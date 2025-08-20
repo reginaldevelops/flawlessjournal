@@ -71,19 +71,65 @@ export default function DynamicTable() {
                         }
                       />
                     ) : col.type === "select" ? (
-                      <select
-                        value={row[col.name] ?? ""}
-                        onChange={(e) =>
-                          handleCellChange(rIdx, col.name, e.target.value)
-                        }
-                      >
-                        <option value="">-- Kies --</option>
-                        {col.options?.map((opt, i) => (
-                          <option key={i} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ position: "relative" }}>
+                        <select
+                          value={row[col.name] ?? ""}
+                          onChange={(e) => {
+                            if (e.target.value === "__new") {
+                              handleCellChange(rIdx, col.name, "__new");
+                            } else {
+                              handleCellChange(rIdx, col.name, e.target.value);
+                            }
+                          }}
+                        >
+                          <option value="">-- Kies --</option>
+                          {col.options?.map((opt, i) => (
+                            <option key={i} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                          <option value="__new">➕ Nieuwe toevoegen...</option>
+                        </select>
+
+                        {row[col.name] === "__new" && (
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Nieuwe optie..."
+                            style={{
+                              position: "absolute",
+                              top: "100%",
+                              left: 0,
+                              marginTop: "4px",
+                              padding: "4px 6px",
+                              fontSize: "0.85rem",
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.target.blur();
+                            }}
+                            onBlur={(e) => {
+                              const newOption = e.target.value.trim();
+                              if (newOption) {
+                                const updatedCols = [...columns];
+                                const colIndex = updatedCols.findIndex(
+                                  (c) => c.name === col.name
+                                );
+                                updatedCols[colIndex] = {
+                                  ...updatedCols[colIndex],
+                                  options: [
+                                    ...(updatedCols[colIndex].options || []),
+                                    newOption,
+                                  ],
+                                };
+                                setColumns(updatedCols);
+                                handleCellChange(rIdx, col.name, newOption);
+                              } else {
+                                handleCellChange(rIdx, col.name, "");
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
                     ) : (
                       <CellInput
                         type={col.type}
