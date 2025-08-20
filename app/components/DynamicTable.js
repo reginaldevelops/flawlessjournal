@@ -28,23 +28,24 @@ export default function DynamicTable() {
 
   return (
     <Wrapper>
-      <ColumnFormDrawer
-        columns={columns}
-        onAddColumn={(col) => setColumns([...columns, col])}
-        onReorder={(newCols) => setColumns(newCols)}
-        onUpdateColumn={(i, updated) => {
-          const newCols = [...columns];
-          newCols[i] = updated;
-          setColumns(newCols);
-        }}
-        onDeleteColumn={(i) => {
-          const newCols = [...columns];
-          newCols.splice(i, 1);
-          setColumns(newCols);
-        }}
-      />
-
-      <RowFormDrawer columns={columns} onAddRow={handleAddRow} />
+      <TableManagementSection>
+        <RowFormDrawer columns={columns} onAddRow={handleAddRow} />
+        <ColumnFormDrawer
+          columns={columns}
+          onAddColumn={(col) => setColumns([...columns, col])}
+          onReorder={(newCols) => setColumns(newCols)}
+          onUpdateColumn={(i, updated) => {
+            const newCols = [...columns];
+            newCols[i] = updated;
+            setColumns(newCols);
+          }}
+          onDeleteColumn={(i) => {
+            const newCols = [...columns];
+            newCols.splice(i, 1);
+            setColumns(newCols);
+          }}
+        />
+      </TableManagementSection>
 
       <TableWrapper>
         <StyledTable>
@@ -61,13 +62,37 @@ export default function DynamicTable() {
               <Tr key={rIdx}>
                 {columns.map((col) => (
                   <Td key={col.name}>
-                    <CellInput
-                      type={col.type === "boolean" ? "text" : col.type}
-                      value={row[col.name] ?? ""}
-                      onChange={(e) =>
-                        handleCellChange(rIdx, col.name, e.target.value)
-                      }
-                    />
+                    {col.type === "boolean" ? (
+                      <input
+                        type="checkbox"
+                        checked={!!row[col.name]}
+                        onChange={(e) =>
+                          handleCellChange(rIdx, col.name, e.target.checked)
+                        }
+                      />
+                    ) : col.type === "select" ? (
+                      <select
+                        value={row[col.name] ?? ""}
+                        onChange={(e) =>
+                          handleCellChange(rIdx, col.name, e.target.value)
+                        }
+                      >
+                        <option value="">-- Kies --</option>
+                        {col.options?.map((opt, i) => (
+                          <option key={i} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <CellInput
+                        type={col.type}
+                        value={row[col.name] ?? ""}
+                        onChange={(e) =>
+                          handleCellChange(rIdx, col.name, e.target.value)
+                        }
+                      />
+                    )}
                   </Td>
                 ))}
                 <Td>
@@ -93,6 +118,13 @@ const Wrapper = styled.div`
   width: 100%;
 `;
 
+const TableManagementSection = styled.div`
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25%;
+`;
+
 const TableWrapper = styled.div`
   width: 100%;
   overflow-x: auto;
@@ -112,26 +144,20 @@ const StyledTable = styled.table`
 const Th = styled.th`
   background: #f9fafb;
   text-align: left;
-  padding: 0.75rem;
+  padding: 0.75rem 1rem;
   font-weight: 600;
   font-size: 0.9rem;
   border-bottom: 1px solid #e5e7eb;
   white-space: normal;
-  word-break: break-word;
 `;
 
-const Tr = styled.tr`
-  &:hover {
-    background: #f9fafb;
-  }
-`;
+const Tr = styled.tr``;
 
 const Td = styled.td`
   padding: 0.75rem;
   border-bottom: 1px solid #f1f5f9;
   width: 1%;
   white-space: normal;
-  word-break: break-word;
 `;
 
 const CellInput = styled.input`
@@ -157,4 +183,12 @@ const DeleteButton = styled.button`
     color: #dc2626;
     transform: scale(1.1);
   }
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
 `;

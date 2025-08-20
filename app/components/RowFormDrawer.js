@@ -8,12 +8,14 @@ export default function RowFormDrawer({ columns, onAddRow }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const formData = new FormData(e.target);
+
     const newRow = {};
     columns.forEach((col) => {
       if (col.type === "boolean") {
-        newRow[col.name] = e.target[col.name].checked; // ✅ true/false
+        newRow[col.name] = formData.get(col.name) === "on"; // ✅ true/false
       } else {
-        newRow[col.name] = e.target[col.name].value;
+        newRow[col.name] = formData.get(col.name) || "";
       }
     });
     onAddRow(newRow);
@@ -23,32 +25,50 @@ export default function RowFormDrawer({ columns, onAddRow }) {
 
   return (
     <>
-      <AddButton onClick={() => setOpen(true)}>+ Rij toevoegen</AddButton>
+      <AddButton onClick={() => setOpen(true)}>+ Trade toevoegen</AddButton>
 
       <Drawer $open={open}>
         <DrawerContent>
           <CloseButton onClick={() => setOpen(false)}>✕</CloseButton>
           <h2>Nieuwe rij toevoegen</h2>
           <Form onSubmit={handleSubmit}>
-            {columns.map((col) =>
-              col.type === "boolean" ? (
-                <label key={col.name}>
-                  <input
-                    type="checkbox"
+            {columns.map((col) => {
+              if (col.type === "boolean") {
+                return (
+                  <label key={col.name}>
+                    <input
+                      type="checkbox"
+                      name={col.name}
+                      defaultChecked={false}
+                    />
+                    {col.name}
+                  </label>
+                );
+              } else if (col.type === "select") {
+                return (
+                  <label key={col.name}>
+                    {col.name}
+                    <Select name={col.name}>
+                      {col.options?.map((opt, i) => (
+                        <option key={i} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                );
+              } else {
+                return (
+                  <Input
+                    key={col.name}
                     name={col.name}
-                    defaultChecked={false}
+                    placeholder={col.name}
+                    type={col.type}
                   />
-                  {col.name}
-                </label>
-              ) : (
-                <Input
-                  key={col.name}
-                  name={col.name}
-                  placeholder={col.name}
-                  type={col.type}
-                />
-              )
-            )}
+                );
+              }
+            })}
+
             <SubmitButton type="submit">Opslaan</SubmitButton>
           </Form>
         </DrawerContent>
@@ -137,4 +157,10 @@ const Overlay = styled.div`
   inset: 0;
   background: rgba(0, 0, 0, 0.3);
   z-index: 40;
+`;
+
+const Select = styled.select`
+  padding: 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
 `;

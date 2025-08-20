@@ -12,25 +12,37 @@ export default function ColumnFormDrawer({
 }) {
   const [open, setOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
-  const [editIndex, setEditIndex] = useState(null); // ✅ bijhouden welke kolom we editen
-  const [editData, setEditData] = useState({ name: "", type: "text" });
+  const [editIndex, setEditIndex] = useState(null);
+  const [editData, setEditData] = useState({
+    name: "",
+    type: "text",
+    options: [],
+  });
   const [error, setError] = useState("");
+  const [extraOptions, setExtraOptions] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const name = e.target.name.value.trim();
     const type = e.target.type.value;
 
-    // ✅ check duplicaat
     if (columns.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
       setError("Kolomnamen moeten uniek zijn");
       return;
     }
 
-    onAddColumn({ name, type });
+    const newCol = { name, type };
+
+    if (type === "select" && extraOptions.trim()) {
+      newCol.options = extraOptions.split(",").map((o) => o.trim());
+    }
+
+    onAddColumn(newCol);
     setError("");
     setOpen(false);
     e.target.reset();
+    setExtraOptions("");
   };
 
   const handleDragStart = (index) => {
@@ -64,6 +76,14 @@ export default function ColumnFormDrawer({
       return;
     }
 
+    // 🔹 opties opslaan bij dropdown
+    if (editData.type === "select" && typeof editData.options === "string") {
+      editData.options = editData.options
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean);
+    }
+
     onUpdateColumn(editIndex, editData);
     setEditIndex(null);
     setError("");
@@ -71,7 +91,7 @@ export default function ColumnFormDrawer({
 
   return (
     <>
-      <AddButton onClick={() => setOpen(true)}>+ Kolom toevoegen</AddButton>
+      <AddButton onClick={() => setOpen(true)}>Tabel management</AddButton>
 
       <Drawer $open={open}>
         <DrawerContent>
@@ -79,14 +99,28 @@ export default function ColumnFormDrawer({
           <h2>Nieuwe kolom</h2>
           <Form onSubmit={handleSubmit}>
             <Input name="name" placeholder="Kolomnaam" />
-            <Select name="type">
+            <Select
+              name="type"
+              onChange={(e) => setShowOptions(e.target.value === "select")}
+            >
               <option value="text">Tekst</option>
               <option value="number">Nummer</option>
               <option value="boolean">Boolean</option>
               <option value="currency">Bedrag</option>
               <option value="date">Datum</option>
               <option value="time">Tijd</option>
+              <option value="select">Dropdown</option>
             </Select>
+
+            {/* 🔹 extra veld voor dropdown opties */}
+            {showOptions && (
+              <Input
+                placeholder="Opties, gescheiden door komma's"
+                value={extraOptions}
+                onChange={(e) => setExtraOptions(e.target.value)}
+              />
+            )}
+
             <SubmitButton type="submit">Opslaan</SubmitButton>
             {error && <ErrorText>{error}</ErrorText>}
           </Form>
@@ -121,7 +155,25 @@ export default function ColumnFormDrawer({
                       <option value="currency">Bedrag</option>
                       <option value="date">Datum</option>
                       <option value="time">Tijd</option>
+                      <option value="select">Dropdown</option>
                     </SmallSelect>
+
+                    {/* ✅ alleen tonen als type "select" is */}
+                    {editData.type === "select" && (
+                      <SmallInput
+                        placeholder="Opties (komma's)"
+                        value={editData.options?.join(", ") ?? ""}
+                        onChange={(e) =>
+                          setEditData({
+                            ...editData,
+                            options: e.target.value
+                              .split(",")
+                              .map((opt) => opt.trim()),
+                          })
+                        }
+                      />
+                    )}
+
                     <ActionButton onClick={saveEdit}>💾</ActionButton>
                     <ActionButton onClick={() => setEditIndex(null)}>
                       ✕
@@ -131,6 +183,10 @@ export default function ColumnFormDrawer({
                   <RowFlex>
                     <span>
                       {col.name} <TypeTag>({col.type})</TypeTag>
+                      {/* 🔹 toon ook opties bij dropdown */}
+                      {col.type === "select" && col.options?.length > 0 && (
+                        <TypeTag> → [{col.options.join(", ")}]</TypeTag>
+                      )}
                     </span>
                     <Actions>
                       <ActionButton onClick={() => startEdit(i)}>
