@@ -1,28 +1,43 @@
 "use client";
-
 import styled from "styled-components";
 
-export default function Navbar() {
+export default function Navbar({ darkMode, setDarkMode }) {
   return (
-    <NavBar>
-      <Logo>Flawless Journal</Logo>
-    </NavBar>
+    <Nav>
+      <Title>Flawless Journal</Title>
+      <Right>
+        <ToggleBtn onClick={() => setDarkMode(!darkMode)}>
+          {darkMode ? "🌙" : "☀️"}
+        </ToggleBtn>
+      </Right>
+    </Nav>
   );
 }
 
-const NavBar = styled.div`
-  width: 100%;
-  background: #1976d2;
-  padding: 1rem 2rem;
-  color: white;
-  font-weight: bold;
-  font-size: 1.2rem;
+const Nav = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #ddd;
+  background: ${(p) => p.theme.background};
+  color: ${(p) => p.theme.foreground};
 `;
 
-const Logo = styled.div`
-  font-family: "Segoe UI", sans-serif;
-  letter-spacing: 0.5px;
+const Title = styled.h1`
+  font-size: 1.5rem;
+`;
+
+const Right = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const ToggleBtn = styled.button`
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: ${(p) => p.theme.foreground};
 `;

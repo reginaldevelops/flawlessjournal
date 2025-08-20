@@ -14,7 +14,7 @@ export default function JournalTable({
       <StyledTable>
         <thead>
           <tr>
-            <th></th>
+            <th>Select / Edit</th>
             {columns
               .filter((c) => c.visible)
               .map((col) => (
@@ -31,13 +31,16 @@ export default function JournalTable({
             </tr>
           ) : (
             trades.map((t) => (
-              <tr key={t.id} onClick={() => onRowClick(t)}>
+              <tr key={t.id}>
                 <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(t.id)}
-                    onChange={() => toggleSelect(t.id)}
-                  />
+                  <RowTools>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(t.id)}
+                      onChange={() => toggleSelect(t.id)}
+                    />
+                    <EditBtn onClick={() => onRowClick(t)}>✏️</EditBtn>
+                  </RowTools>
                 </td>
                 {columns
                   .filter((c) => c.visible)
@@ -64,18 +67,20 @@ const ScrollContainer = styled.div`
 const StyledTable = styled.table`
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+  font-size: inherit;
 
   th,
   td {
-    padding: 0.8rem 1.2rem; /* ✅ wider padding */
-    border: 1px solid #ddd;
+    padding: 0.8rem 1.2rem;
+    border: 1px solid
+      ${(p) => (p.theme.background === "#171717" ? "#444" : "#ddd")};
     text-align: center;
     white-space: nowrap;
   }
 
   th {
-    background: #f0f0f0;
+    background: ${(p) =>
+      p.theme.background === "#171717" ? "#222" : "#f0f0f0"};
     font-weight: bold;
     position: sticky;
     top: 0;
@@ -83,20 +88,41 @@ const StyledTable = styled.table`
   }
 
   tbody tr {
-    background: #fff;
+    background: ${(p) =>
+      p.theme.background === "#171717" ? "#1e1e1e" : "#fff"};
     transition: background 0.2s;
-    cursor: pointer;
   }
 
   tbody tr:nth-child(even) {
-    background: #fafafa;
+    background: ${(p) =>
+      p.theme.background === "#171717" ? "#2a2a2a" : "#fafafa"};
   }
 
   tbody tr:hover {
-    background: #eaeaea;
+    background: ${(p) =>
+      p.theme.background === "#171717" ? "#333" : "#eaeaea"};
   }
 
   input[type="checkbox"] {
     cursor: pointer;
+  }
+`;
+
+const RowTools = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+`;
+
+const EditBtn = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.2rem;
+
+  &:hover {
+    opacity: 0.8;
   }
 `;

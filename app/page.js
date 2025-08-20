@@ -1,13 +1,34 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import styled from "styled-components";
+import styled, { ThemeProvider, createGlobalStyle } from "styled-components";
 import JournalTable from "./components/JournalTable";
 import SidePanelForm from "./components/SidePanelForm";
 import SettingsPopup from "./components/SettingsPopup";
 import Navbar from "./components/Navbar";
 
+const lightTheme = {
+  background: "#ffffff",
+  foreground: "#171717",
+};
+
+const darkTheme = {
+  background: "#171717",
+  foreground: "#ffffff",
+};
+
+const GlobalStyle = createGlobalStyle`
+  body {
+    background: ${(p) => p.theme.background};
+    color: ${(p) => p.theme.foreground};
+    font-family: ${(p) => p.fontFamily};
+    font-size: ${(p) => p.fontSize};
+    transition: background 0.3s, color 0.3s;
+  }
+`;
+
 export default function Home() {
+  const [darkMode, setDarkMode] = useState(false);
   const [trades, setTrades] = useState([]);
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -105,49 +126,55 @@ export default function Home() {
   };
 
   return (
-    <Container style={{ fontSize, fontFamily }}>
-      <Navbar />
-      <TopBar>
-        <AddBtn onClick={handleAddTrade}>+ Add Trade</AddBtn>
-        <DeleteBtn onClick={deleteSelected} disabled={selectedIds.length === 0}>
-          🗑 Delete
-        </DeleteBtn>
-        <GearBtn onClick={() => setShowSettings(true)}>⚙️</GearBtn>
-      </TopBar>
+    <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
+      <GlobalStyle fontSize={fontSize} fontFamily={fontFamily} />
+      <Container style={{ fontSize, fontFamily }}>
+        <Navbar darkMode={darkMode} setDarkMode={setDarkMode} />
+        <TopBar>
+          <AddBtn onClick={handleAddTrade}>+ Add Trade</AddBtn>
+          <DeleteBtn
+            onClick={deleteSelected}
+            disabled={selectedIds.length === 0}
+          >
+            🗑 Delete
+          </DeleteBtn>
+          <GearBtn onClick={() => setShowSettings(true)}>⚙️</GearBtn>
+        </TopBar>
 
-      {selectedIds.length > 0 && (
-        <SelectedInfo>{selectedIds.length} trade(s) selected</SelectedInfo>
-      )}
+        {selectedIds.length > 0 && (
+          <SelectedInfo>{selectedIds.length} trade(s) selected</SelectedInfo>
+        )}
 
-      <JournalTable
-        trades={trades}
-        onRowClick={handleEditTrade}
-        selectedIds={selectedIds}
-        toggleSelect={toggleSelect}
-        columns={columns}
-      />
-
-      {showPanel && (
-        <SidePanelForm
-          trade={selectedTrade}
-          isAdding={isAdding}
-          onSave={handleSaveTrade}
-          onCancel={handleCancel}
+        <JournalTable
+          trades={trades}
+          onRowClick={handleEditTrade}
+          selectedIds={selectedIds}
+          toggleSelect={toggleSelect}
+          columns={columns}
         />
-      )}
 
-      {showSettings && (
-        <SettingsPopup
-          onClose={() => setShowSettings(false)}
-          fontSize={fontSize}
-          setFontSize={setFontSize}
-          fontFamily={fontFamily}
-          setFontFamily={setFontFamily}
-          columns={columns} // ✅ full list of columns
-          setColumns={setColumns} // ✅ updater function
-        />
-      )}
-    </Container>
+        {showPanel && (
+          <SidePanelForm
+            trade={selectedTrade}
+            isAdding={isAdding}
+            onSave={handleSaveTrade}
+            onCancel={handleCancel}
+          />
+        )}
+
+        {showSettings && (
+          <SettingsPopup
+            onClose={() => setShowSettings(false)}
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            fontFamily={fontFamily}
+            setFontFamily={setFontFamily}
+            columns={columns}
+            setColumns={setColumns}
+          />
+        )}
+      </Container>
+    </ThemeProvider>
   );
 }
 
@@ -157,8 +184,12 @@ const Container = styled.div`
   max-width: 100%;
   margin: 0 auto;
   padding: 1rem;
-  background: #f7f7f7;
+  background: ${(p) => p.theme.background}; /* use theme */
+  color: ${(p) => p.theme.foreground}; /* use theme */
   min-height: 100vh;
+  transition:
+    background 0.3s,
+    color 0.3s;
 `;
 
 const TopBar = styled.div`
@@ -169,8 +200,8 @@ const TopBar = styled.div`
 
 const AddBtn = styled.button`
   padding: 0.6rem 1rem;
-  background: #2563eb;
-  color: white;
+  background: #2563eb; /* stays brand blue */
+  color: #fff;
   font-weight: bold;
   border: none;
   border-radius: 6px;
@@ -183,24 +214,23 @@ const AddBtn = styled.button`
 
 const DeleteBtn = styled.button`
   padding: 0.6rem 1rem;
-  background: #aaa;
-  color: white;
+  background: ${(p) => (p.disabled ? "#666" : "#aaa")};
+  color: #fff;
   font-weight: bold;
   border: none;
   border-radius: 6px;
-  cursor: pointer;
+  cursor: ${(p) => (p.disabled ? "not-allowed" : "pointer")};
   opacity: ${(p) => (p.disabled ? 0.5 : 1)};
-  pointer-events: ${(p) => (p.disabled ? "none" : "auto")};
 
   &:hover {
-    background: #e11d48;
+    background: ${(p) => (p.disabled ? "#666" : "#e11d48")};
   }
 `;
 
 const GearBtn = styled.button`
   padding: 0.6rem;
-  background: #333;
-  color: white;
+  background: ${(p) => p.theme.foreground};
+  color: ${(p) => p.theme.background};
   font-size: 1.1rem;
   border: none;
   border-radius: 6px;
@@ -208,7 +238,7 @@ const GearBtn = styled.button`
   margin-left: auto;
 
   &:hover {
-    background: #555;
+    opacity: 0.8;
   }
 `;
 
