@@ -97,12 +97,12 @@ const AddButton = styled.button`
 const Drawer = styled.div`
   position: fixed;
   top: 0;
-  right: ${({ $open }) => ($open ? "0" : "-400px")};
+  left: ${({ $open }) => ($open ? "0" : "-400px")};
   height: 100vh;
   width: 400px;
   background: white;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
-  transition: right 0.3s ease;
+  transition: left 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;

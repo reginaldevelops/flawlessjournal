@@ -1,50 +1,89 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled from "styled-components";
 import RowFormDrawer from "./RowFormDrawer";
 import ColumnFormDrawer from "./ColumnFormDrawer";
+import { supabase } from "../lib/supabaseClient";
 
 export default function DynamicTable() {
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
 
-  // ✅ handler voor rijen
-  const handleAddRow = (newRow) => {
-    setRows([...rows, newRow]);
+  /* ---------- Load data ---------- */
+  const loadRows = async () => {
+    const { data, error } = await supabase.from("trades").select("*");
+    if (!error) {
+      setRows(data.map((d) => ({ id: d.id, ...d.data }))); // uuid id
+    }
   };
 
-  // ✅ handler voor cell updates
-  const handleCellChange = (rowIndex, colName, value) => {
+  const loadColumns = async () => {
+    const { data, error } = await supabase
+      .from("columns")
+      .select("*")
+      .order("order", { ascending: true });
+    if (error) {
+      console.error("Load columns error:", error);
+    } else {
+      setColumns(data.map((c) => ({ id: c.id, ...c.definition })));
+    }
+  };
+
+  useEffect(() => {
+    loadRows();
+    loadColumns();
+  }, []);
+
+  /* ---------- Row actions ---------- */
+  const handleAddRow = async (newRow) => {
+    const { data, error } = await supabase
+      .from("trades")
+      .insert([{ data: newRow }])
+      .select();
+
+    if (!error && data) {
+      // gebruik data[0].data i.p.v. newRow
+      setRows((prev) => [...prev, { id: data[0].id, ...data[0].data }]);
+    }
+  };
+
+  const handleCellChange = async (rowIndex, colName, value) => {
     const updatedRows = [...rows];
     updatedRows[rowIndex][colName] = value;
     setRows(updatedRows);
+
+    if (value === "__new") return; // skip tijdelijk "__new"
+
+    const row = updatedRows[rowIndex];
+    const { id, ...jsonData } = row;
+
+    const { error } = await supabase
+      .from("trades")
+      .update({ data: jsonData })
+      .eq("id", id);
+
+    if (error) console.error("Update row error:", error);
   };
 
-  // ✅ handler voor rijen verwijderen
-  const handleDeleteRow = (rowIndex) => {
-    setRows(rows.filter((_, i) => i !== rowIndex));
+  const handleDeleteRow = async (rowIndex) => {
+    const row = rows[rowIndex];
+    console.log("Deleting row with id:", row.id);
+    const { error } = await supabase.from("trades").delete().eq("id", row.id);
+
+    if (error) {
+      console.error("Delete row error:", error);
+    } else {
+      setRows(rows.filter((_, i) => i !== rowIndex));
+    }
   };
 
+  /* ---------- Render ---------- */
   return (
     <Wrapper>
       <TableManagementSection>
         <RowFormDrawer columns={columns} onAddRow={handleAddRow} />
-        <ColumnFormDrawer
-          columns={columns}
-          onAddColumn={(col) => setColumns([...columns, col])}
-          onReorder={(newCols) => setColumns(newCols)}
-          onUpdateColumn={(i, updated) => {
-            const newCols = [...columns];
-            newCols[i] = updated;
-            setColumns(newCols);
-          }}
-          onDeleteColumn={(i) => {
-            const newCols = [...columns];
-            newCols.splice(i, 1);
-            setColumns(newCols);
-          }}
-        />
+        <ColumnFormDrawer columns={columns} setColumns={setColumns} />
       </TableManagementSection>
 
       <TableWrapper>
@@ -52,16 +91,16 @@ export default function DynamicTable() {
           <thead>
             <tr>
               {columns.map((col) => (
-                <Th key={col.name}>{col.name}</Th>
+                <Th key={col.id}>{col.name}</Th>
               ))}
               {rows.length > 0 && <Th>Acties</Th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, rIdx) => (
-              <Tr key={rIdx}>
+              <Tr key={row.id}>
                 {columns.map((col) => (
-                  <Td key={col.name}>
+                  <Td key={col.id}>
                     {col.type === "boolean" ? (
                       <input
                         type="checkbox"
@@ -71,8 +110,8 @@ export default function DynamicTable() {
                         }
                       />
                     ) : col.type === "select" ? (
-                      <div style={{ position: "relative" }}>
-                        <select
+                      <SelectWrapper>
+                        <ModernSelect
                           value={row[col.name] ?? ""}
                           onChange={(e) => {
                             if (e.target.value === "__new") {
@@ -89,31 +128,25 @@ export default function DynamicTable() {
                             </option>
                           ))}
                           <option value="__new">➕ Nieuwe toevoegen...</option>
-                        </select>
+                        </ModernSelect>
+                        <DropdownArrow>▾</DropdownArrow>
 
                         {row[col.name] === "__new" && (
-                          <input
+                          <InlineNewInput
                             type="text"
                             autoFocus
                             placeholder="Nieuwe optie..."
-                            style={{
-                              position: "absolute",
-                              top: "100%",
-                              left: 0,
-                              marginTop: "4px",
-                              padding: "4px 6px",
-                              fontSize: "0.85rem",
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.target.blur();
-                            }}
-                            onBlur={(e) => {
+                            onKeyDown={(e) =>
+                              e.key === "Enter" && e.target.blur()
+                            }
+                            onBlur={async (e) => {
                               const newOption = e.target.value.trim();
                               if (newOption) {
                                 const updatedCols = [...columns];
                                 const colIndex = updatedCols.findIndex(
-                                  (c) => c.name === col.name
+                                  (c) => c.id === col.id
                                 );
+
                                 updatedCols[colIndex] = {
                                   ...updatedCols[colIndex],
                                   options: [
@@ -123,13 +156,31 @@ export default function DynamicTable() {
                                 };
                                 setColumns(updatedCols);
                                 handleCellChange(rIdx, col.name, newOption);
+
+                                const updatedCol = updatedCols[colIndex];
+                                const { error } = await supabase
+                                  .from("columns")
+                                  .update({
+                                    definition: {
+                                      name: updatedCol.name,
+                                      type: updatedCol.type,
+                                      options: updatedCol.options,
+                                    },
+                                  })
+                                  .eq("id", updatedCol.id);
+
+                                if (error)
+                                  console.error(
+                                    "Update column options error:",
+                                    error
+                                  );
                               } else {
                                 handleCellChange(rIdx, col.name, "");
                               }
                             }}
                           />
                         )}
-                      </div>
+                      </SelectWrapper>
                     ) : (
                       <CellInput
                         type={col.type}
@@ -231,10 +282,59 @@ const DeleteButton = styled.button`
   }
 `;
 
-const Select = styled.select`
+const SelectWrapper = styled.div`
+  position: relative;
   width: 100%;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #ccc;
+`;
+
+const ModernSelect = styled.select`
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  width: 100%;
+  padding: 0.35rem 2rem 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 0.9rem;
+  background: white;
+  color: #333;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #3b82f6;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px #bfdbfe;
+  }
+`;
+
+const DropdownArrow = styled.span`
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #555;
+  font-size: 0.8rem;
+`;
+
+const InlineNewInput = styled.input`
+  width: 100%;
+  margin-top: 4px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: #f9fafb;
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: #fff;
+    box-shadow: 0 0 0 2px #bfdbfe;
+  }
 `;

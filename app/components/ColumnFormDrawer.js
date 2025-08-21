@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import styled from "styled-components";
+import { supabase } from "../lib/supabaseClient";
 
 export default function ColumnFormDrawer({
   columns,
-  onAddColumn,
-  onReorder,
-  onUpdateColumn,
-  onDeleteColumn,
+  setColumns, // 🔹 we hebben direct toegang nodig om id + data te zetten
 }) {
   const [open, setOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -21,6 +19,65 @@ export default function ColumnFormDrawer({
   const [error, setError] = useState("");
   const [extraOptions, setExtraOptions] = useState("");
   const [showOptions, setShowOptions] = useState(false);
+
+  /* ---------------------- Supabase actions ---------------------- */
+
+  const addColumn = async (col) => {
+    const { data, error } = await supabase
+      .from("columns")
+      .insert([{ definition: col, order: columns.length }])
+      .select();
+
+    if (error) {
+      console.error("Add column error:", error);
+    } else {
+      setColumns((prev) => [
+        ...prev,
+        { id: data[0].id, ...data[0].definition },
+      ]);
+    }
+  };
+
+  const updateColumn = async (index, updated) => {
+    const col = columns[index];
+    const { error } = await supabase
+      .from("columns")
+      .update({ definition: updated })
+      .eq("id", col.id);
+
+    if (error) {
+      console.error("Update column error:", error);
+    } else {
+      const newCols = [...columns];
+      newCols[index] = { id: col.id, ...updated };
+      setColumns(newCols);
+    }
+  };
+
+  const deleteColumn = async (index) => {
+    const col = columns[index];
+    const { error } = await supabase.from("columns").delete().eq("id", col.id);
+
+    if (error) {
+      console.error("Delete column error:", error);
+    } else {
+      const newCols = [...columns];
+      newCols.splice(index, 1);
+      setColumns(newCols);
+    }
+  };
+
+  const reorderColumns = async (newCols) => {
+    setColumns(newCols); // lokaal alvast updaten
+
+    // schrijf nieuwe volgorde naar supabase
+    for (let i = 0; i < newCols.length; i++) {
+      const col = newCols[i];
+      await supabase.from("columns").update({ order: i }).eq("id", col.id);
+    }
+  };
+
+  /* ---------------------- UI handlers ---------------------- */
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -38,15 +95,10 @@ export default function ColumnFormDrawer({
       newCol.options = extraOptions.split(",").map((o) => o.trim());
     }
 
-    onAddColumn(newCol);
+    addColumn(newCol);
     setError("");
-    setOpen(false);
     e.target.reset();
     setExtraOptions("");
-  };
-
-  const handleDragStart = (index) => {
-    setDraggedIndex(index);
   };
 
   const handleDrop = (index) => {
@@ -55,12 +107,7 @@ export default function ColumnFormDrawer({
     const [moved] = newCols.splice(draggedIndex, 1);
     newCols.splice(index, 0, moved);
     setDraggedIndex(null);
-    onReorder(newCols);
-  };
-
-  const startEdit = (index) => {
-    setEditIndex(index);
-    setEditData(columns[index]);
+    reorderColumns(newCols);
   };
 
   const saveEdit = () => {
@@ -76,7 +123,6 @@ export default function ColumnFormDrawer({
       return;
     }
 
-    // 🔹 opties opslaan bij dropdown
     if (editData.type === "select" && typeof editData.options === "string") {
       editData.options = editData.options
         .split(",")
@@ -84,10 +130,12 @@ export default function ColumnFormDrawer({
         .filter(Boolean);
     }
 
-    onUpdateColumn(editIndex, editData);
+    updateColumn(editIndex, editData);
     setEditIndex(null);
     setError("");
   };
+
+  /* ---------------------- JSX ---------------------- */
 
   return (
     <>
@@ -112,7 +160,6 @@ export default function ColumnFormDrawer({
               <option value="select">Dropdown</option>
             </Select>
 
-            {/* 🔹 extra veld voor dropdown opties */}
             {showOptions && (
               <Input
                 placeholder="Opties, gescheiden door komma's"
@@ -129,9 +176,9 @@ export default function ColumnFormDrawer({
           <ColumnList>
             {columns.map((col, i) => (
               <ColumnItem
-                key={col.name}
+                key={col.id || col.name}
                 draggable
-                onDragStart={() => handleDragStart(i)}
+                onDragStart={() => setDraggedIndex(i)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleDrop(i)}
               >
@@ -158,7 +205,6 @@ export default function ColumnFormDrawer({
                       <option value="select">Dropdown</option>
                     </SmallSelect>
 
-                    {/* ✅ alleen tonen als type "select" is */}
                     {editData.type === "select" && (
                       <SmallInput
                         placeholder="Opties (komma's)"
@@ -181,18 +227,22 @@ export default function ColumnFormDrawer({
                   </EditForm>
                 ) : (
                   <RowFlex>
-                    <span>
+                    <ColumnLabel>
                       {col.name} <TypeTag>({col.type})</TypeTag>
-                      {/* 🔹 toon ook opties bij dropdown */}
                       {col.type === "select" && col.options?.length > 0 && (
                         <TypeTag> → [{col.options.join(", ")}]</TypeTag>
                       )}
-                    </span>
+                    </ColumnLabel>
                     <Actions>
-                      <ActionButton onClick={() => startEdit(i)}>
+                      <ActionButton
+                        onClick={() => {
+                          setEditIndex(i);
+                          setEditData(col);
+                        }}
+                      >
                         ✏️
                       </ActionButton>
-                      <ActionButton onClick={() => onDeleteColumn(i)}>
+                      <ActionButton onClick={() => deleteColumn(i)}>
                         ❌
                       </ActionButton>
                     </Actions>
@@ -228,12 +278,12 @@ const AddButton = styled.button`
 const Drawer = styled.div`
   position: fixed;
   top: 0;
-  left: ${({ $open }) => ($open ? "0" : "-400px")};
+  right: ${({ $open }) => ($open ? "0" : "-400px")};
   height: 100vh;
   width: 400px;
   background: white;
   box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
-  transition: left 0.3s ease;
+  transition: right 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -244,6 +294,12 @@ const DrawerContent = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
+`;
+
+const ColumnLabel = styled.span`
+  display: inline-block;
+  width: 100%;
+  vertical-align: middle;
 `;
 
 const CloseButton = styled.button`
@@ -332,18 +388,23 @@ const ActionButton = styled.button`
 
 const EditForm = styled.div`
   display: flex;
+  flex-wrap: wrap; /* ✅ voorkomt overflow */
   gap: 0.3rem;
   align-items: center;
+  width: 100%;
 `;
 
 const SmallInput = styled.input`
-  flex: 1;
+  flex: 1 1 100%; /* ✅ neemt volle breedte in binnen EditForm */
+  min-width: 0; /* voorkomt overflow door lange inhoud */
   padding: 0.3rem;
   border: 1px solid #ccc;
   border-radius: 6px;
 `;
 
 const SmallSelect = styled.select`
+  flex: 1 1 auto;
+  min-width: 80px;
   padding: 0.3rem;
   border: 1px solid #ccc;
   border-radius: 6px;
