@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "babel-plugin-styled-components": "^2.1.4",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
     "prettier": "^3.6.2"

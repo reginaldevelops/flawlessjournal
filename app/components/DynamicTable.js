@@ -83,7 +83,12 @@ export default function DynamicTable() {
     <Wrapper>
       <TableManagementSection>
         <RowFormDrawer columns={columns} onAddRow={handleAddRow} />
-        <ColumnFormDrawer columns={columns} setColumns={setColumns} />
+        <ColumnFormDrawer
+          columns={columns}
+          setColumns={setColumns}
+          rows={rows}
+          setRows={setRows}
+        />
       </TableManagementSection>
 
       <TableWrapper>

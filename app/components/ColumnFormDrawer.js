@@ -6,7 +6,9 @@ import { supabase } from "../lib/supabaseClient";
 
 export default function ColumnFormDrawer({
   columns,
-  setColumns, // 🔹 we hebben direct toegang nodig om id + data te zetten
+  setColumns,
+  rows,
+  setRows,
 }) {
   const [open, setOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -54,16 +56,57 @@ export default function ColumnFormDrawer({
     }
   };
 
-  const deleteColumn = async (index) => {
+  const deleteColumn = async (index, rows, setRows) => {
     const col = columns[index];
-    const { error } = await supabase.from("columns").delete().eq("id", col.id);
 
-    if (error) {
-      console.error("Delete column error:", error);
+    // 1️⃣ Kolom zelf uit de columns tabel verwijderen
+    const { error: colError } = await supabase
+      .from("columns")
+      .delete()
+      .eq("id", col.id);
+
+    if (colError) {
+      console.error("Delete column error:", colError);
+      return;
+    }
+
+    // 2️⃣ Kolom lokaal uit state halen
+    const newCols = [...columns];
+    newCols.splice(index, 1);
+    setColumns(newCols);
+
+    // 3️⃣ Als er helemaal geen kolommen meer zijn → verwijder alle trades
+    if (newCols.length === 0) {
+      const { error: rowError } = await supabase
+        .from("trades")
+        .delete()
+        .not("id", "is", null);
+
+      if (rowError) {
+        console.error("Delete all rows error:", rowError);
+      } else {
+        console.log("Alle trades verwijderd omdat er geen kolommen meer zijn.");
+        setRows([]);
+      }
     } else {
-      const newCols = [...columns];
-      newCols.splice(index, 1);
-      setColumns(newCols);
+      // 4️⃣ Anders: laat Supabase de kolom key verwijderen via RPC
+      const { error: rpcError } = await supabase.rpc(
+        "remove_column_from_trades",
+        { col_name: col.name } // 🔹 moet exact overeenkomen met je functieparameter
+      );
+
+      if (rpcError) {
+        console.error("RPC error:", rpcError);
+      } else {
+        console.log(`Kolom '${col.name}' verwijderd uit alle trades`);
+        // lokale rows updaten zodat UI ook klopt
+        const updatedRows = rows.map((r) => {
+          const newR = { ...r };
+          delete newR[col.name];
+          return newR;
+        });
+        setRows(updatedRows);
+      }
     }
   };
 
@@ -83,6 +126,11 @@ export default function ColumnFormDrawer({
     e.preventDefault();
     const name = e.target.name.value.trim();
     const type = e.target.type.value;
+
+    if (!name) {
+      setError("Kolomnaam mag niet leeg zijn");
+      return;
+    }
 
     if (columns.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
       setError("Kolomnamen moeten uniek zijn");
@@ -242,7 +290,9 @@ export default function ColumnFormDrawer({
                       >
                         ✏️
                       </ActionButton>
-                      <ActionButton onClick={() => deleteColumn(i)}>
+                      <ActionButton
+                        onClick={() => deleteColumn(i, rows, setRows)}
+                      >
                         ❌
                       </ActionButton>
                     </Actions>
