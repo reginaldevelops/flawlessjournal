@@ -3,6 +3,7 @@
 import { useState } from "react";
 import styled from "styled-components";
 import { supabase } from "../lib/supabaseClient";
+import { Trash2, Pencil, Save, Plus, close } from "lucide-react";
 
 export default function ColumnFormDrawer({
   columns,
@@ -18,44 +19,38 @@ export default function ColumnFormDrawer({
     type: "text",
     options: [],
   });
+
   const [error, setError] = useState("");
-  const [extraOptions, setExtraOptions] = useState("");
-  const [showOptions, setShowOptions] = useState(false);
+  const [showNewOptions, setShowNewOptions] = useState(false);
+  const [newOptionAdd, setNewOptionAdd] = useState("");
+  const [newOptionEdit, setNewOptionEdit] = useState("");
+  const [tempOptions, setTempOptions] = useState([]);
 
-  /* ---------------------- Supabase actions ---------------------- */
-
+  /* ---------------- Supabase actions ---------------- */
   const addColumn = async (col) => {
-    const newCol = { ...col, width: 150 }; // standaard breedte
-
+    const newCol = { ...col, width: 150 };
     const { data, error } = await supabase
       .from("columns")
       .insert([{ definition: newCol, order: columns.length }])
       .select();
 
-    if (error) {
-      console.error("Add column error:", error);
-    } else {
+    if (error) console.error(error);
+    else
       setColumns((prev) => [
         ...prev,
         { id: data[0].id, ...data[0].definition },
       ]);
-    }
   };
 
   const updateColumn = async (index, updated) => {
     const col = columns[index];
-
-    // width behouden of fallback
     const definition = { width: col.width ?? 150, ...updated };
-
     const { error } = await supabase
       .from("columns")
       .update({ definition })
       .eq("id", col.id);
-
-    if (error) {
-      console.error("Update column error:", error);
-    } else {
+    if (error) console.error(error);
+    else {
       const newCols = [...columns];
       newCols[index] = { id: col.id, ...definition };
       setColumns(newCols);
@@ -64,95 +59,45 @@ export default function ColumnFormDrawer({
 
   const deleteColumn = async (index, rows, setRows) => {
     const col = columns[index];
+    await supabase.from("columns").delete().eq("id", col.id);
 
-    // 1️⃣ Kolom zelf uit de columns tabel verwijderen
-    const { error: colError } = await supabase
-      .from("columns")
-      .delete()
-      .eq("id", col.id);
-
-    if (colError) {
-      console.error("Delete column error:", colError);
-      return;
-    }
-
-    // 2️⃣ Kolom lokaal uit state halen
     const newCols = [...columns];
     newCols.splice(index, 1);
     setColumns(newCols);
 
-    // 3️⃣ Als er helemaal geen kolommen meer zijn → verwijder alle trades
-    if (newCols.length === 0) {
-      const { error: rowError } = await supabase
-        .from("trades")
-        .delete()
-        .not("id", "is", null);
-
-      if (rowError) {
-        console.error("Delete all rows error:", rowError);
-      } else {
-        console.log("Alle trades verwijderd omdat er geen kolommen meer zijn.");
-        setRows([]);
-      }
-    } else {
-      // 4️⃣ Anders: laat Supabase de kolom key verwijderen via RPC
-      const { error: rpcError } = await supabase.rpc(
-        "remove_column_from_trades",
-        { col_name: col.name } // 🔹 moet exact overeenkomen met je functieparameter
-      );
-
-      if (rpcError) {
-        console.error("RPC error:", rpcError);
-      } else {
-        console.log(`Kolom '${col.name}' verwijderd uit alle trades`);
-        // lokale rows updaten zodat UI ook klopt
-        const updatedRows = rows.map((r) => {
-          const newR = { ...r };
-          delete newR[col.name];
-          return newR;
-        });
-        setRows(updatedRows);
-      }
-    }
+    const updatedRows = rows.map((r) => {
+      const copy = { ...r };
+      delete copy[col.name];
+      return copy;
+    });
+    setRows(updatedRows);
   };
 
   const reorderColumns = async (newCols) => {
-    setColumns(newCols); // lokaal alvast updaten
-
-    // schrijf nieuwe volgorde naar supabase
+    setColumns(newCols);
     for (let i = 0; i < newCols.length; i++) {
       const col = newCols[i];
       await supabase.from("columns").update({ order: i }).eq("id", col.id);
     }
   };
 
-  /* ---------------------- UI handlers ---------------------- */
-
+  /* ---------------- UI handlers ---------------- */
   const handleSubmit = (e) => {
     e.preventDefault();
     const name = e.target.name.value.trim();
     const type = e.target.type.value;
-
-    if (!name) {
-      setError("Kolomnaam mag niet leeg zijn");
-      return;
-    }
-
-    if (columns.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
-      setError("Kolomnamen moeten uniek zijn");
-      return;
-    }
+    if (!name) return setError("Kolomnaam mag niet leeg zijn");
+    if (columns.some((c) => c.name.toLowerCase() === name.toLowerCase()))
+      return setError("Kolomnamen moeten uniek zijn");
 
     const newCol = { name, type };
-
-    if (type === "select" && extraOptions.trim()) {
-      newCol.options = extraOptions.split(",").map((o) => o.trim());
-    }
+    if (type === "select") newCol.options = tempOptions;
 
     addColumn(newCol);
     setError("");
     e.target.reset();
-    setExtraOptions("");
+    setTempOptions([]);
+    setNewOptionAdd("");
   };
 
   const handleDrop = (index) => {
@@ -165,76 +110,22 @@ export default function ColumnFormDrawer({
   };
 
   const saveEdit = async () => {
-    const newName = editData.name.trim();
-    const oldName = columns[editIndex].name;
-
+    if (!editData.name.trim()) return setError("Naam mag niet leeg zijn");
     if (
       columns.some(
         (c, idx) =>
-          idx !== editIndex && c.name.toLowerCase() === newName.toLowerCase()
+          idx !== editIndex &&
+          c.name.toLowerCase() === editData.name.toLowerCase()
       )
-    ) {
-      setError("Kolomnamen moeten uniek zijn");
-      return;
-    }
+    )
+      return setError("Kolomnamen moeten uniek zijn");
 
-    if (editData.type === "select" && typeof editData.options === "string") {
-      editData.options = editData.options
-        .split(",")
-        .map((o) => o.trim())
-        .filter(Boolean);
-    }
-
-    // 1️⃣ Eerst kolom zelf updaten in supabase
     await updateColumn(editIndex, editData);
-
-    // 2️⃣ Alle rows migreren: oude key → nieuwe key
-    if (oldName !== newName) {
-      const { data: rowsData, error } = await supabase
-        .from("trades")
-        .select("id, data");
-
-      if (error) {
-        console.error("Fetch rows error:", error);
-      } else {
-        for (let row of rowsData) {
-          if (row.data && row.data[oldName] !== undefined) {
-            const newData = { ...row.data };
-            newData[newName] = newData[oldName];
-            delete newData[oldName];
-
-            const { error: updateError } = await supabase
-              .from("trades")
-              .update({ data: newData })
-              .eq("id", row.id);
-
-            if (updateError) {
-              console.error("Row update error:", updateError);
-            }
-          }
-        }
-
-        // 3️⃣ Lokale rows ook updaten
-        setRows((prev) =>
-          prev.map((r) => {
-            if (r[oldName] !== undefined) {
-              const copy = { ...r };
-              copy[newName] = copy[oldName];
-              delete copy[oldName];
-              return copy;
-            }
-            return r;
-          })
-        );
-      }
-    }
-
     setEditIndex(null);
     setError("");
   };
 
-  /* ---------------------- JSX ---------------------- */
-
+  /* ---------------- JSX ---------------- */
   return (
     <>
       <AddButton onClick={() => setOpen(true)}>Tabel management</AddButton>
@@ -242,12 +133,14 @@ export default function ColumnFormDrawer({
       <Drawer $open={open}>
         <DrawerContent>
           <CloseButton onClick={() => setOpen(false)}>✕</CloseButton>
+
+          {/* Nieuwe kolom */}
           <h2>Nieuwe kolom</h2>
           <Form onSubmit={handleSubmit}>
             <Input name="name" placeholder="Kolomnaam" />
             <Select
               name="type"
-              onChange={(e) => setShowOptions(e.target.value === "select")}
+              onChange={(e) => setShowNewOptions(e.target.value === "select")}
             >
               <option value="text">Tekst</option>
               <option value="number">Nummer</option>
@@ -258,18 +151,67 @@ export default function ColumnFormDrawer({
               <option value="select">Dropdown</option>
             </Select>
 
-            {showOptions && (
-              <Input
-                placeholder="Opties, gescheiden door komma's"
-                value={extraOptions}
-                onChange={(e) => setExtraOptions(e.target.value)}
-              />
+            {showNewOptions && (
+              <>
+                <div
+                  style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+                >
+                  {tempOptions.map((opt, i) => (
+                    <span key={i} style={tagStyle}>
+                      {opt}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTempOptions((prev) =>
+                            prev.filter((_, idx) => idx !== i)
+                          )
+                        }
+                      >
+                        ❌
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <InputNewOption
+                    type="text"
+                    placeholder="Nieuwe optie..."
+                    value={newOptionAdd}
+                    onChange={(e) => setNewOptionAdd(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newOptionAdd.trim()) {
+                        e.preventDefault();
+                        if (tempOptions.includes(newOptionAdd.trim()))
+                          return setError("Deze optie bestaat al.");
+                        setTempOptions((prev) => [
+                          ...prev,
+                          newOptionAdd.trim(),
+                        ]);
+                        setNewOptionAdd("");
+                        setError("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newOptionAdd.trim()) return;
+                      if (tempOptions.includes(newOptionAdd.trim()))
+                        return setError("Deze optie bestaat al.");
+                      setTempOptions((prev) => [...prev, newOptionAdd.trim()]);
+                      setNewOptionAdd("");
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </>
             )}
-
             <SubmitButton type="submit">Opslaan</SubmitButton>
             {error && <ErrorText>{error}</ErrorText>}
           </Form>
 
+          {/* Huidige kolommen */}
           <h3 style={{ marginTop: "2rem" }}>Huidige kolommen</h3>
           <ColumnList>
             {columns.map((col, i) => (
@@ -304,24 +246,85 @@ export default function ColumnFormDrawer({
                     </SmallSelect>
 
                     {editData.type === "select" && (
-                      <SmallInput
-                        placeholder="Opties (komma's)"
-                        value={editData.options?.join(", ") ?? ""}
-                        onChange={(e) =>
-                          setEditData({
-                            ...editData,
-                            options: e.target.value
-                              .split(",")
-                              .map((opt) => opt.trim()),
-                          })
-                        }
-                      />
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          {editData.options?.map((opt, idx) => (
+                            <span key={idx} style={tagStyle}>
+                              {opt}
+                              <SelectionTagExit
+                                type="button"
+                                onClick={() =>
+                                  setEditData((prev) => ({
+                                    ...prev,
+                                    options: prev.options.filter(
+                                      (_, j) => j !== idx
+                                    ),
+                                  }))
+                                }
+                              >
+                                ❌
+                              </SelectionTagExit>
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <InputNewOption
+                            type="text"
+                            placeholder="Nieuwe optie..."
+                            value={newOptionEdit}
+                            onChange={(e) => setNewOptionEdit(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && newOptionEdit.trim()) {
+                                e.preventDefault();
+                                if (
+                                  editData.options?.includes(
+                                    newOptionEdit.trim()
+                                  )
+                                )
+                                  return setError("Deze optie bestaat al.");
+                                setEditData((prev) => ({
+                                  ...prev,
+                                  options: [
+                                    ...(prev.options || []),
+                                    newOptionEdit.trim(),
+                                  ],
+                                }));
+                                setNewOptionEdit("");
+                                setError("");
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newOptionEdit.trim()) return;
+                              if (
+                                editData.options?.includes(newOptionEdit.trim())
+                              )
+                                return setError("Deze optie bestaat al.");
+                              setEditData((prev) => ({
+                                ...prev,
+                                options: [
+                                  ...(prev.options || []),
+                                  newOptionEdit.trim(),
+                                ],
+                              }));
+                              setNewOptionEdit("");
+                            }}
+                          >
+                            <Plus size={9} />
+                          </button>
+                        </div>
+                      </>
                     )}
 
-                    <ActionButton onClick={saveEdit}>💾</ActionButton>
-                    <ActionButton onClick={() => setEditIndex(null)}>
-                      ✕
-                    </ActionButton>
+                    <ActionButton onClick={saveEdit}>Collapse</ActionButton>
                   </EditForm>
                 ) : (
                   <RowFlex>
@@ -338,12 +341,12 @@ export default function ColumnFormDrawer({
                           setEditData(col);
                         }}
                       >
-                        ✏️
+                        <Pencil size={14} />
                       </ActionButton>
                       <ActionButton
                         onClick={() => deleteColumn(i, rows, setRows)}
                       >
-                        ❌
+                        <Trash2 size={14} />
                       </ActionButton>
                     </Actions>
                   </RowFlex>
@@ -359,7 +362,22 @@ export default function ColumnFormDrawer({
   );
 }
 
-/* styled */
+/* ----- styles ----- */
+
+const SelectionTagExit = styled.button`
+  border: none;
+  font-size: 10px;
+  background-color: transparent;
+`;
+
+const tagStyle = {
+  padding: "0.25rem 0.5rem",
+  background: "#e6e6e6ff",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  gap: "0.4rem",
+};
 
 const AddButton = styled.button`
   background: #3b82f6;
@@ -467,10 +485,11 @@ const RowFlex = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0.5em;
 `;
 
 const TypeTag = styled.span`
-  color: #666;
+  color: #666666f7;
   font-size: 0.85rem;
 `;
 
@@ -484,12 +503,13 @@ const ActionButton = styled.button`
   border: none;
   cursor: pointer;
   font-size: 1rem;
+  color: grey;
 `;
 
 const EditForm = styled.div`
   display: flex;
   flex-wrap: wrap; /* ✅ voorkomt overflow */
-  gap: 0.3rem;
+  gap: 1rem;
   align-items: center;
   width: 100%;
 `;
@@ -497,7 +517,7 @@ const EditForm = styled.div`
 const SmallInput = styled.input`
   flex: 1 1 100%; /* ✅ neemt volle breedte in binnen EditForm */
   min-width: 0; /* voorkomt overflow door lange inhoud */
-  padding: 0.3rem;
+  padding: 0.5rem;
   border: 1px solid #ccc;
   border-radius: 6px;
 `;
@@ -505,8 +525,10 @@ const SmallInput = styled.input`
 const SmallSelect = styled.select`
   flex: 1 1 auto;
   min-width: 80px;
-  padding: 0.3rem;
+  max-width: 50%;
+  padding: 0.25rem;
   border: 1px solid #ccc;
+  background-color: #e6e6e6ff;
   border-radius: 6px;
 `;
 
@@ -521,4 +543,9 @@ const ErrorText = styled.p`
   color: #dc2626;
   font-size: 0.85rem;
   margin-top: 0.5rem;
+`;
+
+const InputNewOption = styled.input`
+  font-size: 15px;
+  padding: 2px 5px;
 `;
