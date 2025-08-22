@@ -4,7 +4,7 @@ import styled from "styled-components";
 export default function LayoutWrapper({ children }) {
   return (
     <Container>
-      <Header>📊 Mijn Dynamische Tabel</Header>
+      <Header>Flawless Journal</Header>
       <SubHeader>Voeg kolommen en rijen toe en bewerk ze inline</SubHeader>
       {children}
     </Container>

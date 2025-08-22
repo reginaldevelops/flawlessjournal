@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import RowFormDrawer from "./RowFormDrawer";
 import ColumnFormDrawer from "./ColumnFormDrawer";
@@ -9,6 +9,10 @@ import { supabase } from "../lib/supabaseClient";
 export default function DynamicTable() {
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
+  const [colWidths, setColWidths] = useState([]);
+  const startX = useRef(null);
+  const startWidth = useRef(null);
+  const resizingIndex = useRef(null);
 
   /* ---------- Load data ---------- */
   const loadRows = async () => {
@@ -27,6 +31,7 @@ export default function DynamicTable() {
       console.error("Load columns error:", error);
     } else {
       setColumns(data.map((c) => ({ id: c.id, ...c.definition })));
+      setColWidths(data.map(() => 150)); // standaard breedte
     }
   };
 
@@ -34,6 +39,31 @@ export default function DynamicTable() {
     loadRows();
     loadColumns();
   }, []);
+
+  /* ---------- Column resizing ---------- */
+  const onMouseDown = (e, index) => {
+    e.preventDefault(); // 👉 voorkomt tekstselectie
+    startX.current = e.clientX;
+    startWidth.current = colWidths[index];
+    resizingIndex.current = index;
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const onMouseMove = (e) => {
+    if (resizingIndex.current === null) return;
+    const delta = e.clientX - startX.current;
+    const newWidths = [...colWidths];
+    newWidths[resizingIndex.current] = Math.max(60, startWidth.current + delta);
+    setColWidths(newWidths);
+  };
+
+  const onMouseUp = () => {
+    resizingIndex.current = null;
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  };
 
   /* ---------- Row actions ---------- */
   const handleAddRow = async (newRow) => {
@@ -43,7 +73,6 @@ export default function DynamicTable() {
       .select();
 
     if (!error && data) {
-      // gebruik data[0].data i.p.v. newRow
       setRows((prev) => [...prev, { id: data[0].id, ...data[0].data }]);
     }
   };
@@ -68,7 +97,6 @@ export default function DynamicTable() {
 
   const handleDeleteRow = async (rowIndex) => {
     const row = rows[rowIndex];
-    console.log("Deleting row with id:", row.id);
     const { error } = await supabase.from("trades").delete().eq("id", row.id);
 
     if (error) {
@@ -95,8 +123,11 @@ export default function DynamicTable() {
         <StyledTable>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <Th key={col.id}>{col.name}</Th>
+              {columns.map((col, i) => (
+                <Th key={col.id} style={{ width: colWidths[i] }}>
+                  {col.name}
+                  <Resizer onMouseDown={(e) => onMouseDown(e, i)} />
+                </Th>
               ))}
               {rows.length > 0 && <Th>Acties</Th>}
             </tr>
@@ -236,43 +267,69 @@ const TableWrapper = styled.div`
 const StyledTable = styled.table`
   min-width: 600px;
   width: 100%;
-  table-layout: auto;
+  table-layout: fixed;
   border-spacing: 0;
+  border-collapse: collapse; /* 👉 belangrijk: geeft grid look */
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
+  overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+
+  td:not(:has(input)):not(:has(select)) {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 `;
 
 const Th = styled.th`
-  background: #f9fafb;
+  position: relative;
+  background: #f3f4f6;
   text-align: left;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem;
   font-weight: 600;
   font-size: 0.9rem;
-  border-bottom: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb; /* 👉 border rondom */
   white-space: normal;
+`;
+
+const Resizer = styled.div`
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 8px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 10;
 `;
 
 const Tr = styled.tr``;
 
 const Td = styled.td`
   padding: 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
+  border: 1px solid #e5e7eb; /* 👉 border rondom */
+  vertical-align: middle;
+  white-space: nowrap;
   width: 1%;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  input,
+  select {
+    max-width: 100%;
+    white-space: normal;
+    text-overflow: initial;
+  }
 `;
 
 const CellInput = styled.input`
-  width: 100%;
+  width: auto;
+  min-width: 0;
   padding: 0.35rem 0.5rem;
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 0.9rem;
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    background: #eff6ff;
-  }
 `;
 
 const DeleteButton = styled.button`
@@ -290,6 +347,8 @@ const DeleteButton = styled.button`
 const SelectWrapper = styled.div`
   position: relative;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 `;
 
 const ModernSelect = styled.select`
@@ -298,6 +357,7 @@ const ModernSelect = styled.select`
   -moz-appearance: none;
 
   width: 100%;
+  max-width: 100%;
   padding: 0.35rem 2rem 0.35rem 0.5rem;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -325,6 +385,7 @@ const DropdownArrow = styled.span`
   pointer-events: none;
   color: #555;
   font-size: 0.8rem;
+  z-index: 2;
 `;
 
 const InlineNewInput = styled.input`
