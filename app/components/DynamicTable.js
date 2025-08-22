@@ -14,6 +14,7 @@ export default function DynamicTable() {
   const startX = useRef(null);
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
+  const updateTimeouts = useRef({});
 
   /* ---------- Load data ---------- */
   const loadRows = async () => {
@@ -32,8 +33,16 @@ export default function DynamicTable() {
     if (error) {
       console.error("Load columns error:", error);
     } else {
-      setColumns(data.map((c) => ({ id: c.id, ...c.definition })));
-      setColWidths(data.map((c) => c.definition.width || 150));
+      setColumns(
+        data.map((c) => ({
+          id: c.id,
+          name: c.definition.name,
+          type: c.definition.type,
+          options: c.definition.options || [],
+          width: c.width || 150,
+        }))
+      );
+      setColWidths(data.map((c) => c.width || 150));
     }
   };
 
@@ -56,47 +65,45 @@ export default function DynamicTable() {
   const onMouseMove = (e) => {
     if (resizingIndex.current === null) return;
     const delta = e.clientX - startX.current;
-    const newWidths = [...colWidths];
-    newWidths[resizingIndex.current] = Math.max(60, startWidth.current + delta);
-    setColWidths(newWidths);
+    const newWidth = Math.max(60, startWidth.current + delta);
+
+    setColumns((prev) =>
+      prev.map((c, i) =>
+        i === resizingIndex.current ? { ...c, width: newWidth } : c
+      )
+    );
   };
 
-  const onMouseUp = async () => {
+  const onMouseUp = async (e) => {
     if (resizingIndex.current !== null) {
       const index = resizingIndex.current;
       const col = columns[index];
-      const newWidth = colWidths[index];
 
-      // Alleen de velden die in definition horen
-      const newDefinition = {
-        name: col.name,
-        type: col.type,
-        width: newWidth,
-        options: col.options || [],
-      };
+      // bereken nieuwe breedte rechtstreeks uit de muispositie
+      const delta = e.clientX - startX.current;
+      const newWidth = Math.max(60, startWidth.current + delta);
+
+      console.log("🔧 Resizing finished:");
+      console.log(" - Column:", col.name, `(id: ${col.id})`);
+      console.log(" - Old width:", startWidth.current);
+      console.log(" - New width (calculated):", newWidth);
 
       const { error } = await supabase
         .from("columns")
-        .update({ definition: newDefinition })
+        .update({ width: newWidth })
         .eq("id", col.id);
 
       if (error) {
-        console.error("Update column width error:", error);
+        console.error("❌ Update column width error:", error);
       } else {
-        // Update state: kolommen + breedtes synchroon houden
-        const newCols = [...columns];
-        newCols[index] = { ...col, ...newDefinition };
-        setColumns(newCols);
-
-        const newWidths = [...colWidths];
-        newWidths[index] = newWidth;
-        setColWidths(newWidths);
+        console.log("✅ Supabase updated with new width:", newWidth);
       }
-    }
 
-    resizingIndex.current = null;
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
+      // reset
+      resizingIndex.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    }
   };
 
   /* ---------- Row actions ---------- */
@@ -111,7 +118,7 @@ export default function DynamicTable() {
     }
   };
 
-  const handleCellChange = async (rowIndex, colName, value) => {
+  const handleCellChange = (rowIndex, colName, value) => {
     const updatedRows = [...rows];
     updatedRows[rowIndex][colName] = value;
     setRows(updatedRows);
@@ -121,12 +128,24 @@ export default function DynamicTable() {
     const row = updatedRows[rowIndex];
     const { id, ...jsonData } = row;
 
-    const { error } = await supabase
-      .from("trades")
-      .update({ data: jsonData })
-      .eq("id", id);
+    if (updateTimeouts.current[id]) {
+      clearTimeout(updateTimeouts.current[id]);
+    }
 
-    if (error) console.error("Update row error:", error);
+    updateTimeouts.current[id] = setTimeout(async () => {
+      const { error } = await supabase
+        .from("trades")
+        .update({ data: jsonData })
+        .eq("id", id);
+
+      if (error) {
+        console.error("Update row error:", error);
+      } else {
+        console.log("Row updated in Supabase:", id);
+      }
+
+      delete updateTimeouts.current[id];
+    }, 2000);
   };
 
   const handleDeleteSelected = async () => {
@@ -146,11 +165,10 @@ export default function DynamicTable() {
   };
 
   const toggleRowSelection = (rowId) => {
-    setSelectedRows(
-      (prev) =>
-        prev.includes(rowId)
-          ? prev.filter((id) => id !== rowId) // verwijderen
-          : [...prev, rowId] // toevoegen
+    setSelectedRows((prev) =>
+      prev.includes(rowId)
+        ? prev.filter((id) => id !== rowId)
+        : [...prev, rowId]
     );
   };
 
@@ -192,8 +210,8 @@ export default function DynamicTable() {
         <StyledTable>
           <colgroup>
             <col style={{ width: 40 }} />
-            {columns.map((_, i) => (
-              <col key={i} style={{ width: colWidths[i] || 150 }} />
+            {columns.map((c) => (
+              <col key={c.id} style={{ width: c.width || 150 }} />
             ))}
           </colgroup>
 
@@ -219,7 +237,7 @@ export default function DynamicTable() {
           <tbody>
             {rows.map((row, rowIndex) => (
               <tr key={row.id}>
-                <Td style={{ width: 40 }}>
+                <Td>
                   <input
                     type="checkbox"
                     checked={selectedRows.includes(row.id)}
@@ -269,17 +287,18 @@ export default function DynamicTable() {
                       return (
                         <Td key={col.id}>
                           <input
-                            type="number"
-                            value={value ?? ""} // voorkomt uncontrolled → controlled warning
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={value || ""}
                             onChange={(e) =>
                               handleCellChange(
                                 rowIndex,
                                 col.name,
-                                e.target.value === ""
-                                  ? null
-                                  : e.target.valueAsNumber
+                                e.target.value
                               )
                             }
+                            style={{ textAlign: "right" }}
                           />
                         </Td>
                       );
@@ -289,12 +308,12 @@ export default function DynamicTable() {
                         <Td key={col.id}>
                           <input
                             type="checkbox"
-                            checked={!!value}
+                            checked={value === "true"}
                             onChange={(e) =>
                               handleCellChange(
                                 rowIndex,
                                 col.name,
-                                e.target.checked
+                                e.target.checked ? "true" : "false"
                               )
                             }
                           />
@@ -302,6 +321,251 @@ export default function DynamicTable() {
                       );
 
                     case "select":
+                      return (
+                        <Td key={col.id}>
+                          {value === "__new" ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="Nieuwe waarde..."
+                              onBlur={async (e) => {
+                                const newVal = e.target.value.trim();
+                                if (!newVal) {
+                                  // niets ingevuld → reset
+                                  handleCellChange(rowIndex, col.name, "");
+                                  return;
+                                }
+
+                                // check of waarde al bestaat
+                                if (col.options?.includes(newVal)) {
+                                  alert("Deze waarde bestaat al.");
+                                  handleCellChange(rowIndex, col.name, newVal); // gewoon selecteren
+                                  return;
+                                }
+
+                                const newOptions = [
+                                  ...(col.options || []),
+                                  newVal,
+                                ];
+
+                                // update in Supabase
+                                const { error } = await supabase
+                                  .from("columns")
+                                  .update({
+                                    definition: {
+                                      name: col.name,
+                                      type: col.type,
+                                      width: col.width,
+                                      options: newOptions,
+                                    },
+                                  })
+                                  .eq("id", col.id);
+
+                                if (error) {
+                                  console.error(
+                                    "Fout bij opslaan nieuwe optie:",
+                                    error
+                                  );
+                                  return;
+                                }
+
+                                // update state
+                                setColumns((prev) =>
+                                  prev.map((c) =>
+                                    c.id === col.id
+                                      ? { ...c, options: newOptions }
+                                      : c
+                                  )
+                                );
+
+                                handleCellChange(rowIndex, col.name, newVal);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.target.blur(); // save bij Enter
+                              }}
+                              style={{
+                                width: "100%",
+                                border: "none",
+                                outline: "none",
+                                background: "transparent",
+                              }}
+                            />
+                          ) : (
+                            <select
+                              value={value || ""}
+                              onChange={(e) =>
+                                handleCellChange(
+                                  rowIndex,
+                                  col.name,
+                                  e.target.value
+                                )
+                              }
+                              style={{
+                                width: "100%",
+                                border: "none",
+                                outline: "none",
+                                background: "transparent",
+                              }}
+                            >
+                              <option value="">-- selecteer --</option>
+                              {col.options?.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                              <option value="__new">
+                                ➕ Nieuwe waarde toevoegen
+                              </option>
+                            </select>
+                          )}
+                        </Td>
+                      );
+
+                      return (
+                        <Td key={col.id}>
+                          {value === "__new" ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="Nieuwe waarde..."
+                              onBlur={async (e) => {
+                                const newVal = e.target.value.trim();
+                                if (newVal) {
+                                  const newOptions = [
+                                    ...(col.options || []),
+                                    newVal,
+                                  ];
+
+                                  // update in Supabase
+                                  await supabase
+                                    .from("columns")
+                                    .update({
+                                      definition: {
+                                        name: col.name,
+                                        type: col.type,
+                                        width: col.width,
+                                        options: newOptions,
+                                      },
+                                    })
+                                    .eq("id", col.id);
+
+                                  // update state
+                                  setColumns((prev) =>
+                                    prev.map((c) =>
+                                      c.id === col.id
+                                        ? { ...c, options: newOptions }
+                                        : c
+                                    )
+                                  );
+
+                                  handleCellChange(rowIndex, col.name, newVal);
+                                } else {
+                                  // als user niks invult → reset
+                                  handleCellChange(rowIndex, col.name, "");
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.target.blur(); // save bij Enter
+                              }}
+                              style={{
+                                width: "100%",
+                                border: "none",
+                                outline: "none",
+                                background: "transparent",
+                              }}
+                            />
+                          ) : (
+                            <select
+                              value={value || ""}
+                              onChange={(e) =>
+                                handleCellChange(
+                                  rowIndex,
+                                  col.name,
+                                  e.target.value
+                                )
+                              }
+                              style={{
+                                width: "100%",
+                                border: "none",
+                                outline: "none",
+                                background: "transparent",
+                              }}
+                            >
+                              <option value="">-- selecteer --</option>
+                              {col.options?.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                              <option value="__new">
+                                ➕ Nieuwe waarde toevoegen
+                              </option>
+                            </select>
+                          )}
+                        </Td>
+                      );
+
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="text"
+                            list={`datalist-${col.id}`}
+                            value={value || ""}
+                            onChange={async (e) => {
+                              const v = e.target.value;
+
+                              // update cel direct
+                              handleCellChange(rowIndex, col.name, v);
+
+                              // check of het een nieuwe optie is
+                              if (v && !col.options?.includes(v)) {
+                                const newOptions = [...(col.options || []), v];
+
+                                // update in Supabase
+                                await supabase
+                                  .from("columns")
+                                  .update({
+                                    definition: {
+                                      name: col.name,
+                                      type: col.type,
+                                      width: col.width,
+                                      options: newOptions,
+                                    },
+                                  })
+                                  .eq("id", col.id);
+
+                                // update in state
+                                setColumns((prev) =>
+                                  prev.map((c) =>
+                                    c.id === col.id
+                                      ? { ...c, options: newOptions }
+                                      : c
+                                  )
+                                );
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // bij verlaten cel ook check doen
+                              const v = e.target.value;
+                              if (v && !col.options?.includes(v)) {
+                                handleCellChange(rowIndex, col.name, v);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                            }}
+                          />
+                          <datalist id={`datalist-${col.id}`}>
+                            {col.options?.map((opt) => (
+                              <option key={opt} value={opt} />
+                            ))}
+                          </datalist>
+                        </Td>
+                      );
+
                       return (
                         <Td key={col.id}>
                           <select
@@ -336,6 +600,184 @@ export default function DynamicTable() {
                                     prev.map((c) =>
                                       c.id === col.id
                                         ? { ...c, options: newOptions }
+                                        : c
+                                    )
+                                  );
+
+                                  handleCellChange(rowIndex, col.name, newVal);
+                                }
+                              } else {
+                                handleCellChange(rowIndex, col.name, v);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                            }}
+                          >
+                            <option value="">-- selecteer --</option>
+                            {col.options?.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                            <option value="__new">
+                              ➕ Nieuwe waarde toevoegen
+                            </option>
+                          </select>
+                        </Td>
+                      );
+
+                      return (
+                        <Td key={col.id}>
+                          <select
+                            value={value || ""}
+                            onChange={async (e) => {
+                              const v = e.target.value;
+                              if (v === "__new") {
+                                const newVal = prompt(
+                                  "Nieuwe waarde toevoegen:"
+                                );
+                                if (newVal) {
+                                  const newOptions = [
+                                    ...(col.options || []),
+                                    newVal,
+                                  ];
+
+                                  // update in supabase
+                                  await supabase
+                                    .from("columns")
+                                    .update({
+                                      definition: {
+                                        name: col.name,
+                                        type: col.type,
+                                        width: col.width,
+                                        options: newOptions,
+                                      },
+                                    })
+                                    .eq("id", col.id);
+
+                                  // update in state
+                                  setColumns((prev) =>
+                                    prev.map((c) =>
+                                      c.id === col.id
+                                        ? { ...c, options: newOptions }
+                                        : c
+                                    )
+                                  );
+
+                                  handleCellChange(rowIndex, col.name, newVal);
+                                }
+                              } else {
+                                handleCellChange(rowIndex, col.name, v);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                            }}
+                          >
+                            <option value="">-- selecteer --</option>
+                            {col.options?.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                            <option value="__new">
+                              ➕ Nieuwe waarde toevoegen
+                            </option>
+                          </select>
+                        </Td>
+                      );
+
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            list={`datalist-${col.id}`}
+                            value={value || ""}
+                            onChange={async (e) => {
+                              const v = e.target.value;
+
+                              // Als gebruiker iets nieuws intypt → voeg toe aan opties
+                              if (v && !col.options.includes(v)) {
+                                const newOptions = [...col.options, v];
+
+                                // update in Supabase
+                                await supabase
+                                  .from("columns")
+                                  .update({
+                                    definition: {
+                                      name: col.name,
+                                      type: col.type,
+                                      width: col.width,
+                                      options: newOptions,
+                                    },
+                                  })
+                                  .eq("id", col.id);
+
+                                // update in state
+                                setColumns((prev) =>
+                                  prev.map((c) =>
+                                    c.id === col.id
+                                      ? { ...c, options: newOptions }
+                                      : c
+                                  )
+                                );
+                              }
+
+                              // update celwaarde
+                              handleCellChange(rowIndex, col.name, v);
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                            }}
+                          />
+                          <datalist id={`datalist-${col.id}`}>
+                            {col.options?.map((opt) => (
+                              <option key={opt} value={opt} />
+                            ))}
+                          </datalist>
+                        </Td>
+                      );
+
+                      return (
+                        <Td key={col.id}>
+                          <select
+                            value={value || ""}
+                            onChange={async (e) => {
+                              const v = e.target.value;
+                              if (v === "__new") {
+                                const newVal = prompt(
+                                  "Nieuwe waarde toevoegen:"
+                                );
+                                if (newVal) {
+                                  const newOptions = [
+                                    ...(col.options || []),
+                                    newVal,
+                                  ];
+
+                                  await supabase
+                                    .from("columns")
+                                    .update({
+                                      definition: {
+                                        name: col.name,
+                                        type: col.type,
+                                        options: newOptions,
+                                      },
+                                    })
+                                    .eq("id", col.id);
+
+                                  setColumns((prev) =>
+                                    prev.map((c, i) =>
+                                      i === index
+                                        ? { ...c, width: newWidth }
                                         : c
                                     )
                                   );
@@ -472,8 +914,7 @@ const Td = styled.td`
   border: 1px solid #e5e7eb;
   vertical-align: middle;
 
-  input,
   select {
-    max-width: 100%;
+    width: 100%;
   }
 `;
