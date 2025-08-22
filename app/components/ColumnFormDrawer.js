@@ -25,9 +25,11 @@ export default function ColumnFormDrawer({
   /* ---------------------- Supabase actions ---------------------- */
 
   const addColumn = async (col) => {
+    const newCol = { ...col, width: 150 }; // standaard breedte
+
     const { data, error } = await supabase
       .from("columns")
-      .insert([{ definition: col, order: columns.length }])
+      .insert([{ definition: newCol, order: columns.length }])
       .select();
 
     if (error) {
@@ -42,16 +44,20 @@ export default function ColumnFormDrawer({
 
   const updateColumn = async (index, updated) => {
     const col = columns[index];
+
+    // width behouden of fallback
+    const definition = { width: col.width ?? 150, ...updated };
+
     const { error } = await supabase
       .from("columns")
-      .update({ definition: updated })
+      .update({ definition })
       .eq("id", col.id);
 
     if (error) {
       console.error("Update column error:", error);
     } else {
       const newCols = [...columns];
-      newCols[index] = { id: col.id, ...updated };
+      newCols[index] = { id: col.id, ...definition };
       setColumns(newCols);
     }
   };
@@ -158,8 +164,9 @@ export default function ColumnFormDrawer({
     reorderColumns(newCols);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     const newName = editData.name.trim();
+    const oldName = columns[editIndex].name;
 
     if (
       columns.some(
@@ -178,7 +185,50 @@ export default function ColumnFormDrawer({
         .filter(Boolean);
     }
 
-    updateColumn(editIndex, editData);
+    // 1️⃣ Eerst kolom zelf updaten in supabase
+    await updateColumn(editIndex, editData);
+
+    // 2️⃣ Alle rows migreren: oude key → nieuwe key
+    if (oldName !== newName) {
+      const { data: rowsData, error } = await supabase
+        .from("trades")
+        .select("id, data");
+
+      if (error) {
+        console.error("Fetch rows error:", error);
+      } else {
+        for (let row of rowsData) {
+          if (row.data && row.data[oldName] !== undefined) {
+            const newData = { ...row.data };
+            newData[newName] = newData[oldName];
+            delete newData[oldName];
+
+            const { error: updateError } = await supabase
+              .from("trades")
+              .update({ data: newData })
+              .eq("id", row.id);
+
+            if (updateError) {
+              console.error("Row update error:", updateError);
+            }
+          }
+        }
+
+        // 3️⃣ Lokale rows ook updaten
+        setRows((prev) =>
+          prev.map((r) => {
+            if (r[oldName] !== undefined) {
+              const copy = { ...r };
+              copy[newName] = copy[oldName];
+              delete copy[oldName];
+              return copy;
+            }
+            return r;
+          })
+        );
+      }
+    }
+
     setEditIndex(null);
     setError("");
   };

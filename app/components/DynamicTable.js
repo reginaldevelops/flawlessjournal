@@ -10,6 +10,7 @@ export default function DynamicTable() {
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
   const [colWidths, setColWidths] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
   const startX = useRef(null);
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
@@ -18,7 +19,7 @@ export default function DynamicTable() {
   const loadRows = async () => {
     const { data, error } = await supabase.from("trades").select("*");
     if (!error) {
-      setRows(data.map((d) => ({ id: d.id, ...d.data }))); // uuid id
+      setRows(data.map((d) => ({ id: d.id, ...d.data })));
     }
   };
 
@@ -27,11 +28,12 @@ export default function DynamicTable() {
       .from("columns")
       .select("*")
       .order("order", { ascending: true });
+
     if (error) {
       console.error("Load columns error:", error);
     } else {
       setColumns(data.map((c) => ({ id: c.id, ...c.definition })));
-      setColWidths(data.map(() => 150)); // standaard breedte
+      setColWidths(data.map((c) => c.definition.width || 150));
     }
   };
 
@@ -42,7 +44,7 @@ export default function DynamicTable() {
 
   /* ---------- Column resizing ---------- */
   const onMouseDown = (e, index) => {
-    e.preventDefault(); // 👉 voorkomt tekstselectie
+    e.preventDefault();
     startX.current = e.clientX;
     startWidth.current = colWidths[index];
     resizingIndex.current = index;
@@ -59,7 +61,39 @@ export default function DynamicTable() {
     setColWidths(newWidths);
   };
 
-  const onMouseUp = () => {
+  const onMouseUp = async () => {
+    if (resizingIndex.current !== null) {
+      const index = resizingIndex.current;
+      const col = columns[index];
+      const newWidth = colWidths[index];
+
+      // Alleen de velden die in definition horen
+      const newDefinition = {
+        name: col.name,
+        type: col.type,
+        width: newWidth,
+        options: col.options || [],
+      };
+
+      const { error } = await supabase
+        .from("columns")
+        .update({ definition: newDefinition })
+        .eq("id", col.id);
+
+      if (error) {
+        console.error("Update column width error:", error);
+      } else {
+        // Update state: kolommen + breedtes synchroon houden
+        const newCols = [...columns];
+        newCols[index] = { ...col, ...newDefinition };
+        setColumns(newCols);
+
+        const newWidths = [...colWidths];
+        newWidths[index] = newWidth;
+        setColWidths(newWidths);
+      }
+    }
+
     resizingIndex.current = null;
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);
@@ -82,7 +116,7 @@ export default function DynamicTable() {
     updatedRows[rowIndex][colName] = value;
     setRows(updatedRows);
 
-    if (value === "__new") return; // skip tijdelijk "__new"
+    if (value === "__new") return;
 
     const row = updatedRows[rowIndex];
     const { id, ...jsonData } = row;
@@ -95,14 +129,36 @@ export default function DynamicTable() {
     if (error) console.error("Update row error:", error);
   };
 
-  const handleDeleteRow = async (rowIndex) => {
-    const row = rows[rowIndex];
-    const { error } = await supabase.from("trades").delete().eq("id", row.id);
+  const handleDeleteSelected = async () => {
+    if (selectedRows.length === 0) return;
+
+    const { error } = await supabase
+      .from("trades")
+      .delete()
+      .in("id", selectedRows);
 
     if (error) {
-      console.error("Delete row error:", error);
+      console.error("Bulk delete error:", error);
     } else {
-      setRows(rows.filter((_, i) => i !== rowIndex));
+      setRows(rows.filter((r) => !selectedRows.includes(r.id)));
+      setSelectedRows([]);
+    }
+  };
+
+  const toggleRowSelection = (rowId) => {
+    setSelectedRows(
+      (prev) =>
+        prev.includes(rowId)
+          ? prev.filter((id) => id !== rowId) // verwijderen
+          : [...prev, rowId] // toevoegen
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRows.length === rows.length) {
+      setSelectedRows([]);
+    } else {
+      setSelectedRows(rows.map((r) => r.id));
     }
   };
 
@@ -119,121 +175,216 @@ export default function DynamicTable() {
         />
       </TableManagementSection>
 
+      {rows.length > 0 && (
+        <BulkActions>
+          <button onClick={toggleSelectAll}>
+            {selectedRows.length === rows.length
+              ? "Unselect All"
+              : "Select All"}
+          </button>
+          <button onClick={handleDeleteSelected}>
+            Delete Selected ({selectedRows.length})
+          </button>
+        </BulkActions>
+      )}
+
       <TableWrapper>
         <StyledTable>
+          <colgroup>
+            <col style={{ width: 40 }} />
+            {columns.map((_, i) => (
+              <col key={i} style={{ width: colWidths[i] || 150 }} />
+            ))}
+          </colgroup>
+
           <thead>
             <tr>
+              <Th style={{ width: 40 }}>
+                <input
+                  type="checkbox"
+                  checked={
+                    selectedRows.length === rows.length && rows.length > 0
+                  }
+                  onChange={toggleSelectAll}
+                />
+              </Th>
               {columns.map((col, i) => (
-                <Th key={col.id} style={{ width: colWidths[i] }}>
+                <Th key={col.id}>
                   {col.name}
                   <Resizer onMouseDown={(e) => onMouseDown(e, i)} />
                 </Th>
               ))}
-              {rows.length > 0 && <Th>Acties</Th>}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, rIdx) => (
-              <Tr key={row.id}>
-                {columns.map((col) => (
-                  <Td key={col.id}>
-                    {col.type === "boolean" ? (
-                      <input
-                        type="checkbox"
-                        checked={!!row[col.name]}
-                        onChange={(e) =>
-                          handleCellChange(rIdx, col.name, e.target.checked)
-                        }
-                      />
-                    ) : col.type === "select" ? (
-                      <SelectWrapper>
-                        <ModernSelect
-                          value={row[col.name] ?? ""}
-                          onChange={(e) => {
-                            if (e.target.value === "__new") {
-                              handleCellChange(rIdx, col.name, "__new");
-                            } else {
-                              handleCellChange(rIdx, col.name, e.target.value);
-                            }
-                          }}
-                        >
-                          <option value="">-- Kies --</option>
-                          {col.options?.map((opt, i) => (
-                            <option key={i} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                          <option value="__new">➕ Nieuwe toevoegen...</option>
-                        </ModernSelect>
-                        <DropdownArrow>▾</DropdownArrow>
+            {rows.map((row, rowIndex) => (
+              <tr key={row.id}>
+                <Td style={{ width: 40 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRows.includes(row.id)}
+                    onChange={() => toggleRowSelection(row.id)}
+                  />
+                </Td>
 
-                        {row[col.name] === "__new" && (
-                          <InlineNewInput
-                            type="text"
-                            autoFocus
-                            placeholder="Nieuwe optie..."
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && e.target.blur()
+                {columns.map((col) => {
+                  const value = row[col.name] ?? "";
+
+                  switch (col.type) {
+                    case "date":
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="date"
+                            value={value || ""}
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.value
+                              )
                             }
-                            onBlur={async (e) => {
-                              const newOption = e.target.value.trim();
-                              if (newOption) {
-                                const updatedCols = [...columns];
-                                const colIndex = updatedCols.findIndex(
-                                  (c) => c.id === col.id
+                          />
+                        </Td>
+                      );
+
+                    case "time":
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="time"
+                            value={value || ""}
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.value
+                              )
+                            }
+                          />
+                        </Td>
+                      );
+
+                    case "number":
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="number"
+                            value={value ?? ""} // voorkomt uncontrolled → controlled warning
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.value === ""
+                                  ? null
+                                  : e.target.valueAsNumber
+                              )
+                            }
+                          />
+                        </Td>
+                      );
+
+                    case "boolean":
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="checkbox"
+                            checked={!!value}
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.checked
+                              )
+                            }
+                          />
+                        </Td>
+                      );
+
+                    case "select":
+                      return (
+                        <Td key={col.id}>
+                          <select
+                            value={value || ""}
+                            onChange={async (e) => {
+                              const v = e.target.value;
+                              if (v === "__new") {
+                                const newVal = prompt(
+                                  "Nieuwe waarde toevoegen:"
                                 );
+                                if (newVal) {
+                                  const newOptions = [
+                                    ...(col.options || []),
+                                    newVal,
+                                  ];
 
-                                updatedCols[colIndex] = {
-                                  ...updatedCols[colIndex],
-                                  options: [
-                                    ...(updatedCols[colIndex].options || []),
-                                    newOption,
-                                  ],
-                                };
-                                setColumns(updatedCols);
-                                handleCellChange(rIdx, col.name, newOption);
+                                  // update in supabase
+                                  await supabase
+                                    .from("columns")
+                                    .update({
+                                      definition: {
+                                        name: col.name,
+                                        type: col.type,
+                                        width: col.width,
+                                        options: newOptions,
+                                      },
+                                    })
+                                    .eq("id", col.id);
 
-                                const updatedCol = updatedCols[colIndex];
-                                const { error } = await supabase
-                                  .from("columns")
-                                  .update({
-                                    definition: {
-                                      name: updatedCol.name,
-                                      type: updatedCol.type,
-                                      options: updatedCol.options,
-                                    },
-                                  })
-                                  .eq("id", updatedCol.id);
-
-                                if (error)
-                                  console.error(
-                                    "Update column options error:",
-                                    error
+                                  // update in state
+                                  setColumns((prev) =>
+                                    prev.map((c) =>
+                                      c.id === col.id
+                                        ? { ...c, options: newOptions }
+                                        : c
+                                    )
                                   );
+
+                                  handleCellChange(rowIndex, col.name, newVal);
+                                }
                               } else {
-                                handleCellChange(rIdx, col.name, "");
+                                handleCellChange(rowIndex, col.name, v);
                               }
                             }}
+                          >
+                            <option value="">-- selecteer --</option>
+                            {col.options?.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                            <option value="__new">
+                              ➕ Nieuwe waarde toevoegen
+                            </option>
+                          </select>
+                        </Td>
+                      );
+
+                    default:
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="text"
+                            value={value || ""}
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.value
+                              )
+                            }
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                            }}
                           />
-                        )}
-                      </SelectWrapper>
-                    ) : (
-                      <CellInput
-                        type={col.type}
-                        value={row[col.name] ?? ""}
-                        onChange={(e) =>
-                          handleCellChange(rIdx, col.name, e.target.value)
-                        }
-                      />
-                    )}
-                  </Td>
-                ))}
-                <Td>
-                  <DeleteButton onClick={() => handleDeleteRow(rIdx)}>
-                    ✕
-                  </DeleteButton>
-                </Td>
-              </Tr>
+                        </Td>
+                      );
+                  }
+                })}
+              </tr>
             ))}
           </tbody>
         </StyledTable>
@@ -243,7 +394,6 @@ export default function DynamicTable() {
 }
 
 /* ---------------- styled ---------------- */
-
 const Wrapper = styled.div`
   padding: 2rem;
   font-family: "Inter", sans-serif;
@@ -258,6 +408,24 @@ const TableManagementSection = styled.div`
   gap: 25%;
 `;
 
+const BulkActions = styled.div`
+  margin: 1rem 0;
+  display: flex;
+  gap: 1rem;
+
+  button {
+    background: #f3f4f6;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+
+    &:hover {
+      background: #e5e7eb;
+    }
+  }
+`;
+
 const TableWrapper = styled.div`
   width: 100%;
   overflow-x: auto;
@@ -265,21 +433,16 @@ const TableWrapper = styled.div`
 `;
 
 const StyledTable = styled.table`
-  min-width: 600px;
-  width: 100%;
-  table-layout: fixed;
   border-spacing: 0;
-  border-collapse: collapse; /* 👉 belangrijk: geeft grid look */
+  border-collapse: collapse;
   background: white;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 
-  td:not(:has(input)):not(:has(select)) {
-    max-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+  table-layout: fixed;
+  width: auto;
+  min-width: max-content;
 `;
 
 const Th = styled.th`
@@ -289,7 +452,7 @@ const Th = styled.th`
   padding: 0.75rem;
   font-weight: 600;
   font-size: 0.9rem;
-  border: 1px solid #e5e7eb; /* 👉 border rondom */
+  border: 1px solid #e5e7eb;
   white-space: normal;
 `;
 
@@ -304,103 +467,13 @@ const Resizer = styled.div`
   z-index: 10;
 `;
 
-const Tr = styled.tr``;
-
 const Td = styled.td`
   padding: 0.75rem;
-  border: 1px solid #e5e7eb; /* 👉 border rondom */
+  border: 1px solid #e5e7eb;
   vertical-align: middle;
-  white-space: nowrap;
-  width: 1%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 
   input,
   select {
     max-width: 100%;
-    white-space: normal;
-    text-overflow: initial;
-  }
-`;
-
-const CellInput = styled.input`
-  width: auto;
-  min-width: 0;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 0.9rem;
-`;
-
-const DeleteButton = styled.button`
-  background: none;
-  border: none;
-  color: #ef4444;
-  font-size: 1rem;
-  cursor: pointer;
-  &:hover {
-    color: #dc2626;
-    transform: scale(1.1);
-  }
-`;
-
-const SelectWrapper = styled.div`
-  position: relative;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-`;
-
-const ModernSelect = styled.select`
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-
-  width: 100%;
-  max-width: 100%;
-  padding: 0.35rem 2rem 0.35rem 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background: white;
-  color: #333;
-  cursor: pointer;
-
-  &:hover {
-    border-color: #3b82f6;
-  }
-
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px #bfdbfe;
-  }
-`;
-
-const DropdownArrow = styled.span`
-  position: absolute;
-  right: 0.7rem;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: #555;
-  font-size: 0.8rem;
-  z-index: 2;
-`;
-
-const InlineNewInput = styled.input`
-  width: 100%;
-  margin-top: 4px;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  background: #f9fafb;
-
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    background: #fff;
-    box-shadow: 0 0 0 2px #bfdbfe;
   }
 `;
