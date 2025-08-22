@@ -79,18 +79,22 @@ export default function RowFormDrawer({ columns, onAddRow }) {
   );
 }
 
-/* styled */
+/* ---------------- styled ---------------- */
 const AddButton = styled.button`
-  background: #22c55e;
-  color: white;
-  border: none;
-  border-radius: 8px;
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 0, 128, 0.25);
+  border-radius: 6px;
   padding: 0.6rem 1.2rem;
-  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  color: #f3f4f6;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+
   &:hover {
-    background: #16a34a;
+    background: #222;
+    border-color: rgba(0, 200, 255, 0.4);
+    color: #fff;
   }
 `;
 
@@ -100,12 +104,14 @@ const Drawer = styled.div`
   left: ${({ $open }) => ($open ? "0" : "-400px")};
   height: 100vh;
   width: 400px;
-  background: white;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+  background: #0f0f12;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
   transition: left 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
+  color: #f3f4f6;
 `;
 
 const DrawerContent = styled.div`
@@ -115,14 +121,25 @@ const DrawerContent = styled.div`
   flex-direction: column;
 `;
 
+const Title = styled.h2`
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+`;
+
 const CloseButton = styled.button`
   align-self: flex-end;
   background: none;
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #555;
+  color: #888;
   margin-bottom: 1rem;
+
+  &:hover {
+    color: #fff;
+  }
 `;
 
 const Form = styled.form`
@@ -132,35 +149,71 @@ const Form = styled.form`
   flex: 1;
 `;
 
+const Label = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #ddd;
+  font-size: 0.9rem;
+`;
+
 const Input = styled.input`
   padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f3f4f6;
+  font-size: 0.9rem;
+
+  &::placeholder {
+    color: #777;
+  }
+
+  &:focus {
+    border-color: rgba(0, 200, 255, 0.4);
+    outline: none;
+  }
+`;
+
+const Select = styled.select`
+  padding: 0.6rem;
+  background: #1a1a1f;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f3f4f6;
+  font-size: 0.9rem;
+
+  &:focus {
+    border-color: rgba(255, 0, 128, 0.3);
+    outline: none;
+  }
+`;
+
+const Checkbox = styled.input`
+  accent-color: #ff0080;
 `;
 
 const SubmitButton = styled.button`
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
+  background: #1a1a1f;
+  border: 1px solid rgba(0, 200, 255, 0.3);
+  border-radius: 6px;
   padding: 0.75rem 1rem;
   font-weight: 500;
   cursor: pointer;
   margin-top: auto;
+  color: #f3f4f6;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+
   &:hover {
-    background: #2563eb;
+    background: #222;
+    border-color: rgba(255, 0, 128, 0.5);
   }
 `;
 
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 40;
-`;
-
-const Select = styled.select`
-  padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
 `;

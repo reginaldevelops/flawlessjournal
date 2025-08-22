@@ -159,7 +159,7 @@ export default function ColumnFormDrawer({
                   {tempOptions.map((opt, i) => (
                     <span key={i} style={tagStyle}>
                       {opt}
-                      <button
+                      <SelectionTagExit
                         type="button"
                         onClick={() =>
                           setTempOptions((prev) =>
@@ -168,7 +168,7 @@ export default function ColumnFormDrawer({
                         }
                       >
                         ❌
-                      </button>
+                      </SelectionTagExit>
                     </span>
                   ))}
                 </div>
@@ -362,49 +362,61 @@ export default function ColumnFormDrawer({
   );
 }
 
-/* ----- styles ----- */
+/* ----- styles (dark / minimal cyberpunk) ----- */
 
 const SelectionTagExit = styled.button`
   border: none;
   font-size: 10px;
-  background-color: transparent;
+  background: transparent;
+  color: #ff4d6d;
+  cursor: pointer;
+
+  &:hover {
+    color: #ff8099;
+  }
 `;
 
 const tagStyle = {
-  padding: "0.25rem 0.5rem",
-  background: "#e6e6e6ff",
+  padding: "0.25rem 0.6rem",
+  background: "rgba(255,255,255,0.05)",
   borderRadius: "12px",
+  border: "1px solid rgba(255,255,255,0.1)",
   display: "flex",
   alignItems: "center",
   gap: "0.4rem",
+  fontSize: "0.85rem",
 };
 
 const AddButton = styled.button`
-  background: #3b82f6;
-  color: white;
+  background: linear-gradient(90deg, #007cf0, #00dfd8);
+  color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.6rem 1.2rem;
-  font-weight: 500;
+  font-weight: bold;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
+
   &:hover {
-    background: #2563eb;
+    transform: scale(1.03);
+    box-shadow: 0 0 10px rgba(0, 223, 216, 0.4);
   }
 `;
 
 const Drawer = styled.div`
   position: fixed;
   top: 0;
-  right: ${({ $open }) => ($open ? "0" : "-400px")};
+  right: ${({ $open }) => ($open ? "0" : "-420px")};
   height: 100vh;
-  width: 400px;
-  background: white;
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+  width: 420px;
+  background: #0f0f12;
+  box-shadow: -6px 0 15px rgba(0, 0, 0, 0.7);
   transition: right 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 `;
 
 const DrawerContent = styled.div`
@@ -412,12 +424,13 @@ const DrawerContent = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
+  color: #eee;
 `;
 
 const ColumnLabel = styled.span`
   display: inline-block;
   width: 100%;
-  vertical-align: middle;
+  font-size: 0.95rem;
 `;
 
 const CloseButton = styled.button`
@@ -426,8 +439,11 @@ const CloseButton = styled.button`
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #555;
-  margin-bottom: 1rem;
+  color: #aaa;
+
+  &:hover {
+    color: #fff;
+  }
 `;
 
 const Form = styled.form`
@@ -438,25 +454,47 @@ const Form = styled.form`
 
 const Input = styled.input`
   padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  color: #fff;
+
+  &::placeholder {
+    color: #777;
+  }
+
+  &:focus {
+    border-color: #00dfd8;
+    outline: none;
+    box-shadow: 0 0 6px rgba(0, 223, 216, 0.4);
+  }
 `;
 
 const Select = styled.select`
   padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+
+  &:focus {
+    border-color: #00dfd8;
+    outline: none;
+  }
 `;
 
 const SubmitButton = styled.button`
   background: #22c55e;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.75rem 1rem;
-  font-weight: 500;
+  font-weight: bold;
   cursor: pointer;
   margin-top: auto;
+  text-transform: uppercase;
+  transition: background 0.2s;
+
   &:hover {
     background: #16a34a;
   }
@@ -470,14 +508,15 @@ const ColumnList = styled.ul`
 
 const ColumnItem = styled.li`
   padding: 0.6rem;
-  margin-bottom: 0.4rem;
-  border: 1px solid #ddd;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  background: #f9fafb;
+  background: rgba(255, 255, 255, 0.05);
   cursor: grab;
+
   &:active {
     cursor: grabbing;
-    background: #e5e7eb;
+    background: rgba(255, 255, 255, 0.08);
   }
 `;
 
@@ -485,17 +524,16 @@ const RowFlex = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5em;
 `;
 
 const TypeTag = styled.span`
-  color: #666666f7;
-  font-size: 0.85rem;
+  color: #999;
+  font-size: 0.8rem;
 `;
 
 const Actions = styled.div`
   display: flex;
-  gap: 0.3rem;
+  gap: 0.4rem;
 `;
 
 const ActionButton = styled.button`
@@ -503,23 +541,29 @@ const ActionButton = styled.button`
   border: none;
   cursor: pointer;
   font-size: 1rem;
-  color: grey;
+  color: #aaa;
+
+  &:hover {
+    color: #fff;
+  }
 `;
 
 const EditForm = styled.div`
   display: flex;
-  flex-wrap: wrap; /* ✅ voorkomt overflow */
+  flex-wrap: wrap;
   gap: 1rem;
   align-items: center;
   width: 100%;
 `;
 
 const SmallInput = styled.input`
-  flex: 1 1 100%; /* ✅ neemt volle breedte in binnen EditForm */
-  min-width: 0; /* voorkomt overflow door lange inhoud */
+  flex: 1 1 100%;
+  min-width: 0;
   padding: 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
 `;
 
 const SmallSelect = styled.select`
@@ -527,25 +571,30 @@ const SmallSelect = styled.select`
   min-width: 80px;
   max-width: 50%;
   padding: 0.25rem;
-  border: 1px solid #ccc;
-  background-color: #e6e6e6ff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
 `;
 
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.6);
   z-index: 40;
 `;
 
 const ErrorText = styled.p`
-  color: #dc2626;
+  color: #ff4d6d;
   font-size: 0.85rem;
   margin-top: 0.5rem;
 `;
 
 const InputNewOption = styled.input`
-  font-size: 15px;
-  padding: 2px 5px;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
 `;
