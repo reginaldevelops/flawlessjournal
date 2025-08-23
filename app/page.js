@@ -9,7 +9,7 @@ export default function HomePage() {
     <LayoutWrapper>
       <Hero>
         <ButtonBar>
-          <StyledLink href="/trade-data">Ga naar Trade Data</StyledLink>
+          <StyledLink href="/trade-data">Continue</StyledLink>
         </ButtonBar>
       </Hero>
     </LayoutWrapper>
