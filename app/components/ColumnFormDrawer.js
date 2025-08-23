@@ -149,6 +149,7 @@ export default function ColumnFormDrawer({
               <option value="date">Datum</option>
               <option value="time">Tijd</option>
               <option value="select">Dropdown</option>
+              <option value="link">Link</option>
             </Select>
 
             {showNewOptions && (
@@ -243,6 +244,7 @@ export default function ColumnFormDrawer({
                       <option value="date">Datum</option>
                       <option value="time">Tijd</option>
                       <option value="select">Dropdown</option>
+                      <option value="link">Link</option>
                     </SmallSelect>
 
                     {editData.type === "select" && (
@@ -362,25 +364,39 @@ export default function ColumnFormDrawer({
   );
 }
 
-/* ----- styles (dark / minimal cyberpunk) ----- */
+/* ----- styles (light Notion + subtle cyberpunk accents) ----- */
 
 const SelectionTagExit = styled.button`
-  border: none;
-  font-size: 10px;
-  background: transparent;
-  color: #ff4d6d;
+  all: unset;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
   cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: #db2777;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   &:hover {
-    color: #ff8099;
+    color: #f43f5e;
+  }
+
+  &:focus,
+  &:active {
+    outline: none !important;
+    box-shadow: none !important;
+    background: none !important;
   }
 `;
 
 const tagStyle = {
   padding: "0.25rem 0.6rem",
-  background: "rgba(255,255,255,0.05)",
+  background: "#f9fafb",
   borderRadius: "12px",
-  border: "1px solid rgba(255,255,255,0.1)",
+  border: "1px solid #e5e7eb",
   display: "flex",
   alignItems: "center",
   gap: "0.4rem",
@@ -388,7 +404,7 @@ const tagStyle = {
 };
 
 const AddButton = styled.button`
-  background: linear-gradient(90deg, #007cf0, #00dfd8);
+  background: linear-gradient(90deg, #0ea5e9, #22d3ee); /* cyan glow */
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -397,11 +413,6 @@ const AddButton = styled.button`
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.2s ease;
-
-  &:hover {
-    transform: scale(1.03);
-    box-shadow: 0 0 10px rgba(0, 223, 216, 0.4);
-  }
 `;
 
 const Drawer = styled.div`
@@ -410,13 +421,13 @@ const Drawer = styled.div`
   right: ${({ $open }) => ($open ? "0" : "-420px")};
   height: 100vh;
   width: 420px;
-  background: #0f0f12;
-  box-shadow: -6px 0 15px rgba(0, 0, 0, 0.7);
+  background: #fff;
+  box-shadow: -6px 0 15px rgba(0, 0, 0, 0.1);
   transition: right 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid #e5e7eb;
 `;
 
 const DrawerContent = styled.div`
@@ -424,7 +435,7 @@ const DrawerContent = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
-  color: #eee;
+  color: #111;
 `;
 
 const ColumnLabel = styled.span`
@@ -439,10 +450,10 @@ const CloseButton = styled.button`
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #aaa;
+  color: #999;
 
   &:hover {
-    color: #fff;
+    color: #db2777; /* neon pink accent */
   }
 `;
 
@@ -454,32 +465,27 @@ const Form = styled.form`
 
 const Input = styled.input`
   padding: 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
   border-radius: 6px;
-  color: #fff;
+  color: #111;
 
   &::placeholder {
-    color: #777;
-  }
-
-  &:focus {
-    border-color: #00dfd8;
-    outline: none;
-    box-shadow: 0 0 6px rgba(0, 223, 216, 0.4);
+    color: #aaa;
   }
 `;
 
 const Select = styled.select`
   padding: 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: #fafafa;
+  color: #111;
 
   &:focus {
-    border-color: #00dfd8;
+    border-color: #db2777; /* pink accent */
     outline: none;
+    box-shadow: 0 0 0 2px rgba(219, 39, 119, 0.15);
   }
 `;
 
@@ -494,10 +500,6 @@ const SubmitButton = styled.button`
   margin-top: auto;
   text-transform: uppercase;
   transition: background 0.2s;
-
-  &:hover {
-    background: #16a34a;
-  }
 `;
 
 const ColumnList = styled.ul`
@@ -509,14 +511,15 @@ const ColumnList = styled.ul`
 const ColumnItem = styled.li`
   padding: 0.6rem;
   margin-bottom: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #fafafa;
   cursor: grab;
+  transition: background 0.2s;
 
   &:active {
     cursor: grabbing;
-    background: rgba(255, 255, 255, 0.08);
+    background: #f3faff; /* zacht blauw */
   }
 `;
 
@@ -527,7 +530,7 @@ const RowFlex = styled.div`
 `;
 
 const TypeTag = styled.span`
-  color: #999;
+  color: #666;
   font-size: 0.8rem;
 `;
 
@@ -541,10 +544,11 @@ const ActionButton = styled.button`
   border: none;
   cursor: pointer;
   font-size: 1rem;
-  color: #aaa;
+  color: #888;
+  transition: color 0.2s;
 
   &:hover {
-    color: #fff;
+    color: #0ea5e9; /* cyan hover */
   }
 `;
 
@@ -560,10 +564,10 @@ const SmallInput = styled.input`
   flex: 1 1 100%;
   min-width: 0;
   padding: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: #fafafa;
+  color: #111;
 `;
 
 const SmallSelect = styled.select`
@@ -571,21 +575,21 @@ const SmallSelect = styled.select`
   min-width: 80px;
   max-width: 50%;
   padding: 0.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: #fafafa;
+  color: #111;
 `;
 
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 40;
 `;
 
 const ErrorText = styled.p`
-  color: #ff4d6d;
+  color: #db2777;
   font-size: 0.85rem;
   margin-top: 0.5rem;
 `;
@@ -594,7 +598,7 @@ const InputNewOption = styled.input`
   font-size: 0.9rem;
   padding: 0.4rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  color: #111;
 `;

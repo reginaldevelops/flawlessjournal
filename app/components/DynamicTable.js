@@ -209,7 +209,7 @@ export default function DynamicTable() {
       <TableWrapper>
         <StyledTable>
           <colgroup>
-            <col style={{ width: 40 }} />
+            <col style={{ width: 60 }} />
             {columns.map((c) => (
               <col key={c.id} style={{ width: c.width || 150 }} />
             ))}
@@ -218,7 +218,7 @@ export default function DynamicTable() {
           <thead>
             <tr>
               <Th style={{ width: 40 }}>
-                <input
+                <CheckboxInput
                   type="checkbox"
                   checked={
                     selectedRows.length === rows.length && rows.length > 0
@@ -238,11 +238,13 @@ export default function DynamicTable() {
             {rows.map((row, rowIndex) => (
               <tr key={row.id}>
                 <Td>
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.includes(row.id)}
-                    onChange={() => toggleRowSelection(row.id)}
-                  />
+                  <CheckboxWrapper>
+                    <CheckboxInput
+                      type="checkbox"
+                      checked={selectedRows.includes(row.id)}
+                      onChange={() => toggleRowSelection(row.id)}
+                    />
+                  </CheckboxWrapper>
                 </Td>
 
                 {columns.map((col) => {
@@ -317,6 +319,42 @@ export default function DynamicTable() {
                               )
                             }
                           />
+                        </Td>
+                      );
+
+                    case "link":
+                      return (
+                        <Td key={col.id}>
+                          <input
+                            type="url"
+                            placeholder="https://..."
+                            value={value || ""}
+                            onChange={(e) =>
+                              handleCellChange(
+                                rowIndex,
+                                col.name,
+                                e.target.value
+                              )
+                            }
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              outline: "none",
+                              background: "transparent",
+                              color: "#0ea5e9",
+                              textDecoration: "underline",
+                            }}
+                          />
+                          {value && (
+                            <a
+                              href={value}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ marginLeft: "0.5rem", color: "#0ea5e9" }}
+                            >
+                              🔗
+                            </a>
+                          )}
                         </Td>
                       );
 
@@ -444,33 +482,34 @@ export default function DynamicTable() {
 const Wrapper = styled.div`
   padding: 2rem;
   font-family: "Inter", sans-serif;
-  color: #e5e7eb; /* zacht wit */
+  color: #111; /* donker tekst */
   width: 100%;
   min-height: 100vh;
-  background: #0b0b0d; /* bijna zwart */
+  background: #f9f9fb; /* licht Notion-achtig wit */
 `;
 
 const TableManagementSection = styled.div`
   width: 100%;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 
   button {
-    background: #1a1a1f;
-    border: 1px solid rgba(255, 0, 128, 0.25);
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    padding: 0.6rem 1.2rem;
+    padding: 0.55rem 1.1rem;
     cursor: pointer;
-    color: #f3f4f6;
+    color: #111;
     font-weight: 500;
     font-size: 0.85rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     transition: all 0.2s;
 
     &:hover {
-      background: #222;
-      border-color: rgba(0, 200, 255, 0.4);
-      color: #fff;
+      border-color: rgba(0, 200, 255, 0.5); /* cyberpunk accent */
+      color: #0ea5e9;
+      box-shadow: 0 2px 6px rgba(0, 200, 255, 0.2);
     }
   }
 `;
@@ -478,23 +517,22 @@ const TableManagementSection = styled.div`
 const BulkActions = styled.div`
   margin: 1rem 0;
   display: flex;
-  gap: 1rem;
+  gap: 0.8rem;
 
   button {
-    background: #16161a;
-    border: 1px solid rgba(0, 200, 255, 0.25);
+    background: #fdfdfd;
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 0.9rem;
     cursor: pointer;
-    color: #d1d5db;
-    font-weight: 500;
+    color: #111;
     font-size: 0.8rem;
-    transition: all 0.2s ease;
+    transition: all 0.2s;
 
     &:hover {
-      background: #1e1e24;
-      border-color: rgba(255, 0, 128, 0.4);
-      color: #fff;
+      border-color: rgba(255, 0, 128, 0.6); /* neon pink accent */
+      color: #db2777;
+      box-shadow: 0 2px 6px rgba(255, 0, 128, 0.25);
     }
   }
 `;
@@ -503,32 +541,33 @@ const TableWrapper = styled.div`
   width: 100%;
   overflow-x: auto;
   margin-top: 1rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #111114;
-  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 `;
 
 const StyledTable = styled.table`
   border-spacing: 0;
   border-collapse: collapse;
-  width: auto;
+  width: 100%;
   min-width: max-content;
   table-layout: fixed;
-  font-size: 0.92rem;
-  color: #e5e7eb;
+  font-size: 0.9rem;
+  color: #111;
+  border: 1px solid #e5e7eb; /* buitenrand van de hele tabel */
 `;
 
 const Th = styled.th`
   position: relative;
   text-align: left;
-  padding: 0.9rem;
+  padding: 0.85rem 1rem;
   font-weight: 600;
   font-size: 0.9rem;
   letter-spacing: 0.3px;
-  border-bottom: 1px solid rgba(255, 0, 128, 0.35);
-  color: #fafafa;
-  background: #18181c;
+  border: 1px solid #e5e7eb; /* nu ook verticale scheiding */
+  color: #111;
+  background: #fafafa;
   white-space: nowrap;
 `;
 
@@ -543,31 +582,74 @@ const Resizer = styled.div`
   background: transparent;
 
   &:hover {
-    background: rgba(0, 200, 255, 0.3);
+    background: rgba(14, 165, 233, 0.4); /* neon cyan accent */
   }
 `;
 
 const Td = styled.td`
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: ${({ $even }) => ($even ? "#131316" : "#0f0f12")};
-  transition: background 0.2s;
+  padding: 0.9rem 1rem; /* meer hoogte */
+  border: 1px solid #e5e7eb;
+  background: ${({ $even }) => ($even ? "#fcfcfd" : "#fff")};
+  transition: background 0.15s;
+  text-align: center; /* inhoud centreren */
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: #f3faff;
   }
 
+  /* Alleen text/select inputs restylen */
   select,
-  input {
+  input[type="text"],
+  input[type="date"],
+  input[type="time"],
+  input[type="number"] {
     width: 100%;
     background: transparent;
     border: none;
     outline: none;
-    color: #f3f4f6;
+    color: #111;
     font-size: 0.85rem;
+  }
+`;
 
-    &::placeholder {
-      color: #9ca3af;
-    }
+const CheckboxWrapper = styled.label`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+`;
+
+const CheckboxInput = styled.input.attrs({ type: "checkbox" })`
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  width: 18px;
+  height: 18px;
+  border: 2px solid #d1d5db; /* lichtgrijs randje */
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #0ea5e9; /* subtiele accentkleur */
+  }
+
+  &:checked {
+    background: #0ea5e9; /* simpel blauw vlak */
+    border-color: #0ea5e9;
+  }
+
+  &:checked::after {
+    content: "✓";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -55%);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
   }
 `;

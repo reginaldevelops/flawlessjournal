@@ -22,23 +22,17 @@ export const GlobalStyles = createGlobalStyle`
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.82);
     border-radius: 10px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #c2b5bfff, #3333ff);
-    border-radius: 10px;
-    border: 2px solid rgba(0, 0, 0, 0.4);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #c8bbc5ff, #5555ff);
+    background: linear-gradient(180deg, #cfc8cdff, #5555ff);
   }
 
   /* Scrollbars - Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #d4bfd0ff #1a1a2e;
+    scrollbar-color: #d8d0d7ff #787883ff;
   }
 `;

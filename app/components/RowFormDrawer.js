@@ -81,20 +81,21 @@ export default function RowFormDrawer({ columns, onAddRow }) {
 
 /* ---------------- styled ---------------- */
 const AddButton = styled.button`
-  background: #1a1a1f;
-  border: 1px solid rgba(255, 0, 128, 0.25);
+  background: #fff;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 0.6rem 1.2rem;
   cursor: pointer;
-  color: #f3f4f6;
+  color: #111;
   font-weight: 500;
   font-size: 0.9rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: all 0.2s;
 
   &:hover {
-    background: #222;
-    border-color: rgba(0, 200, 255, 0.4);
-    color: #fff;
+    border-color: rgba(14, 165, 233, 0.6); /* cyan accent */
+    color: #0ea5e9;
+    box-shadow: 0 2px 6px rgba(14, 165, 233, 0.25);
   }
 `;
 
@@ -104,14 +105,14 @@ const Drawer = styled.div`
   left: ${({ $open }) => ($open ? "0" : "-400px")};
   height: 100vh;
   width: 400px;
-  background: #0f0f12;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.1);
   transition: left 0.3s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  color: #f3f4f6;
+  color: #111;
 `;
 
 const DrawerContent = styled.div`
@@ -125,7 +126,9 @@ const Title = styled.h2`
   font-size: 1.1rem;
   margin-bottom: 1.5rem;
   font-weight: 600;
-  color: #fff;
+  color: #111;
+  border-left: 3px solid rgba(255, 0, 128, 0.6); /* neon pink accent bar */
+  padding-left: 0.5rem;
 `;
 
 const CloseButton = styled.button`
@@ -134,11 +137,12 @@ const CloseButton = styled.button`
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #888;
+  color: #999;
   margin-bottom: 1rem;
+  transition: color 0.2s;
 
   &:hover {
-    color: #fff;
+    color: #db2777; /* neon pink */
   }
 `;
 
@@ -153,67 +157,73 @@ const Label = styled.label`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #ddd;
+  color: #444;
   font-size: 0.9rem;
 `;
 
 const Input = styled.input`
   padding: 0.6rem;
-  background: #1a1a1f;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  color: #f3f4f6;
+  color: #111;
   font-size: 0.9rem;
+  transition: all 0.2s;
 
   &::placeholder {
-    color: #777;
+    color: #999;
   }
 
   &:focus {
-    border-color: rgba(0, 200, 255, 0.4);
+    border-color: rgba(14, 165, 233, 0.6); /* cyan accent */
     outline: none;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
   }
 `;
 
 const Select = styled.select`
   padding: 0.6rem;
-  background: #1a1a1f;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  color: #f3f4f6;
+  color: #111;
   font-size: 0.9rem;
+  transition: all 0.2s;
 
   &:focus {
-    border-color: rgba(255, 0, 128, 0.3);
+    border-color: rgba(255, 0, 128, 0.6);
     outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 0, 128, 0.15);
   }
 `;
 
 const Checkbox = styled.input`
-  accent-color: #ff0080;
+  accent-color: #ff0080; /* neon pink accent */
 `;
 
 const SubmitButton = styled.button`
-  background: #1a1a1f;
-  border: 1px solid rgba(0, 200, 255, 0.3);
+  background: #fff;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 0.75rem 1rem;
   font-weight: 500;
   cursor: pointer;
   margin-top: auto;
-  color: #f3f4f6;
+  color: #111;
   font-size: 0.9rem;
   transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
   &:hover {
-    background: #222;
-    border-color: rgba(255, 0, 128, 0.5);
+    border-color: rgba(255, 0, 128, 0.6); /* neon pink */
+    color: #db2777;
+    box-shadow: 0 2px 6px rgba(255, 0, 128, 0.25);
   }
 `;
 
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 40;
 `;

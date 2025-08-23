@@ -6,7 +6,7 @@ import FlawlessLogo from "./FlawlessLogo";
 export default function LayoutWrapper({ children }) {
   return (
     <Container>
-      <Header>
+      {/* <Header>
         <Background>
           <Image
             src={"/flawless-bg.png"}
@@ -24,7 +24,7 @@ export default function LayoutWrapper({ children }) {
             priority
           />
         </LogoWrapper>
-      </Header>
+      </Header> */}
 
       <Content>{children}</Content>
     </Container>
@@ -33,7 +33,7 @@ export default function LayoutWrapper({ children }) {
 
 /* ---------------- styled ---------------- */
 const Container = styled.div`
-  min-height: 90vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -43,7 +43,7 @@ const Container = styled.div`
 const Header = styled.div`
   position: relative;
   width: 100%;
-  height: 10vh;
+  height: 5vh;
   overflow: hidden;
 `;
 
