@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import styled from "styled-components";
+import LayoutWrapper from "../components/LayoutWrapper";
 
 export default function JournalPage() {
   const [entriesByDay, setEntriesByDay] = useState({});
@@ -14,6 +15,10 @@ export default function JournalPage() {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [expandedIds, setExpandedIds] = useState([]);
+
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-11
 
   const toggleExpand = (id) => {
     setExpandedIds((prev) =>
@@ -69,14 +74,52 @@ export default function JournalPage() {
   };
 
   // ➕ nieuwe entry
-  const addEntry = async () => {
-    if (!newEntry.trim()) return;
+  const [newEntryToday, setNewEntryToday] = useState("");
+
+  const addEntryToday = async () => {
+    if (!newEntryToday.trim()) return;
+
+    const timestamp = new Date(); // altijd nu
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert([{ content: newEntry }])
+      .insert([{ content: newEntryToday, created_at: timestamp.toISOString() }])
       .select();
 
-    if (!error && data && data.length > 0) {
+    if (!error && data?.length) {
+      const inserted = data[0];
+      if (
+        inserted.created_at.slice(0, 10) ===
+        new Date().toISOString().slice(0, 10)
+      ) {
+        setEntries((prev) => [...prev, inserted]);
+      }
+      setEntriesByDay((prev) => {
+        const updated = { ...prev };
+        const d = inserted.created_at.slice(0, 10);
+        updated[d] = (updated[d] || 0) + 1;
+        return updated;
+      });
+      setNewEntryToday("");
+    }
+  };
+
+  const [newEntrySelected, setNewEntrySelected] = useState("");
+
+  const addEntryForSelected = async () => {
+    if (!newEntrySelected.trim()) return;
+
+    const timestamp = new Date(selectedDate); // pak de gekozen dag
+    timestamp.setHours(new Date().getHours());
+    timestamp.setMinutes(new Date().getMinutes());
+
+    const { data, error } = await supabase
+      .from("journal_entries")
+      .insert([
+        { content: newEntrySelected, created_at: timestamp.toISOString() },
+      ])
+      .select();
+
+    if (!error && data?.length) {
       const inserted = data[0];
       if (inserted.created_at.slice(0, 10) === selectedDate) {
         setEntries((prev) => [...prev, inserted]);
@@ -87,7 +130,7 @@ export default function JournalPage() {
         updated[d] = (updated[d] || 0) + 1;
         return updated;
       });
-      setNewEntry("");
+      setNewEntrySelected("");
     }
   };
 
@@ -101,17 +144,16 @@ export default function JournalPage() {
       .from("journal_entries")
       .select("id, created_at, content")
       .gte("created_at", start.toISOString())
-      .lt("created_at", end.toISOString()) // 👈 veldnaam erbij!
+      .lt("created_at", end.toISOString())
       .order("created_at", { ascending: true });
 
     setEntries(data || []);
   };
 
   // 📥 kalender data
-  const loadCalendar = async () => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const loadCalendar = async (y = viewYear, m = viewMonth) => {
+    const firstDay = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0);
 
     const { data } = await supabase
       .from("journal_entries")
@@ -130,148 +172,201 @@ export default function JournalPage() {
   // 🔄 init load
   useEffect(() => {
     loadCalendar();
-  }, []);
+  }, [viewYear, viewMonth]);
 
   useEffect(() => {
     loadEntries(selectedDate);
   }, [selectedDate]);
 
+  // 🔀 maand wisselen
+  const changeMonth = (offset) => {
+    let newMonth = viewMonth + offset;
+    let newYear = viewYear;
+
+    if (newMonth < 0) {
+      newMonth = 11;
+      newYear--;
+    } else if (newMonth > 11) {
+      newMonth = 0;
+      newYear++;
+    }
+
+    setViewMonth(newMonth);
+    setViewYear(newYear);
+  };
+
   // kalender helpers
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
   const blanks = Array(firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1).fill("");
 
   return (
-    <PageWrapper>
-      {/* Input Section */}
-      <InputSection>
-        <h3>What's on your mind today...?</h3>
-        <div className="input-box">
-          <input
-            type="text"
-            placeholder="Start typing..."
-            value={newEntry}
-            onChange={(e) => setNewEntry(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addEntry()}
-          />
-          <button onClick={addEntry}>Add</button>
-        </div>
-      </InputSection>
+    <LayoutWrapper>
+      <PageWrapper>
+        {/* Input Section */}
+        <InputSection>
+          <h3>What's on your mind today...?</h3>
+          <div className="input-box">
+            <textarea
+              type="text"
+              placeholder="Start typing..."
+              value={newEntryToday}
+              onChange={(e) => setNewEntryToday(e.target.value)}
+            />
+            <button onClick={addEntryToday}>Add</button>
+          </div>
+        </InputSection>
 
-      {/* Calendar + Entries */}
-      <ContentSection>
-        <CalendarPane>
-          <h3>
-            {now.toLocaleString("default", { month: "long" })} {year}
-          </h3>
-          <CalendarGrid>
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-              <DayHeader key={d}>{d}</DayHeader>
-            ))}
-            {blanks.map((_, i) => (
-              <DayCell key={`b-${i}`} />
-            ))}
-            {Array.from({ length: daysInMonth }, (_, i) => {
-              const day = i + 1;
-              const dateStr = `${year}-${String(month + 1).padStart(
-                2,
-                "0"
-              )}-${String(day).padStart(2, "0")}`;
-              const count = entriesByDay[dateStr] || 0;
-              const isSelected = selectedDate === dateStr;
-              return (
-                <DayCell
-                  key={day}
-                  $hasEntries={count > 0}
-                  $selected={isSelected}
+        {/* Calendar + Entries */}
+        <ContentSection>
+          <CalendarPane>
+            <HeaderRow>
+              <button onClick={() => changeMonth(-1)}>←</button>
+              <h3>
+                {new Date(viewYear, viewMonth).toLocaleString("default", {
+                  month: "long",
+                })}{" "}
+                {viewYear}
+              </h3>
+              <RightControls>
+                <button onClick={() => changeMonth(1)}>→</button>
+                <TodayButton
                   onClick={() => {
-                    setSelectedDate(dateStr);
-                    loadEntries(dateStr);
+                    const today = new Date();
+                    setViewYear(today.getFullYear());
+                    setViewMonth(today.getMonth());
+                    setSelectedDate(today.toISOString().slice(0, 10));
+                    loadCalendar(today.getFullYear(), today.getMonth());
                   }}
                 >
-                  <span className="day">{day}</span>
-                  {count > 0 && <span className="count">{count}</span>}
-                </DayCell>
-              );
-            })}
-          </CalendarGrid>
-        </CalendarPane>
+                  Vandaag
+                </TodayButton>
+              </RightControls>
+            </HeaderRow>
 
-        <EntryPane>
-          <h2>
-            {new Date(selectedDate).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </h2>
-          {entries.length === 0 ? (
-            <p>No entries.</p>
-          ) : (
-            <ul>
-              {entries.map((e) => {
-                const isEditing = editingId === e.id;
-                const isExpanded = expandedIds.includes(e.id);
-
-                // 👇 veilig display content
-                const displayContent =
-                  !isExpanded && (e.content || "").length > 200
-                    ? (e.content || "").slice(0, 200) + "..."
-                    : e.content || "";
-
+            <CalendarGrid>
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                <DayHeader key={d}>{d}</DayHeader>
+              ))}
+              {blanks.map((_, i) => (
+                <DayCell key={`b-${i}`} />
+              ))}
+              {Array.from({ length: daysInMonth }, (_, i) => {
+                const day = i + 1;
+                const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(
+                  2,
+                  "0"
+                )}-${String(day).padStart(2, "0")}`;
+                const count = entriesByDay[dateStr] || 0;
+                const isSelected = selectedDate === dateStr;
                 return (
-                  <li key={e.id}>
-                    <div className="entry-header">
-                      <strong>
-                        {new Date(e.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </strong>
-                    </div>
-                    <div className="entry-body">
-                      {isEditing ? (
-                        <>
-                          <textarea
-                            value={editText}
-                            onChange={(ev) => setEditText(ev.target.value)}
-                            rows={4}
-                          />
-                          <button onClick={() => handleSaveEdit(e.id)}>
-                            💾
-                          </button>
-                          <button onClick={handleCancelEdit}>✖️</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="content">{displayContent}</span>
-                          <div className="actions">
-                            {(e.content || "").length > 200 && (
-                              <button onClick={() => toggleExpand(e.id)}>
-                                {isExpanded ? "Show less" : "Show more"}
-                              </button>
-                            )}
-                            <button onClick={() => handleStartEdit(e)}>
-                              ✏️
-                            </button>
-                            <button onClick={() => handleDelete(e.id)}>
-                              🗑️
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </li>
+                  <DayCell
+                    key={day}
+                    $hasEntries={count > 0}
+                    $selected={isSelected}
+                    onClick={() => {
+                      setSelectedDate(dateStr);
+                      loadEntries(dateStr);
+                    }}
+                  >
+                    <span className="day">{day}</span>
+                    {count > 0 && <span className="count">{count}</span>}
+                  </DayCell>
                 );
               })}
-            </ul>
-          )}
-        </EntryPane>
-      </ContentSection>
-    </PageWrapper>
+            </CalendarGrid>
+          </CalendarPane>
+
+          {/* Entries */}
+          <EntryPane>
+            <h2>
+              {new Date(selectedDate).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </h2>
+
+            {/* Nieuw invoerveld voor geselecteerde dag */}
+            <NoteInput>
+              <textarea
+                placeholder={`Add a note for ${selectedDate}`}
+                value={newEntrySelected}
+                onChange={(e) => setNewEntrySelected(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  (e.preventDefault(), addEntryForSelected())
+                }
+                rows={3}
+              />
+              <button onClick={addEntryForSelected}>Add</button>
+            </NoteInput>
+
+            {entries.length === 0 ? (
+              <p>No entries.</p>
+            ) : (
+              <ul>
+                {entries.map((e) => {
+                  const isEditing = editingId === e.id;
+                  const isExpanded = expandedIds.includes(e.id);
+
+                  const displayContent =
+                    !isExpanded && (e.content || "").length > 200
+                      ? (e.content || "").slice(0, 200) + "..."
+                      : e.content || "";
+
+                  return (
+                    <li key={e.id}>
+                      <div className="entry-header">
+                        <strong>
+                          {new Date(e.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </strong>
+                      </div>
+                      <div className="entry-body">
+                        {isEditing ? (
+                          <>
+                            <textarea
+                              value={editText}
+                              onChange={(ev) => setEditText(ev.target.value)}
+                              rows={4}
+                            />
+                            <button onClick={() => handleSaveEdit(e.id)}>
+                              💾
+                            </button>
+                            <button onClick={handleCancelEdit}>✖️</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="content">{displayContent}</span>
+                            <div className="actions">
+                              {(e.content || "").length > 200 && (
+                                <button onClick={() => toggleExpand(e.id)}>
+                                  {isExpanded ? "Show less" : "Show more"}
+                                </button>
+                              )}
+                              <button onClick={() => handleStartEdit(e)}>
+                                ✏️
+                              </button>
+                              <button onClick={() => handleDelete(e.id)}>
+                                🗑️
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </EntryPane>
+        </ContentSection>
+      </PageWrapper>
+    </LayoutWrapper>
   );
 }
 
@@ -321,24 +416,35 @@ const InputSection = styled.section`
     justify-content: center;
   }
 
-  input {
-    width: 320px;
-    padding: 0.9rem;
-    border: 1px solid #ccc;
+  textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #ddd;
     border-radius: 8px;
-    font-size: 1rem;
-    background: white;
+    font-size: 0.95rem;
+    background: #fff;
+    resize: vertical; /* user kan groter maken */
+    transition: 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px #2563eb33;
+    }
   }
 
   button {
+    align-self: flex-end; /* knop rechts onder */
     background: #2563eb;
-    color: white;
+    color: #fff;
     border: none;
     border-radius: 8px;
-    padding: 0.9rem 1.4rem;
+    padding: 0.6rem 1.2rem;
     cursor: pointer;
     font-weight: 600;
+    font-size: 0.9rem;
     transition: 0.2s;
+
     &:hover {
       background: #1e40af;
     }
@@ -363,6 +469,56 @@ const CalendarPane = styled.div`
     margin-bottom: 1rem;
     font-weight: 600;
     color: #333;
+  }
+`;
+
+const HeaderRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+
+  h3 {
+    margin: 0;
+    font-weight: 600;
+    color: #333;
+  }
+
+  button {
+    background: #f1f5f9;
+    border: 1px solid #ccc;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: 0.2s;
+
+    &:hover {
+      background: #e2e8f0;
+    }
+  }
+`;
+
+const RightControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+`;
+
+const TodayButton = styled.button`
+  background: #fff;
+  border: 1px solid #ccc;
+  color: #2563eb;
+  font-weight: 500;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: 0.2s;
+
+  &:hover {
+    background: #eff6ff;
+    border-color: #2563eb;
   }
 `;
 
@@ -478,5 +634,46 @@ const EntryPane = styled.div`
 
   .actions button:hover {
     text-decoration: underline;
+  }
+`;
+
+const NoteInput = styled.div`
+  display: flex;
+  flex-direction: column; /* onder elkaar */
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+
+  textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: #fff;
+    resize: vertical; /* user kan groter maken */
+    transition: 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px #2563eb33;
+    }
+  }
+
+  button {
+    align-self: flex-end; /* knop rechts onder */
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: 0.2s;
+
+    &:hover {
+      background: #1e40af;
+    }
   }
 `;
