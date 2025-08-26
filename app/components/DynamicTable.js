@@ -12,6 +12,8 @@ export default function DynamicTable() {
   const [colWidths, setColWidths] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [selectedCell, setSelectedCell] = useState(null); // { rowId, colName }
+  const [copiedCell, setCopiedCell] = useState(null); // { value, type }
   const startX = useRef(null);
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
@@ -66,6 +68,42 @@ export default function DynamicTable() {
     loadColumns();
     loadSort();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selectedCell) return;
+
+      // Copy
+      if (e.ctrlKey && e.key.toLowerCase() === "c") {
+        const row = rows.find((r) => r.id === selectedCell.rowId);
+        const col = columns.find((c) => c.name === selectedCell.colName);
+        const val = row[selectedCell.colName] ?? "";
+        navigator.clipboard.writeText(val);
+        setCopiedCell({ value: val, type: col.type });
+        console.log("📋 Copied:", val);
+      }
+
+      // Paste
+      if (e.ctrlKey && e.key.toLowerCase() === "v") {
+        const rowIndex = rows.findIndex((r) => r.id === selectedCell.rowId);
+        const col = columns.find((c) => c.name === selectedCell.colName);
+
+        navigator.clipboard.readText().then((clipText) => {
+          // Optional: type check
+          if (copiedCell && copiedCell.type !== col.type) {
+            alert(`❌ Type mismatch: ${copiedCell.type} → ${col.type}`);
+            return;
+          }
+
+          handleCellChange(rowIndex, selectedCell.colName, clipText);
+          console.log("📥 Pasted:", clipText);
+        });
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedCell, rows, columns, copiedCell]);
 
   /* ---------- Column resizing ---------- */
   const onMouseDown = (e, index) => {
@@ -302,11 +340,22 @@ export default function DynamicTable() {
 
                 {columns.map((col) => {
                   const value = row[col.name] ?? "";
+                  const isSelected =
+                    selectedCell?.rowId === row.id &&
+                    selectedCell?.colName === col.name;
+
+                  const commonTdProps = {
+                    onClick: () =>
+                      setSelectedCell({ rowId: row.id, colName: col.name }),
+                    style: {
+                      outline: isSelected ? "2px solid #0ea5e9" : "none",
+                    },
+                  };
 
                   switch (col.type) {
                     case "date":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="date"
                             value={value || ""}
@@ -323,7 +372,7 @@ export default function DynamicTable() {
 
                     case "time":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="time"
                             value={value || ""}
@@ -340,7 +389,7 @@ export default function DynamicTable() {
 
                     case "number":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -360,7 +409,7 @@ export default function DynamicTable() {
 
                     case "boolean":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="checkbox"
                             checked={value === "true"}
@@ -377,7 +426,7 @@ export default function DynamicTable() {
 
                     case "link":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="url"
                             placeholder="https://..."
@@ -413,7 +462,7 @@ export default function DynamicTable() {
 
                     case "select":
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           {value === "__new" ? (
                             <input
                               type="text"
@@ -500,7 +549,7 @@ export default function DynamicTable() {
 
                     default:
                       return (
-                        <Td key={col.id}>
+                        <Td key={col.id} {...commonTdProps}>
                           <input
                             type="text"
                             value={value || ""}
