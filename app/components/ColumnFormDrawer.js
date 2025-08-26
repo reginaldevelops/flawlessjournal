@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled from "styled-components";
 import { supabase } from "../lib/supabaseClient";
 import { Trash2, Pencil, Save, Plus, close } from "lucide-react";
@@ -25,6 +25,16 @@ export default function ColumnFormDrawer({
   const [newOptionAdd, setNewOptionAdd] = useState("");
   const [newOptionEdit, setNewOptionEdit] = useState("");
   const [tempOptions, setTempOptions] = useState([]);
+
+  // Voorkomt dat achtergrond scrollt als drawer openstaat
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => (document.body.style.overflow = "auto");
+  }, [open]);
 
   /* ---------------- Supabase actions ---------------- */
   const addColumn = async (col) => {
@@ -436,6 +446,7 @@ const DrawerContent = styled.div`
   display: flex;
   flex-direction: column;
   color: #111;
+  overflow-y: auto;
 `;
 
 const ColumnLabel = styled.span`
@@ -506,6 +517,9 @@ const ColumnList = styled.ul`
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 300px);
 `;
 
 const ColumnItem = styled.li`

@@ -11,6 +11,7 @@ export default function DynamicTable() {
   const [rows, setRows] = useState([]);
   const [colWidths, setColWidths] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const startX = useRef(null);
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
@@ -45,10 +46,25 @@ export default function DynamicTable() {
       setColWidths(data.map((c) => c.width || 150));
     }
   };
+  const loadSort = async () => {
+    const { data, error } = await supabase
+      .from("table_settings")
+      .select("sort_key, sort_direction")
+      .eq("id", 1)
+      .single();
+
+    if (!error && data) {
+      setSortConfig({
+        key: data.sort_key,
+        direction: data.sort_direction || "asc",
+      });
+    }
+  };
 
   useEffect(() => {
     loadRows();
     loadColumns();
+    loadSort();
   }, []);
 
   /* ---------- Column resizing ---------- */
@@ -164,6 +180,29 @@ export default function DynamicTable() {
     }
   };
 
+  const handleSort = async (col) => {
+    setSortConfig((prev) => {
+      let newConfig;
+      if (prev.key === col.name) {
+        newConfig = {
+          key: col.name,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      } else {
+        newConfig = { key: col.name, direction: "asc" };
+      }
+
+      // ✅ update Supabase
+      supabase.from("table_settings").upsert({
+        id: 1, // vaste record
+        sort_key: newConfig.key,
+        sort_direction: newConfig.direction,
+      });
+
+      return newConfig;
+    });
+  };
+
   const toggleRowSelection = (rowId) => {
     setSelectedRows((prev) =>
       prev.includes(rowId)
@@ -179,6 +218,18 @@ export default function DynamicTable() {
       setSelectedRows(rows.map((r) => r.id));
     }
   };
+
+  /* ---------- Sorting ---------- */
+  const sortedRows = [...rows].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+
+    const valA = a[sortConfig.key] ?? "";
+    const valB = b[sortConfig.key] ?? "";
+
+    if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+    return 0;
+  });
 
   /* ---------- Render ---------- */
   return (
@@ -227,15 +278,17 @@ export default function DynamicTable() {
                 />
               </Th>
               {columns.map((col, i) => (
-                <Th key={col.id}>
+                <Th key={col.id} onClick={() => handleSort(col)}>
                   {col.name}
+                  {sortConfig.key === col.name &&
+                    (sortConfig.direction === "asc" ? "" : "")}
                   <Resizer onMouseDown={(e) => onMouseDown(e, i)} />
                 </Th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, rowIndex) => (
+            {sortedRows.map((row, rowIndex) => (
               <tr key={row.id}>
                 <Td>
                   <CheckboxWrapper>
@@ -569,6 +622,7 @@ const Th = styled.th`
   color: #111;
   background: #fafafa;
   white-space: nowrap;
+  cursor: pointer;
 `;
 
 const Resizer = styled.div`

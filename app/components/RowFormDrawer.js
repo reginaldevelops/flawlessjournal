@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled from "styled-components";
 
 export default function RowFormDrawer({ columns, onAddRow }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"; // 🚫 lock body scroll
+    } else {
+      document.body.style.overflow = "auto"; // ✅ unlock again
+    }
+    return () => (document.body.style.overflow = "auto");
+  }, [open]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -120,15 +129,7 @@ const DrawerContent = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
-`;
-
-const Title = styled.h2`
-  font-size: 1.1rem;
-  margin-bottom: 1.5rem;
-  font-weight: 600;
-  color: #111;
-  border-left: 3px solid rgba(255, 0, 128, 0.6); /* neon pink accent bar */
-  padding-left: 0.5rem;
+  overflow-y: auto;
 `;
 
 const CloseButton = styled.button`
@@ -151,14 +152,6 @@ const Form = styled.form`
   flex-direction: column;
   gap: 1rem;
   flex: 1;
-`;
-
-const Label = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #444;
-  font-size: 0.9rem;
 `;
 
 const Input = styled.input`
@@ -195,10 +188,6 @@ const Select = styled.select`
     outline: none;
     box-shadow: 0 0 0 2px rgba(255, 0, 128, 0.15);
   }
-`;
-
-const Checkbox = styled.input`
-  accent-color: #ff0080; /* neon pink accent */
 `;
 
 const SubmitButton = styled.button`
