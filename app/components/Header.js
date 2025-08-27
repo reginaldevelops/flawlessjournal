@@ -16,7 +16,7 @@ export default function Header() {
 
       {/* desktop menu */}
       <Nav>
-        <Link href="/">Home</Link>
+        <Link href="/dashboard">Dash</Link>
         <Link href="/trade-data">Trade Data</Link>
         <Link href="/journal">Journal</Link>
       </Nav>

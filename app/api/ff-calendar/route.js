@@ -26,12 +26,12 @@ export async function GET() {
       const forecast = $(el).find(".calendar__forecast span").text().trim();
       const previous = $(el).find(".calendar__previous span").text().trim();
 
-      // 📅 parse date naar ISO
+      // 📅 parse date naar ISO lokaal
       if (dateCell) {
         const parsed = new Date(dateCell + " " + new Date().getFullYear());
         currentDate = isNaN(parsed.getTime())
           ? dateCell
-          : parsed.toISOString().split("T")[0];
+          : parsed.toLocaleDateString("en-CA"); // YYYY-MM-DD in lokale TZ
       }
 
       // ⏱️ tijd converteren
@@ -60,8 +60,10 @@ export async function GET() {
         // Combineer datetime alleen als tijd echt HH:mm is
         let datetime = "";
         if (currentDate && /^\d{2}:\d{2}$/.test(currentTime)) {
+          // let op: geen Z suffix → blijft lokale tijd!
+          const [year, month, day] = currentDate.split("-");
           datetime = new Date(
-            `${currentDate}T${currentTime}:00Z`
+            `${year}-${month}-${day}T${currentTime}:00`
           ).toISOString();
         }
 
@@ -86,7 +88,6 @@ export async function GET() {
       /federal funds rate/i, // vervangt FOMC
       /powell/i,
       /trump/i,
-      /pce/i,
       /unemployment claims/i,
     ];
 

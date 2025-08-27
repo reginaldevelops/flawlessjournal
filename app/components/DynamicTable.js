@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import RowFormDrawer from "./RowFormDrawer";
@@ -12,8 +11,7 @@ export default function DynamicTable() {
   const [colWidths, setColWidths] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [selectedCell, setSelectedCell] = useState(null); // { rowId, colName }
-  const [copiedCell, setCopiedCell] = useState(null); // { value, type }
+
   const startX = useRef(null);
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
@@ -48,6 +46,7 @@ export default function DynamicTable() {
       setColWidths(data.map((c) => c.width || 150));
     }
   };
+
   const loadSort = async () => {
     const { data, error } = await supabase
       .from("table_settings")
@@ -68,42 +67,6 @@ export default function DynamicTable() {
     loadColumns();
     loadSort();
   }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!selectedCell) return;
-
-      // Copy
-      if (e.ctrlKey && e.key.toLowerCase() === "c") {
-        const row = rows.find((r) => r.id === selectedCell.rowId);
-        const col = columns.find((c) => c.name === selectedCell.colName);
-        const val = row[selectedCell.colName] ?? "";
-        navigator.clipboard.writeText(val);
-        setCopiedCell({ value: val, type: col.type });
-        console.log("📋 Copied:", val);
-      }
-
-      // Paste
-      if (e.ctrlKey && e.key.toLowerCase() === "v") {
-        const rowIndex = rows.findIndex((r) => r.id === selectedCell.rowId);
-        const col = columns.find((c) => c.name === selectedCell.colName);
-
-        navigator.clipboard.readText().then((clipText) => {
-          // Optional: type check
-          if (copiedCell && copiedCell.type !== col.type) {
-            alert(`❌ Type mismatch: ${copiedCell.type} → ${col.type}`);
-            return;
-          }
-
-          handleCellChange(rowIndex, selectedCell.colName, clipText);
-          console.log("📥 Pasted:", clipText);
-        });
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedCell, rows, columns, copiedCell]);
 
   /* ---------- Column resizing ---------- */
   const onMouseDown = (e, index) => {
@@ -132,13 +95,11 @@ export default function DynamicTable() {
     if (resizingIndex.current !== null) {
       const index = resizingIndex.current;
       const col = columns[index];
-
-      // bereken nieuwe breedte rechtstreeks uit de muispositie
       const delta = e.clientX - startX.current;
       const newWidth = Math.max(60, startWidth.current + delta);
 
       console.log("🔧 Resizing finished:");
-      console.log(" - Column:", col.name, `(id: ${col.id})`);
+      console.log(` - Column: ${col.name} (id: ${col.id})`);
       console.log(" - Old width:", startWidth.current);
       console.log(" - New width (calculated):", newWidth);
 
@@ -153,7 +114,6 @@ export default function DynamicTable() {
         console.log("✅ Supabase updated with new width:", newWidth);
       }
 
-      // reset
       resizingIndex.current = null;
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
@@ -197,14 +157,12 @@ export default function DynamicTable() {
       } else {
         console.log("Row updated in Supabase:", id);
       }
-
       delete updateTimeouts.current[id];
     }, 2000);
   };
 
   const handleDeleteSelected = async () => {
     if (selectedRows.length === 0) return;
-
     const { error } = await supabase
       .from("trades")
       .delete()
@@ -230,9 +188,8 @@ export default function DynamicTable() {
         newConfig = { key: col.name, direction: "asc" };
       }
 
-      // ✅ update Supabase
       supabase.from("table_settings").upsert({
-        id: 1, // vaste record
+        id: 1,
         sort_key: newConfig.key,
         sort_direction: newConfig.direction,
       });
@@ -260,10 +217,8 @@ export default function DynamicTable() {
   /* ---------- Sorting ---------- */
   const sortedRows = [...rows].sort((a, b) => {
     if (!sortConfig.key) return 0;
-
     const valA = a[sortConfig.key] ?? "";
     const valB = b[sortConfig.key] ?? "";
-
     if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
     if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
     return 0;
@@ -303,7 +258,6 @@ export default function DynamicTable() {
               <col key={c.id} style={{ width: c.width || 150 }} />
             ))}
           </colgroup>
-
           <thead>
             <tr>
               <Th style={{ width: 40 }}>
@@ -318,8 +272,6 @@ export default function DynamicTable() {
               {columns.map((col, i) => (
                 <Th key={col.id} onClick={() => handleSort(col)}>
                   {col.name}
-                  {sortConfig.key === col.name &&
-                    (sortConfig.direction === "asc" ? "" : "")}
                   <Resizer onMouseDown={(e) => onMouseDown(e, i)} />
                 </Th>
               ))}
@@ -340,22 +292,11 @@ export default function DynamicTable() {
 
                 {columns.map((col) => {
                   const value = row[col.name] ?? "";
-                  const isSelected =
-                    selectedCell?.rowId === row.id &&
-                    selectedCell?.colName === col.name;
-
-                  const commonTdProps = {
-                    onClick: () =>
-                      setSelectedCell({ rowId: row.id, colName: col.name }),
-                    style: {
-                      outline: isSelected ? "2px solid #0ea5e9" : "none",
-                    },
-                  };
 
                   switch (col.type) {
                     case "date":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="date"
                             value={value || ""}
@@ -369,10 +310,9 @@ export default function DynamicTable() {
                           />
                         </Td>
                       );
-
                     case "time":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="time"
                             value={value || ""}
@@ -386,10 +326,9 @@ export default function DynamicTable() {
                           />
                         </Td>
                       );
-
                     case "number":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -406,10 +345,9 @@ export default function DynamicTable() {
                           />
                         </Td>
                       );
-
                     case "boolean":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="checkbox"
                             checked={value === "true"}
@@ -423,10 +361,9 @@ export default function DynamicTable() {
                           />
                         </Td>
                       );
-
                     case "link":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="url"
                             placeholder="https://..."
@@ -459,10 +396,9 @@ export default function DynamicTable() {
                           )}
                         </Td>
                       );
-
                     case "select":
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           {value === "__new" ? (
                             <input
                               type="text"
@@ -494,7 +430,6 @@ export default function DynamicTable() {
                                     },
                                   })
                                   .eq("id", col.id);
-
                                 if (!error) {
                                   setColumns((prev) =>
                                     prev.map((c) =>
@@ -546,10 +481,9 @@ export default function DynamicTable() {
                           )}
                         </Td>
                       );
-
                     default:
                       return (
-                        <Td key={col.id} {...commonTdProps}>
+                        <Td key={col.id}>
                           <input
                             type="text"
                             value={value || ""}
@@ -584,10 +518,10 @@ export default function DynamicTable() {
 const Wrapper = styled.div`
   padding: 2rem;
   font-family: "Inter", sans-serif;
-  color: #111; /* donker tekst */
+  color: #111;
   width: 100%;
   min-height: 100vh;
-  background: #f9f9fb; /* licht Notion-achtig wit */
+  background: #f9f9fb;
 `;
 
 const TableManagementSection = styled.div`
@@ -609,7 +543,7 @@ const TableManagementSection = styled.div`
     transition: all 0.2s;
 
     &:hover {
-      border-color: rgba(0, 200, 255, 0.5); /* cyberpunk accent */
+      border-color: rgba(0, 200, 255, 0.5);
       color: #0ea5e9;
       box-shadow: 0 2px 6px rgba(0, 200, 255, 0.2);
     }
@@ -632,7 +566,7 @@ const BulkActions = styled.div`
     transition: all 0.2s;
 
     &:hover {
-      border-color: rgba(255, 0, 128, 0.6); /* neon pink accent */
+      border-color: rgba(255, 0, 128, 0.6);
       color: #db2777;
       box-shadow: 0 2px 6px rgba(255, 0, 128, 0.25);
     }
@@ -657,7 +591,7 @@ const StyledTable = styled.table`
   table-layout: fixed;
   font-size: 0.9rem;
   color: #111;
-  border: 1px solid #e5e7eb; /* buitenrand van de hele tabel */
+  border: 1px solid #e5e7eb;
 `;
 
 const Th = styled.th`
@@ -667,7 +601,7 @@ const Th = styled.th`
   font-weight: 600;
   font-size: 0.9rem;
   letter-spacing: 0.3px;
-  border: 1px solid #e5e7eb; /* nu ook verticale scheiding */
+  border: 1px solid #e5e7eb;
   color: #111;
   background: #fafafa;
   white-space: nowrap;
@@ -685,22 +619,21 @@ const Resizer = styled.div`
   background: transparent;
 
   &:hover {
-    background: rgba(14, 165, 233, 0.4); /* neon cyan accent */
+    background: rgba(14, 165, 233, 0.4);
   }
 `;
 
 const Td = styled.td`
-  padding: 0.9rem 1rem; /* meer hoogte */
+  padding: 0.9rem 1rem;
   border: 1px solid #e5e7eb;
   background: ${({ $even }) => ($even ? "#fcfcfd" : "#fff")};
   transition: background 0.15s;
-  text-align: center; /* inhoud centreren */
+  text-align: center;
 
   &:hover {
     background: #f3faff;
   }
 
-  /* Alleen text/select inputs restylen */
   select,
   input[type="text"],
   input[type="date"],
@@ -726,10 +659,9 @@ const CheckboxInput = styled.input.attrs({ type: "checkbox" })`
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-
   width: 18px;
   height: 18px;
-  border: 2px solid #d1d5db; /* lichtgrijs randje */
+  border: 2px solid #d1d5db;
   border-radius: 4px;
   background: #fff;
   cursor: pointer;
@@ -737,11 +669,11 @@ const CheckboxInput = styled.input.attrs({ type: "checkbox" })`
   transition: all 0.15s ease;
 
   &:hover {
-    border-color: #0ea5e9; /* subtiele accentkleur */
+    border-color: #0ea5e9;
   }
 
   &:checked {
-    background: #0ea5e9; /* simpel blauw vlak */
+    background: #0ea5e9;
     border-color: #0ea5e9;
   }
 
