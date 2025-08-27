@@ -10,49 +10,59 @@ export default function Header() {
 
   return (
     <Wrapper>
-      <Logo>
-        <Link href="/">Trade Journal</Link>
-      </Logo>
+      <TextWrapper>
+        <Logo>
+          <Link href="/">Trade Journal</Link>
+        </Logo>
 
-      {/* desktop menu */}
-      <Nav>
-        <Link href="/dashboard">Dash</Link>
-        <Link href="/trade-data">Trade Data</Link>
-        <Link href="/journal">Journal</Link>
-      </Nav>
+        {/* desktop menu */}
+        <Nav>
+          <Link href="/dashboard">Dash</Link>
+          <Link href="/trade-data">Trade Data</Link>
+          <Link href="/journal">Journal</Link>
+        </Nav>
 
-      {/* mobile toggle */}
-      <MobileToggle onClick={() => setOpen(!open)}>
-        {open ? <X size={24} /> : <Menu size={24} />}
-      </MobileToggle>
+        {/* mobile toggle */}
+        <MobileToggle onClick={() => setOpen(!open)}>
+          {open ? <X size={24} /> : <Menu size={24} />}
+        </MobileToggle>
 
-      {/* mobile dropdown */}
-      {open && (
-        <MobileMenu>
-          <Link href="/" onClick={() => setOpen(false)}>
-            Home
-          </Link>
-          <Link href="/trade-data" onClick={() => setOpen(false)}>
-            Trade Data
-          </Link>
-          <Link href="/journal" onClick={() => setOpen(false)}>
-            Journal
-          </Link>
-        </MobileMenu>
-      )}
+        {/* mobile dropdown */}
+        {open && (
+          <MobileMenu>
+            <Link href="/" onClick={() => setOpen(false)}>
+              Home
+            </Link>
+            <Link href="/trade-data" onClick={() => setOpen(false)}>
+              Trade Data
+            </Link>
+            <Link href="/journal" onClick={() => setOpen(false)}>
+              Journal
+            </Link>
+          </MobileMenu>
+        )}
+      </TextWrapper>
     </Wrapper>
   );
 }
 
 /* ---------------- styled ---------------- */
 const Wrapper = styled.header`
+  background: #0b0b0d;
+  border-bottom: 1px solid #222;
+  position: relative;
+  width: 100%;
+`;
+
+const TextWrapper = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background: #0b0b0d;
-  border-bottom: 1px solid #222;
   position: relative;
+  width: 100%;
+  max-width: 1256px;
+  margin: auto;
 `;
 
 const Logo = styled.div`

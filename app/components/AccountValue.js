@@ -1,38 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import styled from "styled-components";
 
-export default function AccountValue() {
-  const [phantom, setPhantom] = useState(0);
-  const [hyper, setHyper] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        // ✅ Phantom (Solana wallet via jouw /api/portfolio)
-        const resPhantom = await fetch("/api/portfolio", { cache: "no-store" });
-        const dataPhantom = await resPhantom.json();
-        setPhantom(dataPhantom?.totalUSD ?? 0);
-
-        // ✅ Hyperliquid
-        const resHyper = await fetch("/api/hyperliquid", { cache: "no-store" });
-        const dataHyper = await resHyper.json();
-        setHyper(dataHyper?.totalUSD ?? 0);
-      } catch (err) {
-        console.error("Error loading balances:", err);
-        setPhantom(0);
-        setHyper(0);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
-
-  if (loading) return <Card>Loading...</Card>;
-
+export default function AccountValue({ phantom, hyper, lastUpdated }) {
   const total = phantom + hyper;
 
   return (
@@ -49,6 +19,11 @@ export default function AccountValue() {
         Hyperliquid: $
         {hyper.toLocaleString(undefined, { maximumFractionDigits: 2 })}
       </div>
+      {lastUpdated && (
+        <div className="updated">
+          Last updated: {new Date(lastUpdated).toLocaleTimeString()}
+        </div>
+      )}
     </Card>
   );
 }
@@ -87,5 +62,11 @@ const Card = styled.div`
   .hyper {
     font-weight: 500;
     color: #2563eb;
+  }
+
+  .updated {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: #6b7280;
   }
 `;

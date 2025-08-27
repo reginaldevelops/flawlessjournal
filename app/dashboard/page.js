@@ -7,6 +7,7 @@ import LayoutWrapper from "../components/LayoutWrapper";
 import { supabase } from "../lib/supabaseClient";
 import AccountValue from "../components/AccountValue";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import BalanceCard from "../components/BalanceCard";
 
 // ⏰ Greeting
 function getGreeting() {
@@ -33,9 +34,9 @@ function getWeekNumber(d = new Date()) {
 
 // 📅 Sessie data
 const sessions = [
-  { name: "Tokyo", start: 1, end: 8, color: "#aec6cf" },
-  { name: "London", start: 8, end: 14, color: "#cfcfc4" },
-  { name: "New York", start: 14, end: 21, color: "#ffb347" },
+  { name: "Tokyo", start: 1, end: 7, color: "#aec6cf" },
+  { name: "London", start: 8, end: 13, color: "#cfcfc4" },
+  { name: "New York", start: 14, end: 20, color: "#ffb347" },
   { name: "PH", start: 21, end: 22, color: "#ffb347" },
 ];
 
@@ -52,6 +53,7 @@ export default function Dashboard() {
 
   const [phantom, setPhantom] = useState(0);
   const [hyper, setHyper] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60 * 1000);
@@ -64,6 +66,7 @@ export default function Dashboard() {
         const resPhantom = await fetch("/api/portfolio", { cache: "no-store" });
         const dataPhantom = await resPhantom.json();
         setPhantom(dataPhantom?.totalUSD ?? 0);
+        setLastUpdated(dataPhantom?.cachedAt ?? new Date().toISOString());
 
         const resHyper = await fetch("/api/hyperliquid", { cache: "no-store" });
         const dataHyper = await resHyper.json();
@@ -218,22 +221,28 @@ export default function Dashboard() {
         <Sessions>
           <h2>Sessions</h2>
           <SessionBarWrapper>
-            <TimeAxis>
-              {Array.from({ length: 24 }).map((_, i) => (
+            {/* <TimeAxis>
+              {Array.from({ length: 25 }).map((_, i) => (
                 <span key={i}>{i * 1}h</span>
               ))}
-            </TimeAxis>
+            </TimeAxis> */}
             <SessionBar>
-              {sessions.map((s, idx) => (
-                <SessionBlock
-                  key={idx}
-                  $left={`${(s.start / 24) * 100}%`}
-                  $width={`${((s.end - s.start) / 24) * 100}%`}
-                  $color={s.color}
-                >
-                  {s.name}
-                </SessionBlock>
-              ))}
+              {sessions.map((s, idx) => {
+                // start/end zijn in uren → omzetten naar minuten
+                const left = ((s.start * 60) / (24 * 60)) * 100;
+                const width = ((s.end * 60 - s.start * 60) / (24 * 60)) * 100;
+
+                return (
+                  <SessionBlock
+                    key={idx}
+                    $left={`${left}%`}
+                    $width={`${width}%`}
+                    $color={s.color}
+                  >
+                    {s.name}
+                  </SessionBlock>
+                );
+              })}
               <CurrentTime style={{ left: `${currentPercent}%` }} />
             </SessionBar>
           </SessionBarWrapper>
@@ -243,11 +252,11 @@ export default function Dashboard() {
         <Sections>
           <TwoCol>
             <Card>
-              <h3>Summary Stats</h3>
+              <h3>Weekly Stats</h3>
               <StatsGrid>
                 <StatItem>
                   <span className="icon">💰</span>
-                  <span className="label">Weekly PnL</span>
+                  <span className="label">PnL</span>
                   <span className="value">
                     {weeklyPNL !== null
                       ? `$${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
@@ -290,36 +299,11 @@ export default function Dashboard() {
               </StatsGrid>
             </Card>
 
-            <Card>
-              <h3>Total Balance</h3>
-              <BalanceWrapper>
-                <AccountValue />
-                <PieWrapper>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        dataKey="value"
-                        data={[
-                          { name: "Phantom", value: phantom },
-                          { name: "Hyperliquid", value: hyper },
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={70}
-                        paddingAngle={4}
-                      >
-                        <Cell fill="#3b82f6" />
-                        <Cell fill="#f59e0b" />
-                      </Pie>
-                      <Tooltip
-                        formatter={(val) => `$${val.toLocaleString()}`}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </PieWrapper>
-              </BalanceWrapper>
-            </Card>
+            <BalanceCard
+              phantom={phantom}
+              hyper={hyper}
+              lastUpdated={lastUpdated}
+            />
           </TwoCol>
 
           {/* 📅 Weekly goals + Notes */}
@@ -335,6 +319,12 @@ export default function Dashboard() {
                   {progress.toFixed(0)}%
                 </ProgressLabel>
               </ProgressTrack>
+
+              <h3>Weekly goals</h3>
+              <ol>
+                <li>Risk 0.5% to 1% on B- and B+ setups respectively.</li>
+                <li>No interventions. Stop loss or target.</li>
+              </ol>
             </Card>
 
             <Card>
@@ -353,7 +343,9 @@ const Wrapper = styled.div`
   font-family: "Inter", sans-serif;
   color: #374151; /* donkergrijs */
   background: linear-gradient(135deg, #a1aebcff, #eef2ff); /* fris licht */
-  min-height: 100vh;
+  min-height: 96vh;
+  max-width: 1256px;
+  margin: auto;
 `;
 
 const Header = styled.div`
