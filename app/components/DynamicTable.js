@@ -132,14 +132,15 @@ export default function DynamicTable() {
     }
   };
 
-  const handleCellChange = (rowIndex, colName, value) => {
-    const updatedRows = [...rows];
-    updatedRows[rowIndex][colName] = value;
+  const handleCellChange = (rowId, colName, value) => {
+    const updatedRows = rows.map((r) =>
+      r.id === rowId ? { ...r, [colName]: value } : r
+    );
     setRows(updatedRows);
 
     if (value === "__new") return;
 
-    const row = updatedRows[rowIndex];
+    const row = updatedRows.find((r) => r.id === rowId);
     const { id, ...jsonData } = row;
 
     if (updateTimeouts.current[id]) {
@@ -278,7 +279,7 @@ export default function DynamicTable() {
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row, rowIndex) => (
+            {sortedRows.map((row) => (
               <tr key={row.id}>
                 <Td>
                   <CheckboxWrapper>
@@ -301,11 +302,7 @@ export default function DynamicTable() {
                             type="date"
                             value={value || ""}
                             onChange={(e) =>
-                              handleCellChange(
-                                rowIndex,
-                                col.name,
-                                e.target.value
-                              )
+                              handleCellChange(row.id, col.name, e.target.value)
                             }
                           />
                         </Td>
@@ -317,11 +314,7 @@ export default function DynamicTable() {
                             type="time"
                             value={value || ""}
                             onChange={(e) =>
-                              handleCellChange(
-                                rowIndex,
-                                col.name,
-                                e.target.value
-                              )
+                              handleCellChange(row.id, col.name, e.target.value)
                             }
                           />
                         </Td>
@@ -335,11 +328,7 @@ export default function DynamicTable() {
                             pattern="[0-9]*"
                             value={value || ""}
                             onChange={(e) =>
-                              handleCellChange(
-                                rowIndex,
-                                col.name,
-                                e.target.value
-                              )
+                              handleCellChange(row.id, col.name, e.target.value)
                             }
                             style={{ textAlign: "right" }}
                           />
@@ -353,7 +342,7 @@ export default function DynamicTable() {
                             checked={value === "true"}
                             onChange={(e) =>
                               handleCellChange(
-                                rowIndex,
+                                row.id,
                                 col.name,
                                 e.target.checked ? "true" : "false"
                               )
@@ -369,11 +358,7 @@ export default function DynamicTable() {
                             placeholder="https://..."
                             value={value || ""}
                             onChange={(e) =>
-                              handleCellChange(
-                                rowIndex,
-                                col.name,
-                                e.target.value
-                              )
+                              handleCellChange(row.id, col.name, e.target.value)
                             }
                             style={{
                               width: "100%",
@@ -407,12 +392,12 @@ export default function DynamicTable() {
                               onBlur={async (e) => {
                                 const newVal = e.target.value.trim();
                                 if (!newVal) {
-                                  handleCellChange(rowIndex, col.name, "");
+                                  handleCellChange(row.id, col.name, "");
                                   return;
                                 }
                                 if (col.options?.includes(newVal)) {
                                   alert("Deze waarde bestaat al.");
-                                  handleCellChange(rowIndex, col.name, newVal);
+                                  handleCellChange(row.id, col.name, newVal);
                                   return;
                                 }
                                 const newOptions = [
@@ -438,7 +423,7 @@ export default function DynamicTable() {
                                         : c
                                     )
                                   );
-                                  handleCellChange(rowIndex, col.name, newVal);
+                                  handleCellChange(row.id, col.name, newVal);
                                 }
                               }}
                               onKeyDown={(e) =>
@@ -456,7 +441,7 @@ export default function DynamicTable() {
                               value={value || ""}
                               onChange={(e) =>
                                 handleCellChange(
-                                  rowIndex,
+                                  row.id,
                                   col.name,
                                   e.target.value
                                 )
@@ -488,11 +473,7 @@ export default function DynamicTable() {
                             type="text"
                             value={value || ""}
                             onChange={(e) =>
-                              handleCellChange(
-                                rowIndex,
-                                col.name,
-                                e.target.value
-                              )
+                              handleCellChange(row.id, col.name, e.target.value)
                             }
                             style={{
                               width: "100%",
