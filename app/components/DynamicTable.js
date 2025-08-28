@@ -469,17 +469,41 @@ export default function DynamicTable() {
                     default:
                       return (
                         <Td key={col.id}>
-                          <input
-                            type="text"
+                          <textarea
                             value={value || ""}
                             onChange={(e) =>
                               handleCellChange(row.id, col.name, e.target.value)
                             }
+                            rows={1}
                             style={{
                               width: "100%",
                               border: "none",
                               outline: "none",
                               background: "transparent",
+                              resize: "none",
+                              overflow: "hidden",
+                              whiteSpace: "nowrap",
+                              textOverflow: "ellipsis",
+                              height: "1.2rem",
+                              transition: "all 0.2s ease",
+                              fontFamily: "inherit",
+                              fontSize: "0.85rem",
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.whiteSpace = "normal";
+                              e.target.style.overflow = "visible";
+                              e.target.style.height =
+                                e.target.scrollHeight + "px";
+                            }}
+                            onInput={(e) => {
+                              e.target.style.height = "auto";
+                              e.target.style.height =
+                                e.target.scrollHeight + "px";
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.whiteSpace = "nowrap";
+                              e.target.style.overflow = "hidden";
+                              e.target.style.height = "1.2rem";
                             }}
                           />
                         </Td>
