@@ -6,8 +6,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function BalanceCard({ phantom, hyper, lastUpdated }) {
   return (
-    <Card>
-      <h3>Total Balance</h3>
+    <div>
       <BalanceWrapper>
         <AccountValue
           phantom={phantom}
@@ -29,41 +28,30 @@ export default function BalanceCard({ phantom, hyper, lastUpdated }) {
                 outerRadius={70}
                 paddingAngle={4}
               >
-                <Cell fill="#3b82f6" />
-                <Cell fill="#f59e0b" />
+                <Cell fill="#0e20deff" />
+                <Cell fill="#b7f51bff" />
               </Pie>
               <Tooltip formatter={(val) => `$${val.toLocaleString()}`} />
             </PieChart>
           </ResponsiveContainer>
         </PieWrapper>
       </BalanceWrapper>
-    </Card>
+    </div>
   );
 }
 
 /* ---------------- styled ---------------- */
-const Card = styled.div`
-  background: #ffffff;
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-  h3 {
-    margin-bottom: 0.5rem;
-    color: #1e293b;
-    font-size: 1.1rem;
-  }
-`;
 
 const BalanceWrapper = styled.div`
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: start;
 `;
 
 const PieWrapper = styled.div`
   width: 150px;
   height: 150px;
+  margin: auto;
 
   img {
     width: 100%;

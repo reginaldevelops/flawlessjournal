@@ -18,8 +18,8 @@ const Container = styled.div`
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #eaeaeaff; /* zwart ipv wit voor meer contrast */
-  color: #e5e7eb;
+  background: linear-gradient(135deg, #dcd9deff, #d3d4d7ff);
+  color: #000000ff;
 `;
 
 const Content = styled.main`

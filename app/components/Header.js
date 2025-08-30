@@ -18,7 +18,7 @@ export default function Header() {
         {/* desktop menu */}
         <Nav>
           <Link href="/dashboard">Dash</Link>
-          <Link href="/trade-data">Trade Data</Link>
+          <Link href="/trades">Trade Data</Link>
           <Link href="/journal">Journal</Link>
         </Nav>
 
@@ -30,7 +30,7 @@ export default function Header() {
         {/* mobile dropdown */}
         {open && (
           <MobileMenu>
-            <Link href="/" onClick={() => setOpen(false)}>
+            <Link href="/dashboard" onClick={() => setOpen(false)}>
               Home
             </Link>
             <Link href="/trade-data" onClick={() => setOpen(false)}>

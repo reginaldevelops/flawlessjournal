@@ -6,7 +6,21 @@ import Link from "next/link";
 import LayoutWrapper from "../components/LayoutWrapper";
 import { supabase } from "../lib/supabaseClient";
 import AccountValue from "../components/AccountValue";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ReferenceLine,
+  Line,
+} from "recharts";
+
 import BalanceCard from "../components/BalanceCard";
 
 // ⏰ Greeting
@@ -35,7 +49,7 @@ function getWeekNumber(d = new Date()) {
 // 📅 Sessie data
 const sessions = [
   { name: "Tokyo", start: 1, end: 7, color: "#aec6cf" },
-  { name: "London", start: 8, end: 13, color: "#cfcfc4" },
+  { name: "London", start: 8, end: 13, color: "#991b1b" },
   { name: "New York", start: 14, end: 20, color: "#ffb347" },
   { name: "PH", start: 21, end: 22, color: "#ffb347" },
 ];
@@ -50,6 +64,9 @@ export default function Dashboard() {
   const [avgWinner, setAvgWinner] = useState(0);
   const [avgLoser, setAvgLoser] = useState(0);
   const [p2g, setP2G] = useState(0);
+
+  const [winners, setWinners] = useState([]);
+  const [losers, setLosers] = useState([]);
 
   const [phantom, setPhantom] = useState(0);
   const [hyper, setHyper] = useState(0);
@@ -106,8 +123,8 @@ export default function Dashboard() {
       let totalPNL = 0;
       let totalTrades = 0;
       let wins = 0;
-      let winners = [];
-      let losers = [];
+      let winsArr = [];
+      let lossArr = [];
 
       data.forEach((row) => {
         const pnlRaw = row.data?.PNL;
@@ -123,9 +140,9 @@ export default function Dashboard() {
             totalPNL += pnl;
             if (pnl > 0) {
               wins++;
-              winners.push(pnl);
+              winsArr.push(pnl);
             } else if (pnl < 0) {
-              losers.push(pnl);
+              lossArr.push(pnl);
             }
           }
         }
@@ -133,12 +150,12 @@ export default function Dashboard() {
 
       const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
       const avgWinner =
-        winners.length > 0
-          ? winners.reduce((a, b) => a + b, 0) / winners.length
+        winsArr.length > 0
+          ? winsArr.reduce((a, b) => a + b, 0) / winsArr.length
           : 0;
       const avgLoser =
-        losers.length > 0
-          ? Math.abs(losers.reduce((a, b) => a + b, 0)) / losers.length
+        lossArr.length > 0
+          ? Math.abs(lossArr.reduce((a, b) => a + b, 0)) / lossArr.length
           : 0;
       const p2gRatio = avgLoser > 0 ? avgWinner / avgLoser : 0;
 
@@ -148,6 +165,8 @@ export default function Dashboard() {
       setAvgWinner(avgWinner);
       setAvgLoser(avgLoser);
       setP2G(p2gRatio);
+      setWinners(winsArr);
+      setLosers(lossArr);
     }
 
     loadWeeklyStats();
@@ -221,11 +240,6 @@ export default function Dashboard() {
         <Sessions>
           <h2>Sessions</h2>
           <SessionBarWrapper>
-            {/* <TimeAxis>
-              {Array.from({ length: 25 }).map((_, i) => (
-                <span key={i}>{i * 1}h</span>
-              ))}
-            </TimeAxis> */}
             <SessionBar>
               {sessions.map((s, idx) => {
                 // start/end zijn in uren → omzetten naar minuten
@@ -273,44 +287,166 @@ export default function Dashboard() {
                   <span className="label">Win Rate</span>
                   <span className="value">{winRate.toFixed(0)}%</span>
                 </StatItem>
-                <StatItem>
-                  <span className="icon">🏆</span>
-                  <span className="label">Avg Winner</span>
-                  <span className="value">
-                    {avgWinner > 0
-                      ? `$${avgWinner.toFixed(0)} | ${((avgWinner / totalBalance) * 100).toFixed(1)}%`
-                      : "--"}
-                  </span>
-                </StatItem>
-                <StatItem>
-                  <span className="icon">💀</span>
-                  <span className="label">Avg Loser</span>
-                  <span className="value">
-                    {avgLoser > 0
-                      ? `-$${avgLoser.toFixed(0)} (${((avgLoser / totalBalance) * 100).toFixed(1)}%)`
-                      : "--"}
-                  </span>
-                </StatItem>
-                <StatItem>
-                  <span className="icon">⚖️</span>
-                  <span className="label">P2G Ratio</span>
-                  <span className="value">{p2g.toFixed(1)}</span>
-                </StatItem>
               </StatsGrid>
+              <P2Gsection>
+                <h3>P2G Ratio</h3>
+                <div
+                  style={{
+                    position: "relative",
+                    height: "40px",
+                    marginTop: "10px",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: 0,
+                      right: 0,
+                      height: "6px",
+                      borderRadius: "6px",
+                      background:
+                        "linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)",
+                    }}
+                  />
+                  {[0.5, 1, 1.5].map((mark, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        position: "absolute",
+                        top: "28px",
+                        left: `${((mark - 0.5) / 1) * 100}%`,
+                        transform: "translateX(-50%)",
+                        fontSize: "0.8rem",
+                        color: "#374151",
+                      }}
+                    >
+                      {mark}
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: `${Math.min(((p2g - 0.5) / 1) * 100, 100)}%`,
+                      transform: "translate(-50%, -50%)",
+                      width: "2px",
+                      height: "18px",
+                      background: "#111827",
+                      boxShadow: "0 0 6px rgba(0, 0, 0, 0.08)",
+                    }}
+                  />
+                </div>
+              </P2Gsection>
+            </Card>
+            <Card>
+              <h3>Total Balance</h3>
+              <BalanceCard
+                phantom={phantom}
+                hyper={hyper}
+                lastUpdated={lastUpdated}
+              />
+            </Card>
+          </TwoCol>
+
+          {/* 🔥 Nieuwe kaarten */}
+          <TwoCol>
+            <Card>
+              <h3>Weekly Winners</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart
+                  data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="trade" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#00ca7dff" radius={[4, 4, 0, 0]} />
+
+                  {/* gemiddelde lijn */}
+                  <ReferenceLine
+                    y={avgWinner}
+                    stroke="#000000ff"
+                    strokeDasharray="3 3"
+                    label={{
+                      value: `Avg: $${avgWinner.toFixed(0)}`,
+                      position: "top",
+                      fill: "#000000ff",
+                      fontWeight: "bold",
+                      fontSize: 13,
+                    }}
+                  />
+
+                  {/* target lijn (dik & solid) */}
+                  <ReferenceLine
+                    y={2500}
+                    stroke="#166534"
+                    strokeWidth={4}
+                    ifOverflow="extendDomain"
+                    label={{
+                      value: `Target $2500`,
+                      position: "insideTopRight",
+                      fill: "#166534",
+                      fontWeight: "bold",
+                      fontSize: 12,
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </Card>
 
-            <BalanceCard
-              phantom={phantom}
-              hyper={hyper}
-              lastUpdated={lastUpdated}
-            />
+            <Card>
+              <h3>Weekly Losers</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart
+                  data={losers.map((val, i) => ({
+                    trade: i + 1,
+                    value: Math.abs(val),
+                  }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="trade" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#d4154bff" radius={[4, 4, 0, 0]} />
+
+                  {/* gemiddelde lijn */}
+                  <ReferenceLine
+                    y={avgLoser}
+                    stroke="#000000ff"
+                    strokeDasharray="3 3"
+                    label={{
+                      value: `Avg: $${avgLoser.toFixed(0)}`,
+                      position: "top",
+                      fill: "#000000ff",
+                      fontWeight: "bold",
+                      fontSize: 13,
+                    }}
+                  />
+
+                  {/* target lijn (dik & solid) */}
+                  <ReferenceLine
+                    y={3000}
+                    stroke="#991b1b"
+                    strokeWidth={4}
+                    ifOverflow="extendDomain"
+                    label={{
+                      value: `Target $3000`,
+                      position: "insideTopRight",
+                      fill: "#991b1b",
+                      fontWeight: "bold",
+                      fontSize: 12,
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
           </TwoCol>
 
           {/* 📅 Weekly goals + Notes */}
           <TwoCol>
             <Card>
               <h3>Weekly Profit Target {profitTargetPct}%</h3>
-
               <ProgressTrack>
                 <ProgressFill
                   style={{ width: `${Math.min(progress, 100)}%` }}
@@ -320,11 +456,22 @@ export default function Dashboard() {
                 </ProgressLabel>
               </ProgressTrack>
 
-              <h3>Weekly goals</h3>
-              <ol>
-                <li>Risk 0.5% to 1% on B- and B+ setups respectively.</li>
-                <li>No interventions. Stop loss or target.</li>
-              </ol>
+              <h3>Weekly Goals</h3>
+              <GoalsList>
+                <GoalItem>
+                  <span className="icon">🎯</span>
+                  <span>
+                    Risk <strong>0.5% – 1%</strong> on B- and B+ setups
+                  </span>
+                </GoalItem>
+                <GoalItem>
+                  <span className="icon">⛔</span>
+                  <span>
+                    No interventions — respect{" "}
+                    <strong>stop loss / target</strong>
+                  </span>
+                </GoalItem>
+              </GoalsList>
             </Card>
 
             <Card>
@@ -342,7 +489,7 @@ const Wrapper = styled.div`
   padding: 2rem;
   font-family: "Inter", sans-serif;
   color: #374151; /* donkergrijs */
-  background: linear-gradient(135deg, #a1aebcff, #eef2ff); /* fris licht */
+  background: transparent;
   min-height: 96vh;
   max-width: 1256px;
   margin: auto;
@@ -423,14 +570,6 @@ const Sessions = styled.div`
     font-size: 1.2rem;
     color: #1e293b;
   }
-`;
-
-const TimeAxis = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.8rem;
-  color: #6b7280;
 `;
 
 const SessionBar = styled.div`
@@ -573,23 +712,6 @@ const TwoCol = styled.div`
   margin-bottom: 2rem;
 `;
 
-const BalanceWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`;
-
-const PieWrapper = styled.div`
-  width: 150px;
-  height: 150px;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-`;
-
 const ProgressTrack = styled.div`
   position: relative;
   width: 100%;
@@ -601,7 +723,7 @@ const ProgressTrack = styled.div`
 
 const ProgressFill = styled.div`
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  background: linear-gradient(90deg, #0a1cddff, #06eb5aff);
   border-radius: 12px;
   transition: width 0.4s ease;
 `;
@@ -616,4 +738,39 @@ const ProgressLabel = styled.div`
   font-weight: 600;
   border-radius: 4px;
   z-index: 99;
+`;
+
+const P2Gsection = styled.div`
+  margin-top: 3em;
+`;
+
+const GoalsList = styled.ul`
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+`;
+
+const GoalItem = styled.li`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: #1f2937;
+  font-weight: 500;
+  transition: all 0.2s;
+
+  .icon {
+    font-size: 1.1rem;
+  }
+
+  &:hover {
+    background: #f3f4f6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  }
 `;

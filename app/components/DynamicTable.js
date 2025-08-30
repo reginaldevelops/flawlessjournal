@@ -4,6 +4,7 @@ import styled from "styled-components";
 import RowFormDrawer from "./RowFormDrawer";
 import ColumnFormDrawer from "./ColumnFormDrawer";
 import { supabase } from "../lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
 export default function DynamicTable() {
   const [columns, setColumns] = useState([]);
@@ -16,6 +17,7 @@ export default function DynamicTable() {
   const startWidth = useRef(null);
   const resizingIndex = useRef(null);
   const updateTimeouts = useRef({});
+  const router = useRouter();
 
   /* ---------- Load data ---------- */
   const loadRows = async () => {
@@ -280,8 +282,12 @@ export default function DynamicTable() {
           </thead>
           <tbody>
             {sortedRows.map((row) => (
-              <tr key={row.id}>
-                <Td>
+              <Tr
+                key={row.id}
+                onClick={() => router.push(`/trade/${row.id}`)}
+                style={{ cursor: "pointer" }}
+              >
+                <Td onClick={(e) => e.stopPropagation()}>
                   <CheckboxWrapper>
                     <CheckboxInput
                       type="checkbox"
@@ -298,219 +304,109 @@ export default function DynamicTable() {
                     case "date":
                       return (
                         <Td key={col.id}>
-                          <input
-                            type="date"
-                            value={value || ""}
-                            onChange={(e) =>
-                              handleCellChange(row.id, col.name, e.target.value)
-                            }
-                          />
+                          {value
+                            ? new Date(value).toLocaleDateString("nl-NL")
+                            : "—"}
                         </Td>
                       );
+
                     case "time":
-                      return (
-                        <Td key={col.id}>
-                          <input
-                            type="time"
-                            value={value || ""}
-                            onChange={(e) =>
-                              handleCellChange(row.id, col.name, e.target.value)
-                            }
-                          />
-                        </Td>
-                      );
+                      return <Td key={col.id}>{value || "—"}</Td>;
+
                     case "number":
                       return (
-                        <Td key={col.id}>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={value || ""}
-                            onChange={(e) =>
-                              handleCellChange(row.id, col.name, e.target.value)
-                            }
-                            style={{ textAlign: "right" }}
-                          />
+                        <Td key={col.id} style={{ textAlign: "right" }}>
+                          {value !== "" ? Number(value) : "—"}
                         </Td>
                       );
+
                     case "boolean":
                       return (
                         <Td key={col.id}>
-                          <input
-                            type="checkbox"
-                            checked={value === "true"}
-                            onChange={(e) =>
-                              handleCellChange(
-                                row.id,
-                                col.name,
-                                e.target.checked ? "true" : "false"
-                              )
-                            }
-                          />
+                          {value === "true"
+                            ? "✅"
+                            : value === "false"
+                              ? "❌"
+                              : "—"}
                         </Td>
                       );
+
                     case "link":
                       return (
-                        <Td key={col.id}>
-                          <input
-                            type="url"
-                            placeholder="https://..."
-                            value={value || ""}
-                            onChange={(e) =>
-                              handleCellChange(row.id, col.name, e.target.value)
-                            }
-                            style={{
-                              width: "100%",
-                              border: "none",
-                              outline: "none",
-                              background: "transparent",
-                              color: "#0ea5e9",
-                              textDecoration: "underline",
-                            }}
-                          />
-                          {value && (
-                            <a
-                              href={value}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ marginLeft: "0.5rem", color: "#0ea5e9" }}
-                            >
-                              🔗
-                            </a>
-                          )}
-                        </Td>
-                      );
-                    case "select":
-                      return (
-                        <Td key={col.id}>
-                          {value === "__new" ? (
-                            <input
-                              type="text"
-                              autoFocus
-                              placeholder="Nieuwe waarde..."
-                              onBlur={async (e) => {
-                                const newVal = e.target.value.trim();
-                                if (!newVal) {
-                                  handleCellChange(row.id, col.name, "");
-                                  return;
-                                }
-                                if (col.options?.includes(newVal)) {
-                                  alert("Deze waarde bestaat al.");
-                                  handleCellChange(row.id, col.name, newVal);
-                                  return;
-                                }
-                                const newOptions = [
-                                  ...(col.options || []),
-                                  newVal,
-                                ];
-                                const { error } = await supabase
-                                  .from("columns")
-                                  .update({
-                                    definition: {
-                                      name: col.name,
-                                      type: col.type,
-                                      width: col.width,
-                                      options: newOptions,
-                                    },
-                                  })
-                                  .eq("id", col.id);
-                                if (!error) {
-                                  setColumns((prev) =>
-                                    prev.map((c) =>
-                                      c.id === col.id
-                                        ? { ...c, options: newOptions }
-                                        : c
-                                    )
-                                  );
-                                  handleCellChange(row.id, col.name, newVal);
-                                }
-                              }}
-                              onKeyDown={(e) =>
-                                e.key === "Enter" && e.target.blur()
-                              }
+                        <Td
+                          key={col.id}
+                          style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            textAlign: "left",
+                            maxWidth: "200px", // pas aan naar wens
+                            position: "relative",
+                          }}
+                          title={value || ""}
+                        >
+                          {value ? (
+                            <span
                               style={{
-                                width: "100%",
-                                border: "none",
-                                outline: "none",
-                                background: "transparent",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.3rem",
                               }}
-                            />
+                            >
+                              <a
+                                href={value}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: "#0ea5e9",
+                                  textDecoration: "underline",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  maxWidth: "160px", // laat ruimte voor icoon
+                                  display: "inline-block",
+                                }}
+                              >
+                                {value}
+                              </a>
+                              <span
+                                style={{ fontSize: "1rem", color: "#0ea5e9" }}
+                              >
+                                🔗
+                              </span>
+                            </span>
                           ) : (
-                            <select
-                              value={value || ""}
-                              onChange={(e) =>
-                                handleCellChange(
-                                  row.id,
-                                  col.name,
-                                  e.target.value
-                                )
-                              }
-                              style={{
-                                width: "100%",
-                                border: "none",
-                                outline: "none",
-                                background: "transparent",
-                              }}
-                            >
-                              <option value="">-- selecteer --</option>
-                              {col.options?.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                              <option value="__new">
-                                ➕ Nieuwe waarde toevoegen
-                              </option>
-                            </select>
+                            "—"
                           )}
                         </Td>
                       );
+
+                    case "select":
+                      return <Td key={col.id}>{value || "—"}</Td>;
+
                     default:
                       return (
-                        <Td key={col.id}>
-                          <textarea
-                            value={value || ""}
-                            onChange={(e) =>
-                              handleCellChange(row.id, col.name, e.target.value)
-                            }
-                            rows={1}
-                            style={{
-                              width: "100%",
-                              border: "none",
-                              outline: "none",
-                              background: "transparent",
-                              resize: "none",
-                              overflow: "hidden",
-                              whiteSpace: "nowrap",
-                              textOverflow: "ellipsis",
-                              height: "1.2rem",
-                              transition: "all 0.2s ease",
-                              fontFamily: "inherit",
-                              fontSize: "0.85rem",
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.whiteSpace = "normal";
-                              e.target.style.overflow = "visible";
-                              e.target.style.height =
-                                e.target.scrollHeight + "px";
-                            }}
-                            onInput={(e) => {
-                              e.target.style.height = "auto";
-                              e.target.style.height =
-                                e.target.scrollHeight + "px";
-                            }}
-                            onBlur={(e) => {
-                              e.target.style.whiteSpace = "nowrap";
-                              e.target.style.overflow = "hidden";
-                              e.target.style.height = "1.2rem";
-                            }}
-                          />
+                        <Td
+                          key={col.id}
+                          style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            textAlign: "left",
+                            lineHeight: "1.4",
+                            fontSize: "0.85rem",
+                            padding: "0.6rem 0.8rem",
+                            color: "#111",
+                            maxWidth: "200px", // cutoff breedte
+                          }}
+                          title={value || ""}
+                        >
+                          {value || "—"}
                         </Td>
                       );
                   }
                 })}
-              </tr>
+              </Tr>
             ))}
           </tbody>
         </StyledTable>
@@ -526,7 +422,6 @@ const Wrapper = styled.div`
   color: #111;
   width: 100%;
   min-height: 100vh;
-  background: #f9f9fb;
 `;
 
 const TableManagementSection = styled.div`
@@ -613,6 +508,14 @@ const Th = styled.th`
   cursor: pointer;
 `;
 
+const Tr = styled.tr`
+  background: #ffffff;
+
+  &:hover {
+    background: #f3faff;
+  }
+`;
+
 const Resizer = styled.div`
   position: absolute;
   right: 0;
@@ -631,13 +534,8 @@ const Resizer = styled.div`
 const Td = styled.td`
   padding: 0.9rem 1rem;
   border: 1px solid #e5e7eb;
-  background: ${({ $even }) => ($even ? "#fcfcfd" : "#fff")};
   transition: background 0.15s;
   text-align: center;
-
-  &:hover {
-    background: #f3faff;
-  }
 
   select,
   input[type="text"],

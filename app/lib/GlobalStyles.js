@@ -11,7 +11,7 @@ export const GlobalStyles = createGlobalStyle`
     margin: 0;
     padding: 0;
     background: radial-gradient(circle at top left, #0f0c29, #302b63, #24243e);
-    color: #fff;
+    color: #000000ff;
     font-family: "Orbitron", sans-serif;
   }
 
