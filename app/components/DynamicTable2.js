@@ -19,6 +19,7 @@ export default function DynamicTable2() {
   const router = useRouter();
 
   const fixedCols = [
+    "Trade Number",
     "Coins",
     "Datum",
     "Entreetijd",
@@ -44,6 +45,7 @@ export default function DynamicTable2() {
       const parsed = data.map((d) => {
         const base = {
           id: d.id,
+          "Trade Number": d.trade_number,
           Coins: d.data?.Coins,
           Datum: d.data?.Datum,
           Entreetijd: d.data?.Entreetijd,
@@ -320,7 +322,6 @@ export default function DynamicTable2() {
 const Wrapper = styled.div`
   padding: 2rem;
   margin: 1rem;
-  font-family: "Inter", sans-serif;
   background: #fff;
   border-radius: 20px;
 `;

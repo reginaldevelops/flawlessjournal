@@ -12,7 +12,18 @@ export const GlobalStyles = createGlobalStyle`
     padding: 0;
     background: radial-gradient(circle at top left, #0f0c29, #302b63, #24243e);
     color: #000000ff;
-    font-family: "Orbitron", sans-serif;
+    font-weight: 400; /* default gewicht, font komt via next/font */
+  }
+
+  /* Zorg dat form controls hetzelfde font pakken als body */
+  input, textarea, select, button {
+    font-family: inherit;
+  }
+
+  /* Headings gebruiken echte bold varianten */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600; /* of 700 als je ze vetter wilt */
+    margin: 0;
   }
 
   /* Scrollbars - Chrome, Edge, Safari */

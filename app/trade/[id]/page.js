@@ -16,6 +16,7 @@ export default function TradeViewPage() {
 
   /* ---------- vaste volgorde ---------- */
   const fixedOrder = [
+    "Trade number",
     "Coins",
     "Datum",
     "Entreetijd",
@@ -38,7 +39,19 @@ export default function TradeViewPage() {
         .single();
 
       if (!error && data) {
-        setTrade({ id: data.id, ...data.data });
+        const newState = {
+          id: data.id,
+          "Trade number": data.trade_number,
+          ...data.data,
+        };
+
+        // 🟢 Debug logs
+        console.log("👉 Raw data from Supabase:", data);
+        console.log("👉 State we will set:", newState);
+
+        setTrade(newState);
+      } else {
+        console.error("❌ Load trade error:", error);
       }
     };
 
@@ -49,7 +62,13 @@ export default function TradeViewPage() {
   useEffect(() => {
     const loadVariables = async () => {
       const { data, error } = await supabase.from("variables").select("*");
-      if (!error && data) setVariables(data);
+      if (!error && data) {
+        console.log(
+          "👉 Variables loaded:",
+          data.map((v) => v.name)
+        );
+        setVariables(data);
+      }
     };
     loadVariables();
   }, []);
@@ -154,12 +173,10 @@ export default function TradeViewPage() {
 
         <Content>
           <Sidebar>
-            <PnLBox $positive={Number(trade.PNL) >= 0}>
-              <div className="label">Net PnL</div>
-              <div className="value">
-                {Number(trade.PNL) >= 0 ? "+" : ""}${trade.PNL}
-              </div>
-            </PnLBox>
+            <PnLHighlight $positive={Number(trade["PNL"]) >= 0}>
+              <span>Net PnL</span>
+              {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
+            </PnLHighlight>
             <DetailSection>
               <h2>Details</h2>
               {variables
@@ -169,9 +186,24 @@ export default function TradeViewPage() {
                     fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
                 )
                 .map((v) => {
+                  // 🔹 Trade Number → read-only
+                  if (v.name === "Trade number") {
+                    return (
+                      <Item key={v.id}>
+                        <strong>{v.name}</strong>
+                        <div>{trade["Trade number"] || "—"}</div>
+                      </Item>
+                    );
+                  }
+
+                  // 🔹 Skip PNL en Time exit
+                  if (v.name === "PNL" || v.name === "Time exit") {
+                    return null;
+                  }
+
                   const value = trade[v.name] || "";
 
-                  // 🔹 Coins & Confidence als dropdown
+                  // 🔹 Coins & Confidence → dropdown
                   if (["Coins", "Confidence"].includes(v.name)) {
                     return (
                       <Item key={v.id}>
@@ -230,30 +262,13 @@ export default function TradeViewPage() {
                     );
                   }
 
-                  // 🔹 Entreetijd / Time exit → time picker
-                  if (["Entreetijd", "Time exit"].includes(v.name)) {
+                  // 🔹 Entreetijd → time picker
+                  if (v.name === "Entreetijd") {
                     return (
                       <Item key={v.id}>
                         <strong>{v.name}</strong>
                         <input
                           type="time"
-                          value={value}
-                          onChange={(e) =>
-                            saveTrade({ ...trade, [v.name]: e.target.value })
-                          }
-                        />
-                      </Item>
-                    );
-                  }
-
-                  // 🔹 PNL → number input
-                  if (v.name === "PNL") {
-                    return (
-                      <Item key={v.id}>
-                        <strong>{v.name}</strong>
-                        <input
-                          type="number"
-                          step="0.01"
                           value={value}
                           onChange={(e) =>
                             saveTrade({ ...trade, [v.name]: e.target.value })
@@ -378,6 +393,38 @@ export default function TradeViewPage() {
             <AddNewVariable onClick={addVariable}>
               + Add new category
             </AddNewVariable>
+
+            <Divider />
+
+            {/* 2️⃣ Exit & PnL sectie */}
+            <DetailSection>
+              <h2>Exit & Result</h2>
+
+              {/* Exit time */}
+              <Item>
+                <strong>Exit time</strong>
+                <input
+                  type="time"
+                  value={trade["Time exit"] || ""}
+                  onChange={(e) =>
+                    saveTrade({ ...trade, ["Time exit"]: e.target.value })
+                  }
+                />
+              </Item>
+
+              {/* PNL */}
+              <Item>
+                <strong>PNL</strong>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={trade["PNL"] || ""}
+                  onChange={(e) =>
+                    saveTrade({ ...trade, PNL: Number(e.target.value) })
+                  }
+                />
+              </Item>
+            </DetailSection>
           </Sidebar>
 
           <Main>
@@ -415,7 +462,7 @@ export default function TradeViewPage() {
             </ChartCard>
 
             <NotesCard>
-              <h3>Notes</h3>
+              <h3>Trade evaluation</h3>
               <textarea
                 value={trade["Notes"] || ""}
                 onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
@@ -432,9 +479,7 @@ export default function TradeViewPage() {
 const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
   background: #f9fafb;
-  font-family: "Inter", sans-serif;
 `;
 const Header = styled.div`
   display: flex;
@@ -454,23 +499,92 @@ const Sidebar = styled.div`
   flex-direction: column;
   gap: 1.2rem;
 `;
-const PnLBox = styled.div`
+const PnLHighlight = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
   background: ${(p) => (p.$positive ? "#ecfdf5" : "#fef2f2")};
-  border: 1px solid ${(p) => (p.$positive ? "#bbf7d0" : "#fecaca")};
-  padding: 1rem;
-  border-radius: 8px;
+  color: ${(p) => (p.$positive ? "#059669" : "#dc2626")};
+  border: 1px solid ${(p) => (p.$positive ? "#a7f3d0" : "#fecaca")};
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  span {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #6b7280;
+  }
 `;
 const DetailSection = styled.div`
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.2rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.8rem;
+
+  h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: #374151;
+  }
 `;
 const Item = styled.div`
   display: flex;
-  flex-direction: column;
+  flex-direction: column; /* 👈 belangrijk */
   gap: 0.3rem;
-  font-size: 0.85rem;
+
+  strong {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6b7280;
+  }
+
+  input,
+  select {
+    padding: 0.55rem 0.8rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #fafafa;
+    transition:
+      border 0.2s,
+      box-shadow 0.2s,
+      background 0.2s;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #fafafa;
+    transition:
+      border 0.2s,
+      box-shadow 0.2s,
+      background 0.2s;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: #6366f1;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+  }
 `;
+
 const VariableHeader = styled.div`
   display: flex;
   justify-content: space-between;
