@@ -6,6 +6,7 @@ import Link from "next/link";
 import LayoutWrapper from "../components/LayoutWrapper";
 import { supabase } from "../lib/supabaseClient";
 import AccountValue from "../components/AccountValue";
+import NotesArea from "../components/NotesArea";
 import {
   PieChart,
   Pie,
@@ -475,7 +476,7 @@ export default function Dashboard() {
             </Card>
 
             <Card>
-              <h3>Quick notes</h3>
+              <h3>Quick Notes</h3>
               <NotesArea />
             </Card>
           </TwoCol>
@@ -681,27 +682,6 @@ const StatItem = styled.div`
     font-size: 0.9rem;
     font-weight: 600;
     color: #111827;
-  }
-`;
-
-const NotesArea = styled.textarea`
-  margin-top: 0.75rem;
-  width: 100%;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  color: #1f2937;
-  border-radius: 10px;
-  padding: 1rem;
-  min-height: 120px;
-  resize: none;
-  font-size: 0.9rem;
-  line-height: 1.4rem;
-
-  &:focus {
-    outline: none;
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 2px #bfdbfe;
-    background: #ffffff;
   }
 `;
 
