@@ -462,14 +462,14 @@ export default function Dashboard() {
                 <GoalItem>
                   <span className="icon">🎯</span>
                   <span>
-                    Risk <strong>0.5% – 1%</strong> on B- and B+ setups
+                    Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
                   </span>
                 </GoalItem>
                 <GoalItem>
                   <span className="icon">⛔</span>
                   <span>
-                    No interventions — respect{" "}
-                    <strong>stop loss / target</strong>
+                    Aim for 15M/1H Highs/lows . Make sure RR is
+                    <strong>higher than 0.5 else use Limit order!</strong>
                   </span>
                 </GoalItem>
               </GoalsList>
