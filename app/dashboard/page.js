@@ -329,7 +329,7 @@ export default function Dashboard() {
                     style={{
                       position: "absolute",
                       top: "50%",
-                      left: `${Math.min(((p2g - 0.5) / 1) * 100, 100)}%`,
+                      left: `${Math.min((p2g / 1) * 100, 100)}%`,
                       transform: "translate(-50%, -50%)",
                       width: "2px",
                       height: "18px",
@@ -380,12 +380,12 @@ export default function Dashboard() {
 
                   {/* target lijn (dik & solid) */}
                   <ReferenceLine
-                    y={2500}
+                    y={2000}
                     stroke="#166534"
                     strokeWidth={4}
                     ifOverflow="extendDomain"
                     label={{
-                      value: `Target $2500`,
+                      value: `Target $2000`,
                       position: "insideTopRight",
                       fill: "#166534",
                       fontWeight: "bold",
@@ -427,12 +427,12 @@ export default function Dashboard() {
 
                   {/* target lijn (dik & solid) */}
                   <ReferenceLine
-                    y={3000}
+                    y={2000}
                     stroke="#991b1b"
                     strokeWidth={4}
                     ifOverflow="extendDomain"
                     label={{
-                      value: `Target $3000`,
+                      value: `Target $2000`,
                       position: "insideTopRight",
                       fill: "#991b1b",
                       fontWeight: "bold",
@@ -450,9 +450,11 @@ export default function Dashboard() {
               <h3>Weekly Profit Target {profitTargetPct}%</h3>
               <ProgressTrack>
                 <ProgressFill
-                  style={{ width: `${Math.min(progress, 100)}%` }}
+                  style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
                 />
-                <ProgressLabel style={{ left: `${Math.min(progress, 100)}%` }}>
+                <ProgressLabel
+                  style={{ left: `${Math.min(Math.max(progress, 0), 100)}%` }}
+                >
                   {progress.toFixed(0)}%
                 </ProgressLabel>
               </ProgressTrack>
@@ -468,8 +470,15 @@ export default function Dashboard() {
                 <GoalItem>
                   <span className="icon">⛔</span>
                   <span>
-                    Aim for 15M/1H Highs/lows . Make sure RR is
-                    <strong>higher than 0.5 else use Limit order!</strong>
+                    Aim for 15M/1H Highs/lows. Make sure RR is
+                    <strong>higher than 0.7 else use a Limit order!</strong>
+                  </span>
+                </GoalItem>
+                <GoalItem>
+                  <span className="icon">🎯</span>
+                  <span>
+                    <strong>Wacht op goede USDT.D bias</strong> en kies coin die
+                    meest aligned.
                   </span>
                 </GoalItem>
               </GoalsList>

@@ -15,7 +15,10 @@
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.55.0",
+    "@tiptap/react": "^3.3.0",
+    "@tiptap/starter-kit": "^3.3.0",
     "cheerio": "^1.1.2",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.541.0",
     "next": "15.4.6",
     "puppeteer": "^24.17.0",
@@ -27,9 +30,11 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@tailwindcss/typography": "^0.5.16",
     "babel-plugin-styled-components": "^2.1.4",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.12"
   }
 }

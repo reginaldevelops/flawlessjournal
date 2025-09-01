@@ -10,14 +10,17 @@ export const GlobalStyles = createGlobalStyle`
   body {
     margin: 0;
     padding: 0;
-    background: radial-gradient(circle at top left, #0f0c29, #302b63, #24243e);
+    background: white;
+    /* background: radial-gradient(circle at top left, #0f0c29, #302b63, #24243e); */
     color: #000000ff;
     font-weight: 400; /* default gewicht, font komt via next/font */
+    font-size:1.1em;
   }
 
   /* Zorg dat form controls hetzelfde font pakken als body */
   input, textarea, select, button {
     font-family: inherit;
+    font-size:1.1em;
   }
 
   /* Headings gebruiken echte bold varianten */

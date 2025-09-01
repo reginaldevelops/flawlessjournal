@@ -561,7 +561,7 @@ const Item = styled.div`
 
   textarea {
     width: 100%;
-    min-height: 90px;
+    min-height: 160px;
     resize: vertical;
     padding: 0.7rem 0.9rem;
     border: 1px solid #e5e7eb;
@@ -675,7 +675,7 @@ const NotesCard = styled.div`
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
   textarea {
     width: 100%;
-    min-height: 120px;
+    min-height: 150px;
     font-size: 0.9rem;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
