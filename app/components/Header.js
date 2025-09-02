@@ -12,7 +12,7 @@ export default function Header() {
     <Wrapper>
       <TextWrapper>
         <Logo>
-          <Link href="/">Trade Journal</Link>
+          <Link href="/">Flawless Journal</Link>
         </Logo>
 
         {/* desktop menu */}

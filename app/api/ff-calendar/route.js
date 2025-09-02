@@ -60,11 +60,8 @@ export async function GET() {
         // Combineer datetime alleen als tijd echt HH:mm is
         let datetime = "";
         if (currentDate && /^\d{2}:\d{2}$/.test(currentTime)) {
-          // let op: geen Z suffix → blijft lokale tijd!
-          const [year, month, day] = currentDate.split("-");
-          datetime = new Date(
-            `${year}-${month}-${day}T${currentTime}:00`
-          ).toISOString();
+          // geen Z suffix → blijft lokale tijd!
+          datetime = `${currentDate}T${currentTime}:00`;
         }
 
         events.push({

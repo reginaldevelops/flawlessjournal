@@ -7,7 +7,6 @@ import Header from "./Header";
 export default function LayoutWrapper({ children }) {
   return (
     <Container>
-      <Header /> {/* ⬅ navigatiebalk bovenaan */}
       <Content>{children}</Content>
     </Container>
   );
@@ -15,10 +14,10 @@ export default function LayoutWrapper({ children }) {
 
 /* ---------------- styled ---------------- */
 const Container = styled.div`
-  min-height: 100vh;
+  min-height: 96vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #dcd9deff, #d3d4d7ff);
+  background: linear-gradient(120deg, #e1c4f4ff, #a8c5ffff);
   color: #000000ff;
 `;
 

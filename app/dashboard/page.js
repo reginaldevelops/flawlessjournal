@@ -39,21 +39,47 @@ const getPercentOfDay = (date) => {
   return ((hours * 60 + minutes) / (24 * 60)) * 100;
 };
 
+// 📅 Weeknummer in lokale tijd
 function getWeekNumber(d = new Date()) {
-  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = d.getUTCDay() || 7; // zondag = 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  // kopie in lokale tijd
+  d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayNum = d.getDay() || 7; // zondag=7
+  d.setDate(d.getDate() + 4 - dayNum);
+  const yearStart = new Date(d.getFullYear(), 0, 1);
   return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 
-// 📅 Sessie data
-const sessions = [
-  { name: "Tokyo", start: 1, end: 7, color: "#aec6cf" },
-  { name: "London", start: 8, end: 13, color: "#991b1b" },
-  { name: "New York", start: 14, end: 20, color: "#ffb347" },
-  { name: "PH", start: 21, end: 22, color: "#ffb347" },
+// ⏱ Formatter voor NL-tijd
+function formatLocal(dateString) {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleString("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function utcHourToLocal(utcHour) {
+  const d = new Date();
+  d.setUTCHours(utcHour, 0, 0, 0);
+  return d.getHours();
+}
+
+// 🌍 Sessies in UTC (gebaseerd op jouw NL-blokken)
+const sessionsUTC = [
+  { name: "Tokyo", start: 0, end: 5, color: "#aec6cf" }, // 01–07 NL
+  { name: "London", start: 6, end: 10, color: "#991b1b" }, // 08–13 NL
+  { name: "New York", start: 12, end: 19, color: "#ffb347" }, // 14–20 NL
+  { name: "PH", start: 19, end: 20, color: "#ffb347" }, // 21–22 NL
 ];
+
+const sessions = sessionsUTC.map((s) => ({
+  ...s,
+  start: utcHourToLocal(s.start),
+  end: utcHourToLocal(s.end),
+}));
 
 export default function Dashboard() {
   const greeting = getGreeting();
@@ -84,7 +110,7 @@ export default function Dashboard() {
         const resPhantom = await fetch("/api/portfolio", { cache: "no-store" });
         const dataPhantom = await resPhantom.json();
         setPhantom(dataPhantom?.totalUSD ?? 0);
-        setLastUpdated(dataPhantom?.cachedAt ?? new Date().toISOString());
+        setLastUpdated(dataPhantom?.cachedAt ?? new Date());
 
         const resHyper = await fetch("/api/hyperliquid", { cache: "no-store" });
         const dataHyper = await resHyper.json();
@@ -226,7 +252,19 @@ export default function Dashboard() {
                   <EventsForDay>
                     {dayEvents.map((ev, i) => (
                       <EventItem key={i}>
-                        <span className="time">{ev.time}</span>
+                        <span className="time">
+                          {ev.datetime
+                            ? new Date(ev.datetime).toLocaleTimeString(
+                                "nl-NL",
+                                {
+                                  timeZone: "Europe/Amsterdam",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )
+                            : ev.time}
+                        </span>
+
                         <span className="title">{ev.title}</span>
                       </EventItem>
                     ))}
@@ -243,9 +281,16 @@ export default function Dashboard() {
           <SessionBarWrapper>
             <SessionBar>
               {sessions.map((s, idx) => {
-                // start/end zijn in uren → omzetten naar minuten
-                const left = ((s.start * 60) / (24 * 60)) * 100;
-                const width = ((s.end * 60 - s.start * 60) / (24 * 60)) * 100;
+                let start = s.start * 60;
+                let end = s.end * 60;
+
+                // Als end < start → loopt over middernacht
+                if (end <= start) {
+                  end += 24 * 60;
+                }
+
+                const left = (start / (24 * 60)) * 100;
+                const width = ((end - start) / (24 * 60)) * 100;
 
                 return (
                   <SessionBlock
@@ -258,6 +303,7 @@ export default function Dashboard() {
                   </SessionBlock>
                 );
               })}
+
               <CurrentTime style={{ left: `${currentPercent}%` }} />
             </SessionBar>
           </SessionBarWrapper>
@@ -274,7 +320,7 @@ export default function Dashboard() {
                   <span className="label">PnL</span>
                   <span className="value">
                     {weeklyPNL !== null
-                      ? `$${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
+                      ? `${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
                       : "--"}
                   </span>
                 </StatItem>
@@ -298,6 +344,7 @@ export default function Dashboard() {
                     marginTop: "10px",
                   }}
                 >
+                  {/* Gradient bar */}
                   <div
                     style={{
                       position: "absolute",
@@ -310,26 +357,30 @@ export default function Dashboard() {
                         "linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)",
                     }}
                   />
-                  {[0.5, 1, 1.5].map((mark, i) => (
+
+                  {/* Marks */}
+                  {[0.0, 0.5, 1.0].map((mark, i) => (
                     <div
                       key={i}
                       style={{
                         position: "absolute",
                         top: "28px",
-                        left: `${((mark - 0.5) / 1) * 100}%`,
+                        left: `${(mark / 1) * 100}%`,
                         transform: "translateX(-50%)",
                         fontSize: "0.8rem",
                         color: "#374151",
                       }}
                     >
-                      {mark}
+                      {mark.toFixed(1)}
                     </div>
                   ))}
+
+                  {/* Indicator */}
                   <div
                     style={{
                       position: "absolute",
                       top: "50%",
-                      left: `${Math.min(((p2g - 0.5) / 1) * 100, 100)}%`,
+                      left: `${Math.min(Math.max((p2g / 1) * 100, 0), 100)}%`,
                       transform: "translate(-50%, -50%)",
                       width: "2px",
                       height: "18px",
@@ -345,7 +396,7 @@ export default function Dashboard() {
               <BalanceCard
                 phantom={phantom}
                 hyper={hyper}
-                lastUpdated={lastUpdated}
+                lastUpdated={formatLocal(lastUpdated)}
               />
             </Card>
           </TwoCol>
@@ -730,7 +781,7 @@ const ProgressLabel = styled.div`
 `;
 
 const P2Gsection = styled.div`
-  margin-top: 3em;
+  margin-top: 1em;
 `;
 
 const GoalsList = styled.ul`

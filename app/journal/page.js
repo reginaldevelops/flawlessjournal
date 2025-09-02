@@ -8,10 +8,10 @@ import LayoutWrapper from "../components/LayoutWrapper";
 export default function JournalPage() {
   const [entriesByDay, setEntriesByDay] = useState({});
   const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().slice(0, 10)
+    new Date().toLocaleDateString("en-CA") // intern altijd YYYY-MM-DD
   );
+
   const [entries, setEntries] = useState([]);
-  const [newEntry, setNewEntry] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [expandedIds, setExpandedIds] = useState([]);
@@ -73,29 +73,29 @@ export default function JournalPage() {
     }
   };
 
-  // ➕ nieuwe entry
+  // ➕ nieuwe entry vandaag
   const [newEntryToday, setNewEntryToday] = useState("");
 
   const addEntryToday = async () => {
     if (!newEntryToday.trim()) return;
 
-    const timestamp = new Date(); // altijd nu
+    const timestamp = new Date(); // lokaal nu
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert([{ content: newEntryToday, created_at: timestamp.toISOString() }])
+      .insert([{ content: newEntryToday, created_at: timestamp }])
       .select();
 
     if (!error && data?.length) {
       const inserted = data[0];
       if (
-        inserted.created_at.slice(0, 10) ===
-        new Date().toISOString().slice(0, 10)
+        new Date(inserted.created_at).toLocaleDateString("en-CA") ===
+        new Date().toLocaleDateString("en-CA")
       ) {
         setEntries((prev) => [...prev, inserted]);
       }
       setEntriesByDay((prev) => {
         const updated = { ...prev };
-        const d = inserted.created_at.slice(0, 10);
+        const d = new Date(inserted.created_at).toLocaleDateString("en-CA");
         updated[d] = (updated[d] || 0) + 1;
         return updated;
       });
@@ -103,30 +103,33 @@ export default function JournalPage() {
     }
   };
 
+  // ➕ nieuwe entry voor geselecteerde dag
   const [newEntrySelected, setNewEntrySelected] = useState("");
 
   const addEntryForSelected = async () => {
     if (!newEntrySelected.trim()) return;
 
-    const timestamp = new Date(selectedDate); // pak de gekozen dag
-    timestamp.setHours(new Date().getHours());
-    timestamp.setMinutes(new Date().getMinutes());
+    const now = new Date();
+    const timestamp = new Date(
+      `${selectedDate}T${now.toTimeString().slice(0, 5)}`
+    );
 
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert([
-        { content: newEntrySelected, created_at: timestamp.toISOString() },
-      ])
+      .insert([{ content: newEntrySelected, created_at: timestamp }])
       .select();
 
     if (!error && data?.length) {
       const inserted = data[0];
-      if (inserted.created_at.slice(0, 10) === selectedDate) {
+      if (
+        new Date(inserted.created_at).toLocaleDateString("en-CA") ===
+        selectedDate
+      ) {
         setEntries((prev) => [...prev, inserted]);
       }
       setEntriesByDay((prev) => {
         const updated = { ...prev };
-        const d = inserted.created_at.slice(0, 10);
+        const d = new Date(inserted.created_at).toLocaleDateString("en-CA");
         updated[d] = (updated[d] || 0) + 1;
         return updated;
       });
@@ -136,11 +139,10 @@ export default function JournalPage() {
 
   // 📥 entries voor geselecteerde dag
   const loadEntries = async (date) => {
-    const start = new Date(date);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 1);
+    const start = new Date(`${date}T00:00:00`);
+    const end = new Date(`${date}T23:59:59`);
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("journal_entries")
       .select("id, created_at, content")
       .gte("created_at", start.toISOString())
@@ -162,7 +164,7 @@ export default function JournalPage() {
       .lte("created_at", lastDay.toISOString());
 
     const grouped = (data || []).reduce((acc, e) => {
-      const d = e.created_at.slice(0, 10);
+      const d = new Date(e.created_at).toLocaleDateString("en-CA");
       acc[d] = (acc[d] || 0) + 1;
       return acc;
     }, {});
@@ -223,7 +225,7 @@ export default function JournalPage() {
             <HeaderRow>
               <button onClick={() => changeMonth(-1)}>←</button>
               <h3>
-                {new Date(viewYear, viewMonth).toLocaleString("default", {
+                {new Date(viewYear, viewMonth).toLocaleString("nl-NL", {
                   month: "long",
                 })}{" "}
                 {viewYear}
@@ -235,7 +237,7 @@ export default function JournalPage() {
                     const today = new Date();
                     setViewYear(today.getFullYear());
                     setViewMonth(today.getMonth());
-                    setSelectedDate(today.toISOString().slice(0, 10));
+                    setSelectedDate(today.toLocaleDateString("en-CA"));
                     loadCalendar(today.getFullYear(), today.getMonth());
                   }}
                 >
@@ -245,9 +247,10 @@ export default function JournalPage() {
             </HeaderRow>
 
             <CalendarGrid>
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+              {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((d) => (
                 <DayHeader key={d}>{d}</DayHeader>
               ))}
+
               {blanks.map((_, i) => (
                 <DayCell key={`b-${i}`} />
               ))}
@@ -280,7 +283,7 @@ export default function JournalPage() {
           {/* Entries */}
           <EntryPane>
             <h2>
-              {new Date(selectedDate).toLocaleDateString("en-GB", {
+              {new Date(selectedDate).toLocaleDateString("nl-NL", {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
@@ -320,7 +323,7 @@ export default function JournalPage() {
                     <li key={e.id}>
                       <div className="entry-header">
                         <strong>
-                          {new Date(e.created_at).toLocaleTimeString([], {
+                          {new Date(e.created_at).toLocaleTimeString("nl-NL", {
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
@@ -372,9 +375,7 @@ export default function JournalPage() {
 
 /* ---------------- styled ---------------- */
 const PageWrapper = styled.div`
-  background: white;
-  font-family: "Inter", sans-serif;
-  min-height: 100vh;
+  background: inherit;
   display: flex;
   flex-direction: column;
 `;
@@ -382,14 +383,13 @@ const PageWrapper = styled.div`
 /* Input section */
 const InputSection = styled.section`
   position: relative;
-  min-height: 60vh;
+  min-height: 30vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   background: url("/relaxingclouds.png") center/cover no-repeat;
-  background-color: #f0f9ff;
 
   &::before {
     content: "";
@@ -423,7 +423,7 @@ const InputSection = styled.section`
     border-radius: 8px;
     font-size: 0.95rem;
     background: #fff;
-    resize: vertical; /* user kan groter maken */
+    resize: vertical;
     transition: 0.2s;
 
     &:focus {
@@ -434,7 +434,7 @@ const InputSection = styled.section`
   }
 
   button {
-    align-self: flex-end; /* knop rechts onder */
+    align-self: flex-end;
     background: #2563eb;
     color: #fff;
     border: none;
@@ -461,6 +461,7 @@ const ContentSection = styled.section`
   background: white;
   color: #222;
   border-top: 1px solid #eee;
+  min-height: 66vh;
 `;
 
 const CalendarPane = styled.div`
@@ -601,13 +602,13 @@ const EntryPane = styled.div`
 
   .entry-body {
     display: flex;
-    flex-direction: column; /* content + actions onder elkaar */
+    flex-direction: column;
     gap: 0.5rem;
   }
 
   .content {
-    white-space: pre-wrap; /* behoudt enters */
-    word-break: break-word; /* breekt lange woorden */
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   textarea {
@@ -639,7 +640,7 @@ const EntryPane = styled.div`
 
 const NoteInput = styled.div`
   display: flex;
-  flex-direction: column; /* onder elkaar */
+  flex-direction: column;
   gap: 0.6rem;
   margin-bottom: 1.2rem;
 
@@ -650,7 +651,7 @@ const NoteInput = styled.div`
     border-radius: 8px;
     font-size: 0.95rem;
     background: #fff;
-    resize: vertical; /* user kan groter maken */
+    resize: vertical;
     transition: 0.2s;
 
     &:focus {
@@ -661,7 +662,7 @@ const NoteInput = styled.div`
   }
 
   button {
-    align-self: flex-end; /* knop rechts onder */
+    align-self: flex-end;
     background: #2563eb;
     color: #fff;
     border: none;

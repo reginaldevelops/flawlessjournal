@@ -99,6 +99,19 @@ function SortableItem({
           saveTrade({ ...trade, [v.name]: inputValue });
         }}
         placeholder="Select or type..."
+        className="react-select"
+        classNamePrefix="react-select"
+        styles={{
+          control: (base) => ({
+            ...base,
+            width: "100%", // full width
+            fontSize: "0.85rem",
+          }),
+          menu: (base) => ({
+            ...base,
+            fontSize: "0.85rem",
+          }),
+        }}
       />
     </SortableItemWrapper>
   );
@@ -109,7 +122,7 @@ export default function TradeViewPage() {
   const [trade, setTrade] = useState(null);
   const [variables, setVariables] = useState([]);
   const [menuOpen, setMenuOpen] = useState(null);
-  const [showUsdtChart, setShowUsdtChart] = useState(false);
+  const [showUsdtChart, setShowUsdtChart] = useState(true);
 
   /* ---------- vaste volgorde ---------- */
   const fixedOrder = [
@@ -125,6 +138,20 @@ export default function TradeViewPage() {
     "Reasons for entry",
     "PNL",
   ];
+
+  /* ---------- layout overrides ---------- */
+  const layoutOverrides = {
+    "Trade number": "row",
+    Coins: "row",
+    Datum: "row",
+    Entreetijd: "row",
+    Confidence: "row",
+    "Target Win": "row",
+    "Target loss": "row",
+    Chart: "row",
+    "USDT.D chart": "row",
+    "Reasons for entry": "column",
+  };
 
   /* ---------- Load trade ---------- */
   useEffect(() => {
@@ -292,9 +319,12 @@ export default function TradeViewPage() {
                 .map((v) => {
                   if (v.name === "Trade number") {
                     return (
-                      <Item key={v.id}>
+                      <Item
+                        key={v.id}
+                        $layout={layoutOverrides[v.name] || "column"}
+                      >
                         <strong>{v.name}</strong>
-                        <div>{trade["Trade number"] || "—"}</div>
+                        <span>{trade["Trade number"] || "—"}</span>
                       </Item>
                     );
                   }
@@ -304,7 +334,10 @@ export default function TradeViewPage() {
                   const value = trade[v.name] || "";
                   if (["Coins", "Confidence"].includes(v.name)) {
                     return (
-                      <Item key={v.id}>
+                      <Item
+                        key={v.id}
+                        $layout={layoutOverrides[v.name] || "column"}
+                      >
                         <strong>{v.name}</strong>
                         <CreatableSelect
                           value={value ? { value, label: value } : null}
@@ -345,7 +378,10 @@ export default function TradeViewPage() {
                   }
                   if (v.name === "Datum") {
                     return (
-                      <Item key={v.id}>
+                      <Item
+                        key={v.id}
+                        $layout={layoutOverrides[v.name] || "column"}
+                      >
                         <strong>{v.name}</strong>
                         <input
                           type="date"
@@ -359,7 +395,10 @@ export default function TradeViewPage() {
                   }
                   if (v.name === "Entreetijd") {
                     return (
-                      <Item key={v.id}>
+                      <Item
+                        key={v.id}
+                        $layout={layoutOverrides[v.name] || "column"}
+                      >
                         <strong>{v.name}</strong>
                         <input
                           type="time"
@@ -373,7 +412,10 @@ export default function TradeViewPage() {
                   }
                   if (v.name === "Reasons for entry") {
                     return (
-                      <Item key={v.id}>
+                      <Item
+                        key={v.id}
+                        $layout={layoutOverrides[v.name] || "column"}
+                      >
                         <strong>{v.name}</strong>
                         <textarea
                           rows={3}
@@ -386,7 +428,10 @@ export default function TradeViewPage() {
                     );
                   }
                   return (
-                    <Item key={v.id}>
+                    <Item
+                      key={v.id}
+                      $layout={layoutOverrides[v.name] || "column"}
+                    >
                       <strong>{v.name}</strong>
                       <input
                         type="text"
@@ -529,7 +574,7 @@ const Header = styled.div`
 `;
 const Content = styled.div`
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 400px 1fr;
   gap: 1.5rem;
   padding: 1.5rem 2rem;
 `;
@@ -544,7 +589,7 @@ const PnLHighlight = styled.div`
   align-items: center;
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  font-size: 1rem;
+  font-size: 2rem;
   font-weight: 600;
   background: ${(p) => (p.$positive ? "#ecfdf5" : "#fef2f2")};
   color: ${(p) => (p.$positive ? "#059669" : "#dc2626")};
@@ -565,66 +610,81 @@ const DetailSection = styled.div`
   flex-direction: column;
   gap: 0.8rem;
   h2 {
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
     margin-bottom: 0.4rem;
     color: #374151;
   }
 `;
+
 const Item = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  flex-direction: ${(p) => (p.$layout === "row" ? "row" : "column")};
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  box-sizing: border-box;
+
+  span {
+    font-size: 0.85rem;
+  }
+
   strong {
     font-size: 0.85rem;
     font-weight: 500;
     color: #6b7280;
+    min-width: ${(p) => (p.$layout === "row" ? "120px" : "auto")};
+    text-align: left;
+    flex-shrink: 0;
   }
+  /* Geldt voor alle inputs/selects/textarea */
   input,
-  select {
-    padding: 0.55rem 0.8rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 0.8rem;
-    font-family: inherit;
-    background: #fafafa;
-    transition:
-      border 0.2s,
-      box-shadow 0.2s,
-      background 0.2s;
-  }
+  select,
   textarea {
+    flex: 1;
     width: 100%;
-    min-height: 160px;
-    resize: vertical;
-    padding: 0.7rem 0.9rem;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.3rem 0.25rem;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-family: inherit;
     background: #fafafa;
-    transition:
-      border 0.2s,
-      box-shadow 0.2s,
-      background 0.2s;
   }
-  input:focus,
-  textarea:focus,
-  select:focus {
-    border-color: #6366f1;
-    background: #fff;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    outline: none;
-    font-size: 0.8rem;
+
+  /* Textarea specifiek */
+  textarea {
+    min-height: 150px;
+    resize: vertical;
+  }
+
+  /* Date & Time pickers */
+  input[type="date"],
+  input[type="time"] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    line-height: 1.2;
+  }
+
+  /* React-select dropdown fix */
+  .css-13cymwt-control,   /* standaard react-select class */
+  .css-t3ipsp-control {
+    min-height: 10px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 0.85rem;
   }
 `;
+
 const VariableHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
 
   span {
-    font-size: 0.8em;
+    font-size: 0.85em;
   }
 `;
 const MenuWrapper = styled.div`

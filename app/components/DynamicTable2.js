@@ -4,19 +4,20 @@ import styled from "styled-components";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-export default function DynamicTable2() {
-  const [rows, setRows] = useState([]);
+export default function DynamicTable2({ rows: initialRows, variables }) {
+  const [rows, setRows] = useState(initialRows || []);
   const [visibleCols, setVisibleCols] = useState([]);
   const [allCols, setAllCols] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [variables, setVariables] = useState([]);
-  const [selectedRows, setSelectedRows] = useState([]); // ✅ geselecteerde trades
-  const [bulkOpen, setBulkOpen] = useState(false); // ✅ bulk menu
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({
     key: "Datum",
     direction: "desc",
   });
   const router = useRouter();
+  const rowsPerPage = 10;
 
   const fixedCols = [
     "Trade Number",
@@ -34,52 +35,26 @@ export default function DynamicTable2() {
     "Tags",
   ];
 
-  const loadVariables = async () => {
-    const { data, error } = await supabase.from("trade_variables").select("*");
-    if (!error && data) setVariables(data.map((v) => v.name));
-  };
-
-  const loadRows = async () => {
-    const { data, error } = await supabase.from("trades").select("*");
-    if (!error && data) {
-      const parsed = data.map((d) => {
-        const base = {
-          id: d.id,
-          "Trade Number": d.trade_number,
-          Coins: d.data?.Coins,
-          Datum: d.data?.Datum,
-          Entreetijd: d.data?.Entreetijd,
-          "Time exit": d.data?.["Time exit"],
-          Chart: d.data?.Chart,
-          "USDT.D chart": d.data?.["USDT.D chart"],
-          Confidence: d.data?.Confidence,
-          "Target Win": d.data?.["Target Win"],
-          "Target loss": d.data?.["Target loss"],
-          "Reasons for entry": d.data?.["Reasons for entry"],
-          PnL: d.data?.PNL,
-          Result: d.data?.Result,
-          Tags: d.data?.tags || [],
-        };
-        variables.forEach((v) => {
-          base[v] = d.data?.[v] || "";
-        });
-        return base;
-      });
-
-      setRows(parsed);
-      setAllCols([...fixedCols, ...variables]);
-    }
-  };
+  // Bouw kolommen samen
+  useEffect(() => {
+    const cols = [...fixedCols, ...variables];
+    setAllCols(cols);
+    loadVisibleCols(cols);
+  }, [variables]);
 
   const loadVisibleCols = async (allColumns) => {
     const { data, error } = await supabase
       .from("table_settings")
-      .select("visible_columns")
+      .select("visible_columns, sort_key, sort_direction")
       .eq("id", 1)
       .single();
 
-    if (!error && data?.visible_columns) {
-      setVisibleCols(data.visible_columns);
+    if (!error && data) {
+      setVisibleCols(data.visible_columns || allColumns);
+      setSortConfig({
+        key: data.sort_key || "Datum",
+        direction: data.sort_direction || "desc",
+      });
     } else {
       setVisibleCols(allColumns);
       await supabase
@@ -100,19 +75,6 @@ export default function DynamicTable2() {
       .select();
   };
 
-  useEffect(() => {
-    loadVariables();
-  }, []);
-
-  useEffect(() => {
-    if (variables.length >= 0) {
-      loadRows().then(() => {
-        const combinedCols = [...fixedCols, ...variables];
-        loadVisibleCols(combinedCols);
-      });
-    }
-  }, [variables]);
-
   const sortedRows = [...rows].sort((a, b) => {
     if (!sortConfig.key) return 0;
     const valA = a[sortConfig.key] ?? "";
@@ -122,12 +84,31 @@ export default function DynamicTable2() {
     return 0;
   });
 
-  const handleSort = (col) => {
-    setSortConfig((prev) =>
-      prev.key === col
-        ? { key: col, direction: prev.direction === "asc" ? "desc" : "asc" }
-        : { key: col, direction: "asc" }
-    );
+  const totalPages = Math.ceil(sortedRows.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const currentRows = sortedRows.slice(startIndex, endIndex);
+
+  const handleSort = async (col) => {
+    setSortConfig((prev) => {
+      const newConfig =
+        prev.key === col
+          ? { key: col, direction: prev.direction === "asc" ? "desc" : "asc" }
+          : { key: col, direction: "asc" };
+
+      (async () => {
+        await supabase
+          .from("table_settings")
+          .upsert({
+            id: 1,
+            sort_key: newConfig.key,
+            sort_direction: newConfig.direction,
+          })
+          .select();
+      })();
+
+      return newConfig;
+    });
   };
 
   const addTrade = async () => {
@@ -167,14 +148,12 @@ export default function DynamicTable2() {
 
   const bulkDelete = async () => {
     if (!confirm("Delete selected trades?")) return;
-
     const { error } = await supabase
       .from("trades")
       .delete()
       .in("id", selectedRows);
 
     if (error) return console.error("❌ Bulk delete error:", error);
-
     setRows((prev) => prev.filter((r) => !selectedRows.includes(r.id)));
     setSelectedRows([]);
     setBulkOpen(false);
@@ -258,13 +237,18 @@ export default function DynamicTable2() {
               </Th>
               {visibleCols.map((col) => (
                 <Th key={col} onClick={() => handleSort(col)}>
-                  {col}
+                  {col}{" "}
+                  {sortConfig.key === col
+                    ? sortConfig.direction === "asc"
+                      ? "▲"
+                      : "▼"
+                    : ""}
                 </Th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row) => (
+            {currentRows.map((row) => (
               <Tr key={row.id}>
                 <Td>
                   <input
@@ -313,6 +297,29 @@ export default function DynamicTable2() {
             ))}
           </tbody>
         </StyledTable>
+        <PaginationWrapper>
+          <span>
+            {startIndex + 1} – {Math.min(endIndex, sortedRows.length)} of{" "}
+            {sortedRows.length} trades
+          </span>
+          <div>
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+            >
+              ‹
+            </button>
+            <span>
+              {currentPage} of {totalPages}
+            </span>
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
+              ›
+            </button>
+          </div>
+        </PaginationWrapper>
       </TableWrapper>
     </Wrapper>
   );
@@ -322,7 +329,7 @@ export default function DynamicTable2() {
 const Wrapper = styled.div`
   padding: 2rem;
   margin: 1rem;
-  background: #fff;
+  background: inherit;
   border-radius: 20px;
 `;
 const TableWrapper = styled.div`
@@ -369,7 +376,7 @@ const Tag = styled.span`
 `;
 const AddTradeButton = styled.button`
   margin-right: 1rem;
-  background: #0ea5e9;
+  background: #039d1aff;
   color: #fff;
   font-size: 0.9rem;
   padding: 0.6rem 1rem;
@@ -378,7 +385,7 @@ const AddTradeButton = styled.button`
   cursor: pointer;
   font-weight: 600;
   &:hover {
-    background: #0284c7;
+    background: #026c12ff;
   }
 `;
 const GearButton = styled.button`
@@ -481,5 +488,52 @@ const BulkMenu = styled.div`
     &:hover {
       background: #f3f4f6;
     }
+  }
+`;
+
+const PaginationWrapper = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  font-size: 0.85rem;
+  color: #374151;
+
+  span {
+    font-weight: 500;
+    color: #4b5563;
+  }
+
+  div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  button {
+    min-width: 32px;
+    height: 32px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #374151;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  button:hover:not(:disabled) {
+    background: #f3f4f6;
+  }
+
+  button:disabled {
+    color: #9ca3af;
+    cursor: not-allowed;
+    background: #f9fafb;
   }
 `;

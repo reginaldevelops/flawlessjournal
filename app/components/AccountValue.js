@@ -3,21 +3,20 @@
 import styled from "styled-components";
 
 export default function AccountValue({ phantom, hyper, lastUpdated }) {
-  const eurusd = 1.165;
-  const total = ((phantom + hyper) * 1) / eurusd;
+  const total = phantom + hyper;
 
   return (
     <Card>
       <div className="total">
-        €{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        {total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </div>
       <div className="sub phantom">
-        Phantom: $
-        {phantom.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        Phantom:
+        {phantom.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </div>
       <div className="sub hyper">
-        Hyperliquid: $
-        {hyper.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        Hyperliquid:
+        {hyper.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </div>
       {lastUpdated && (
         <div className="updated">

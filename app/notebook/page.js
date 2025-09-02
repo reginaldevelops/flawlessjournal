@@ -40,6 +40,25 @@ export default function Notebook() {
   const [openTagMenu, setOpenTagMenu] = useState(null);
   const menuRef = useRef(null);
 
+  // ✅ helper: altijd veilige NL-tijd
+  function formatLocal(dateString) {
+    if (!dateString) return "—";
+
+    // forceer UTC als er geen Z in zit
+    let fixed = dateString.endsWith("Z") ? dateString : dateString + "Z";
+    const d = new Date(fixed);
+
+    if (isNaN(d.getTime())) return "—";
+
+    return d.toLocaleString("nl-NL", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
@@ -123,7 +142,7 @@ export default function Notebook() {
           .update({
             title: selectedPost.title,
             content,
-            updated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(), // ✅ UTC opslaan
           })
           .eq("id", selectedPost.id);
       }
@@ -151,7 +170,7 @@ export default function Notebook() {
         .from("notebook")
         .update({
           title: selectedPost.title,
-          updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(), // ✅ UTC opslaan
         })
         .eq("id", selectedPost.id);
       setStatus("✅ Saved");
@@ -310,9 +329,7 @@ export default function Notebook() {
                   <div>
                     <strong>{post.title}</strong>
                     <small>
-                      {new Date(
-                        post.updated_at || post.created_at
-                      ).toLocaleString()}
+                      {formatLocal(post.updated_at || post.created_at)}
                     </small>
                   </div>
                 </ListItem>
@@ -345,16 +362,12 @@ export default function Notebook() {
                       placeholder="Untitled note..."
                     />
                   </div>
+
                   <MetaInfo>
-                    <span>
-                      Created:{" "}
-                      {new Date(selectedPost.created_at).toLocaleString()}
-                    </span>
-                    <span>
-                      Updated:{" "}
-                      {new Date(selectedPost.updated_at).toLocaleString()}
-                    </span>
+                    <span>Created: {formatLocal(selectedPost.created_at)}</span>
+                    <span>Updated: {formatLocal(selectedPost.updated_at)}</span>
                   </MetaInfo>
+
                   <TagSelect
                     value={selectedPost.tag_id || ""}
                     onChange={(e) =>
@@ -370,6 +383,7 @@ export default function Notebook() {
                       </option>
                     ))}
                   </TagSelect>
+
                   <SaveStatus>
                     {status.includes("Saving") ? (
                       <Loader2 size={16} className="animate-spin" />
@@ -377,6 +391,17 @@ export default function Notebook() {
                       <Check size={16} color="green" />
                     )}
                   </SaveStatus>
+
+                  {/* 🗑️ Delete knop */}
+                  <SmallButton
+                    onClick={() => {
+                      if (confirm("Delete this note?")) {
+                        handleDeleteNote();
+                      }
+                    }}
+                  >
+                    🗑️ Delete
+                  </SmallButton>
                 </MetaBar>
 
                 {/* Toolbar */}
