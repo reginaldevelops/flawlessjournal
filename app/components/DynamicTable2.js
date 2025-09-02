@@ -17,7 +17,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     direction: "desc",
   });
   const router = useRouter();
-  const rowsPerPage = 10;
+  const rowsPerPage = 20;
 
   const fixedCols = [
     "Trade Number",
