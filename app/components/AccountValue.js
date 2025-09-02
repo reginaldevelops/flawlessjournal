@@ -3,12 +3,13 @@
 import styled from "styled-components";
 
 export default function AccountValue({ phantom, hyper, lastUpdated }) {
-  const total = phantom + hyper;
+  const eurusd = 1.165;
+  const total = ((phantom + hyper) * 1) / eurusd;
 
   return (
     <Card>
       <div className="total">
-        ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        €{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
       </div>
       <div className="sub phantom">
         Phantom: $

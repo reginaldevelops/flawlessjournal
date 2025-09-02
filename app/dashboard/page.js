@@ -329,7 +329,7 @@ export default function Dashboard() {
                     style={{
                       position: "absolute",
                       top: "50%",
-                      left: `${Math.min((p2g / 1) * 100, 100)}%`,
+                      left: `${Math.min(((p2g - 0.5) / 1) * 100, 100)}%`,
                       transform: "translate(-50%, -50%)",
                       width: "2px",
                       height: "18px",

@@ -7,6 +7,102 @@ import styled from "styled-components";
 import CreatableSelect from "react-select/creatable";
 import LayoutWrapper from "../../components/LayoutWrapper";
 
+/* 🟢 DnD-kit imports */
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableItem({
+  v,
+  trade,
+  saveTrade,
+  setVariables,
+  renameVariable,
+  deleteVariable,
+  menuOpen,
+  setMenuOpen,
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: v.id });
+
+  const value = trade[v.name] || null;
+
+  return (
+    <SortableItemWrapper
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      $transform={CSS.Transform.toString(transform)}
+      $transition={transition}
+    >
+      <VariableHeader>
+        <strong>{v.name}</strong>
+        {v.editable && (
+          <MenuWrapper>
+            <MenuButton
+              onClick={() => setMenuOpen(menuOpen === v.id ? null : v.id)}
+            >
+              ⋮
+            </MenuButton>
+            {menuOpen === v.id && (
+              <Dropdown>
+                <button
+                  onClick={() => {
+                    const newName = prompt("New name?", v.name);
+                    if (newName) renameVariable(v, newName.trim());
+                  }}
+                >
+                  ✏ Rename
+                </button>
+                <button
+                  onClick={() => deleteVariable(v)}
+                  style={{ color: "red" }}
+                >
+                  🗑 Delete
+                </button>
+              </Dropdown>
+            )}
+          </MenuWrapper>
+        )}
+      </VariableHeader>
+
+      <CreatableSelect
+        isClearable
+        value={value ? { value, label: value } : null}
+        options={v.options.map((opt) => ({
+          value: opt,
+          label: opt,
+        }))}
+        onChange={(sel) =>
+          saveTrade({
+            ...trade,
+            [v.name]: sel ? sel.value : null,
+          })
+        }
+        onCreateOption={async (inputValue) => {
+          const newOptions = [...v.options, inputValue];
+          await supabase
+            .from("variables")
+            .update({ options: newOptions })
+            .eq("id", v.id);
+
+          setVariables((prev) =>
+            prev.map((x) => (x.id === v.id ? { ...x, options: newOptions } : x))
+          );
+
+          saveTrade({ ...trade, [v.name]: inputValue });
+        }}
+        placeholder="Select or type..."
+      />
+    </SortableItemWrapper>
+  );
+}
+
 export default function TradeViewPage() {
   const { id } = useParams();
   const [trade, setTrade] = useState(null);
@@ -44,30 +140,27 @@ export default function TradeViewPage() {
           "Trade number": data.trade_number,
           ...data.data,
         };
-
-        // 🟢 Debug logs
-        console.log("👉 Raw data from Supabase:", data);
-        console.log("👉 State we will set:", newState);
-
         setTrade(newState);
       } else {
         console.error("❌ Load trade error:", error);
       }
     };
-
     if (id) loadTrade();
   }, [id]);
 
+  /* ---------- Load all variables ---------- */
   /* ---------- Load all variables (fixed + custom) ---------- */
   useEffect(() => {
     const loadVariables = async () => {
-      const { data, error } = await supabase.from("variables").select("*");
+      const { data, error } = await supabase
+        .from("variables")
+        .select("*")
+        .order("order", { ascending: true }); // 🟢 added order
+
       if (!error && data) {
-        console.log(
-          "👉 Variables loaded:",
-          data.map((v) => v.name)
-        );
         setVariables(data);
+      } else {
+        console.error("❌ Load variables error:", error);
       }
     };
     loadVariables();
@@ -80,56 +173,44 @@ export default function TradeViewPage() {
       .from("trades")
       .update({ data: updated })
       .eq("id", updated.id);
-
     if (error) console.error("❌ Save error:", error);
   };
 
   const deleteTrade = async () => {
     if (!confirm("Weet je zeker dat je deze trade wilt verwijderen?")) return;
-
     const { error } = await supabase.from("trades").delete().eq("id", trade.id);
-
     if (error) {
       console.error("❌ Delete error:", error);
       return;
     }
-
-    // Na verwijderen terug naar overzicht
     window.location.href = "/";
   };
 
-  /* ---------- Add new custom variable ---------- */
   const addVariable = async () => {
     const newKey = prompt("Name of new variable?");
     if (!newKey) return;
-
     const { data, error } = await supabase
       .from("variables")
       .insert([{ name: newKey, type: "custom", options: [], editable: true }])
       .select();
-
     if (!error && data) {
       setVariables((prev) => [...prev, data[0]]);
     }
   };
 
-  /* ---------- Rename variable ---------- */
   const renameVariable = async (variable, newName) => {
     if (!newName || newName === variable.name) {
       setMenuOpen(null);
       return;
     }
-
     const { error } = await supabase
       .from("variables")
       .update({ name: newName })
       .eq("id", variable.id);
-
     if (!error) {
       setVariables((prev) =>
         prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
       );
-
       if (trade[variable.name] !== undefined) {
         const updated = { ...trade };
         updated[newName] = updated[variable.name];
@@ -140,15 +221,12 @@ export default function TradeViewPage() {
     setMenuOpen(null);
   };
 
-  /* ---------- Delete variable ---------- */
   const deleteVariable = async (variable) => {
     if (!confirm(`Delete variable "${variable.name}"?`)) return;
-
     const { error } = await supabase
       .from("variables")
       .delete()
       .eq("id", variable.id);
-
     if (!error) {
       setVariables((prev) => prev.filter((x) => x.id !== variable.id));
       const updated = { ...trade };
@@ -159,6 +237,30 @@ export default function TradeViewPage() {
   };
 
   if (!trade) return <Wrapper>Loading trade...</Wrapper>;
+
+  /* 🟢 Handle reorder */
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const customVars = variables.filter((v) => v.type === "custom");
+    const oldIndex = customVars.findIndex((v) => v.id === active.id);
+    const newIndex = customVars.findIndex((v) => v.id === over.id);
+    const reordered = arrayMove(customVars, oldIndex, newIndex);
+
+    // 🔹 Merge back with fixed vars
+    setVariables((prev) => {
+      const others = prev.filter((v) => v.type !== "custom");
+      return [...others, ...reordered];
+    });
+
+    // 🔹 Persist order in Supabase
+    await Promise.all(
+      reordered.map((v, index) =>
+        supabase.from("variables").update({ order: index }).eq("id", v.id)
+      )
+    );
+  };
 
   return (
     <LayoutWrapper>
@@ -177,6 +279,7 @@ export default function TradeViewPage() {
               <span>Net PnL</span>
               {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
             </PnLHighlight>
+
             <DetailSection>
               <h2>Details</h2>
               {variables
@@ -186,7 +289,6 @@ export default function TradeViewPage() {
                     fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
                 )
                 .map((v) => {
-                  // 🔹 Trade Number → read-only
                   if (v.name === "Trade number") {
                     return (
                       <Item key={v.id}>
@@ -195,15 +297,10 @@ export default function TradeViewPage() {
                       </Item>
                     );
                   }
-
-                  // 🔹 Skip PNL en Time exit
                   if (v.name === "PNL" || v.name === "Time exit") {
                     return null;
                   }
-
                   const value = trade[v.name] || "";
-
-                  // 🔹 Coins & Confidence → dropdown
                   if (["Coins", "Confidence"].includes(v.name)) {
                     return (
                       <Item key={v.id}>
@@ -245,8 +342,6 @@ export default function TradeViewPage() {
                       </Item>
                     );
                   }
-
-                  // 🔹 Datum → date picker
                   if (v.name === "Datum") {
                     return (
                       <Item key={v.id}>
@@ -261,8 +356,6 @@ export default function TradeViewPage() {
                       </Item>
                     );
                   }
-
-                  // 🔹 Entreetijd → time picker
                   if (v.name === "Entreetijd") {
                     return (
                       <Item key={v.id}>
@@ -277,8 +370,6 @@ export default function TradeViewPage() {
                       </Item>
                     );
                   }
-
-                  // 🔹 Reasons for entry → textarea
                   if (v.name === "Reasons for entry") {
                     return (
                       <Item key={v.id}>
@@ -293,8 +384,6 @@ export default function TradeViewPage() {
                       </Item>
                     );
                   }
-
-                  // 🔹 default → text input
                   return (
                     <Item key={v.id}>
                       <strong>{v.name}</strong>
@@ -312,82 +401,36 @@ export default function TradeViewPage() {
 
             <Divider />
 
-            {/* ✅ Custom variables */}
+            {/* ✅ Custom variables with drag n drop */}
             <DetailSection>
-              {variables
-                .filter((v) => v.type === "custom")
-                .map((v) => {
-                  const value = trade[v.name] || "";
-
-                  return (
-                    <Item key={v.id}>
-                      <VariableHeader>
-                        <strong>{v.name}</strong>
-                        {v.editable && (
-                          <MenuWrapper>
-                            <MenuButton
-                              onClick={() =>
-                                setMenuOpen(menuOpen === v.id ? null : v.id)
-                              }
-                            >
-                              ⋮
-                            </MenuButton>
-                            {menuOpen === v.id && (
-                              <Dropdown>
-                                <button
-                                  onClick={() => {
-                                    const newName = prompt("New name?", v.name);
-                                    if (newName)
-                                      renameVariable(v, newName.trim());
-                                  }}
-                                >
-                                  ✏ Rename
-                                </button>
-                                <button
-                                  onClick={() => deleteVariable(v)}
-                                  style={{ color: "red" }}
-                                >
-                                  🗑 Delete
-                                </button>
-                              </Dropdown>
-                            )}
-                          </MenuWrapper>
-                        )}
-                      </VariableHeader>
-
-                      <CreatableSelect
-                        value={value ? { value, label: value } : null}
-                        options={v.options.map((opt) => ({
-                          value: opt,
-                          label: opt,
-                        }))}
-                        onChange={(sel) =>
-                          saveTrade({
-                            ...trade,
-                            [v.name]: sel ? sel.value : "",
-                          })
-                        }
-                        onCreateOption={async (inputValue) => {
-                          const newOptions = [...v.options, inputValue];
-
-                          await supabase
-                            .from("variables")
-                            .update({ options: newOptions })
-                            .eq("id", v.id);
-
-                          setVariables((prev) =>
-                            prev.map((x) =>
-                              x.id === v.id ? { ...x, options: newOptions } : x
-                            )
-                          );
-
-                          saveTrade({ ...trade, [v.name]: inputValue });
-                        }}
-                        placeholder="Select or type..."
+              <h2>Custom Variables</h2>
+              <DndContext
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={variables
+                    .filter((v) => v.type === "custom")
+                    .map((v) => v.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {variables
+                    .filter((v) => v.type === "custom")
+                    .map((v) => (
+                      <SortableItem
+                        key={v.id}
+                        v={v}
+                        trade={trade}
+                        saveTrade={saveTrade}
+                        setVariables={setVariables}
+                        renameVariable={renameVariable}
+                        deleteVariable={deleteVariable}
+                        menuOpen={menuOpen}
+                        setMenuOpen={setMenuOpen}
                       />
-                    </Item>
-                  );
-                })}
+                    ))}
+                </SortableContext>
+              </DndContext>
             </DetailSection>
 
             <AddNewVariable onClick={addVariable}>
@@ -399,8 +442,6 @@ export default function TradeViewPage() {
             {/* 2️⃣ Exit & PnL sectie */}
             <DetailSection>
               <h2>Exit & Result</h2>
-
-              {/* Exit time */}
               <Item>
                 <strong>Exit time</strong>
                 <input
@@ -411,8 +452,6 @@ export default function TradeViewPage() {
                   }
                 />
               </Item>
-
-              {/* PNL */}
               <Item>
                 <strong>PNL</strong>
                 <input
@@ -446,7 +485,6 @@ export default function TradeViewPage() {
                   {showUsdtChart ? "Hide" : "Show"}
                 </ToggleButton>
               </h3>
-
               {showUsdtChart &&
                 (trade["USDT.D chart"] ? (
                   <a
@@ -511,7 +549,6 @@ const PnLHighlight = styled.div`
   color: ${(p) => (p.$positive ? "#059669" : "#dc2626")};
   border: 1px solid ${(p) => (p.$positive ? "#a7f3d0" : "#fecaca")};
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-
   span {
     font-size: 0.9rem;
     font-weight: 500;
@@ -526,7 +563,6 @@ const DetailSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
-
   h2 {
     font-size: 0.95rem;
     font-weight: 600;
@@ -536,15 +572,13 @@ const DetailSection = styled.div`
 `;
 const Item = styled.div`
   display: flex;
-  flex-direction: column; /* 👈 belangrijk */
+  flex-direction: column;
   gap: 0.3rem;
-
   strong {
     font-size: 0.85rem;
     font-weight: 500;
     color: #6b7280;
   }
-
   input,
   select {
     padding: 0.55rem 0.8rem;
@@ -558,7 +592,6 @@ const Item = styled.div`
       box-shadow 0.2s,
       background 0.2s;
   }
-
   textarea {
     width: 100%;
     min-height: 160px;
@@ -574,7 +607,6 @@ const Item = styled.div`
       box-shadow 0.2s,
       background 0.2s;
   }
-
   input:focus,
   textarea:focus,
   select:focus {
@@ -584,7 +616,6 @@ const Item = styled.div`
     outline: none;
   }
 `;
-
 const VariableHeader = styled.div`
   display: flex;
   justify-content: space-between;
@@ -610,7 +641,6 @@ const Dropdown = styled.div`
   display: flex;
   flex-direction: column;
   z-index: 10;
-
   button {
     background: none;
     border: none;
@@ -618,7 +648,6 @@ const Dropdown = styled.div`
     font-size: 0.85rem;
     cursor: pointer;
     text-align: left;
-
     &:hover {
       background: #f3f4f6;
     }
@@ -638,17 +667,15 @@ const ChartCard = styled.div`
   border-radius: 12px;
   padding: 1rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-
   img {
-    max-width: 100%; /* nooit breder dan container */
-    max-height: 800px; /* pas max hoogte aan naar smaak */
+    max-width: 100%;
+    max-height: 800px;
     object-fit: contain;
     border-radius: 8px;
     display: block;
     margin: 0 auto;
   }
 `;
-
 const ToggleButton = styled.button`
   margin-left: 1rem;
   font-size: 0.75rem;
@@ -661,7 +688,6 @@ const ToggleButton = styled.button`
     background: #f3f4f6;
   }
 `;
-
 const Empty = styled.div`
   font-size: 0.85rem;
   color: #aaa;
@@ -691,21 +717,30 @@ const AddNewVariable = styled.div`
     text-decoration: underline;
   }
 `;
-
 const HeaderActions = styled.div`
   display: flex;
   align-items: center;
   gap: 0.8rem;
 `;
-
 const DeleteButton = styled.button`
   background: none;
   border: none;
   cursor: pointer;
   font-size: 1.2rem;
   color: #dc2626;
-
   &:hover {
     color: #b91c1c;
   }
+`;
+const SortableItemWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.2rem 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 0.8rem;
+  transform: ${(p) => p.$transform};
+  transition: ${(p) => p.$transition};
 `;
