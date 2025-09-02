@@ -35,13 +35,14 @@ function SortableItem({
   return (
     <SortableItemWrapper
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
       $transform={CSS.Transform.toString(transform)}
       $transition={transition}
     >
       <VariableHeader>
-        <strong>{v.name}</strong>
+        <DragHandle {...attributes} {...listeners}>
+          ⠿
+        </DragHandle>
+        <span>{v.name}</span>
         {v.editable && (
           <MenuWrapper>
             <MenuButton
@@ -584,7 +585,7 @@ const Item = styled.div`
     padding: 0.55rem 0.8rem;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-family: inherit;
     background: #fafafa;
     transition:
@@ -614,12 +615,17 @@ const Item = styled.div`
     background: #fff;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
     outline: none;
+    font-size: 0.8rem;
   }
 `;
 const VariableHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  span {
+    font-size: 0.8em;
+  }
 `;
 const MenuWrapper = styled.div`
   position: relative;
@@ -738,9 +744,16 @@ const SortableItemWrapper = styled.div`
   gap: 0.3rem;
   background: #fff;
   border-radius: 12px;
-  padding: 1.2rem 1rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   margin-bottom: 0.8rem;
   transform: ${(p) => p.$transform};
   transition: ${(p) => p.$transition};
+  font-size: 0.8em;
+`;
+
+const DragHandle = styled.div`
+  cursor: grab;
+  padding: 0 0.3rem;
+  font-size: 1rem;
+  user-select: none;
 `;
