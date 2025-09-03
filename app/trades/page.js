@@ -6,6 +6,8 @@ import WinRateCard from "../components/WinRateCard";
 import AvgWinLossCard from "../components/AvgWinLossCard";
 import LayoutWrapper from "../components/LayoutWrapper";
 
+export const dynamic = "force-dynamic";
+
 export default async function TradeDataPage() {
   const { data: trades } = await supabase.from("trades").select("*");
   const { data: tradeVars } = await supabase
