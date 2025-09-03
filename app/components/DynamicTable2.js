@@ -42,6 +42,10 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     loadVisibleCols(cols);
   }, [variables]);
 
+  useEffect(() => {
+    setRows(initialRows || []);
+  }, [initialRows]);
+
   const loadVisibleCols = async (allColumns) => {
     const { data, error } = await supabase
       .from("table_settings")

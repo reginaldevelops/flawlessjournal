@@ -1,20 +1,75 @@
-import DynamicTable2 from "../components/DynamicTable2";
+"use client";
+
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+
+import LayoutWrapper from "../components/LayoutWrapper";
+import DynamicTable2 from "../components/DynamicTable2";
 import CumulativePnLChart from "../components/CumulativePnLChart";
 import ProfitFactorCard from "../components/ProfitFactorCard";
 import WinRateCard from "../components/WinRateCard";
 import AvgWinLossCard from "../components/AvgWinLossCard";
-import LayoutWrapper from "../components/LayoutWrapper";
 
-export const dynamic = "force-dynamic";
+export default function TradeDataPage() {
+  const [rows, setRows] = useState([]);
+  const [variables, setVariables] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-export default async function TradeDataPage() {
-  const { data: trades } = await supabase.from("trades").select("*");
-  const { data: tradeVars } = await supabase
-    .from("trade_variables")
-    .select("*");
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: trades } = await supabase.from("trades").select("*");
+      const { data: tradeVars } = await supabase
+        .from("trade_variables")
+        .select("*");
 
-  const variables = tradeVars?.map((v) => v.name) || [];
+      const vars = tradeVars?.map((v) => v.name) || [];
+
+      const mapped = trades.map((d) => {
+        const base = {
+          id: d.id,
+          "Trade Number": d.trade_number,
+          Coins: d.data?.Coins,
+          Datum: d.data?.Datum,
+          Entreetijd: d.data?.Entreetijd,
+          "Time exit": d.data?.["Time exit"],
+          Chart: d.data?.Chart,
+          "USDT.D chart": d.data?.["USDT.D chart"],
+          Confidence: d.data?.Confidence,
+          "Target Win": d.data?.["Target Win"],
+          "Target loss": d.data?.["Target loss"],
+          "Reasons for entry": d.data?.["Reasons for entry"],
+          PnL: d.data?.PNL,
+          Result: d.data?.Result,
+          Tags: d.data?.tags || [],
+        };
+        vars.forEach((v) => {
+          base[v] = d.data?.[v] || "";
+        });
+        return base;
+      });
+
+      setVariables(vars);
+      setRows(mapped);
+      setLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <LayoutWrapper>
+        <div className="p-8">Loading trades…</div>
+      </LayoutWrapper>
+    );
+  }
+
+  // ✅ Profit factor berekenen
+  const pnlValues = rows.map((r) => Number(r.PnL) || 0);
+  const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
+  const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
+
+  const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
 
   function StatCard({ children }) {
     return (
@@ -25,37 +80,6 @@ export default async function TradeDataPage() {
       </div>
     );
   }
-
-  const rows = trades.map((d) => {
-    const base = {
-      id: d.id,
-      "Trade Number": d.trade_number,
-      Coins: d.data?.Coins,
-      Datum: d.data?.Datum,
-      Entreetijd: d.data?.Entreetijd,
-      "Time exit": d.data?.["Time exit"],
-      Chart: d.data?.Chart,
-      "USDT.D chart": d.data?.["USDT.D chart"],
-      Confidence: d.data?.Confidence,
-      "Target Win": d.data?.["Target Win"],
-      "Target loss": d.data?.["Target loss"],
-      "Reasons for entry": d.data?.["Reasons for entry"],
-      PnL: d.data?.PNL,
-      Result: d.data?.Result,
-      Tags: d.data?.tags || [],
-    };
-    variables.forEach((v) => {
-      base[v] = d.data?.[v] || "";
-    });
-    return base;
-  });
-
-  // ✅ Profit factor berekenen
-  const pnlValues = rows.map((r) => Number(r.PnL) || 0);
-  const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
-  const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
-
-  const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
 
   return (
     <LayoutWrapper>
