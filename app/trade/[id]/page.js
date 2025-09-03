@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import styled from "styled-components";
 import CreatableSelect from "react-select/creatable";
-import LayoutWrapper from "../../components/LayoutWrapper";
 
 /* 🟢 DnD-kit imports */
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -291,142 +290,86 @@ export default function TradeViewPage() {
   };
 
   return (
-    <LayoutWrapper>
-      <Wrapper>
-        <Header>
-          <h2>{trade.Coins || "Unknown Coin"}</h2>
-          <HeaderActions>
-            <span>{trade.Datum || "—"}</span>
-            <DeleteButton onClick={deleteTrade}>🗑️</DeleteButton>
-          </HeaderActions>
-        </Header>
+    <Wrapper>
+      <Header>
+        <h2>{trade.Coins || "Unknown Coin"}</h2>
+        <HeaderActions>
+          <span>{trade.Datum || "—"}</span>
+          <DeleteButton onClick={deleteTrade}>🗑️</DeleteButton>
+        </HeaderActions>
+      </Header>
 
-        <Content>
-          <Sidebar>
-            <PnLHighlight $positive={Number(trade["PNL"]) >= 0}>
-              <span>Net PnL</span>
-              {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
-            </PnLHighlight>
+      <Content>
+        <Sidebar>
+          <PnLHighlight $positive={Number(trade["PNL"]) >= 0}>
+            <span>Net PnL</span>
+            {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
+          </PnLHighlight>
 
-            <DetailSection>
-              <h2>Details</h2>
-              {variables
-                .filter((v) => v.type === "fixed")
-                .sort(
-                  (a, b) =>
-                    fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
-                )
-                .map((v) => {
-                  if (v.name === "Trade number") {
-                    return (
-                      <Item
-                        key={v.id}
-                        $layout={layoutOverrides[v.name] || "column"}
-                      >
-                        <strong>{v.name}</strong>
-                        <span>{trade["Trade number"] || "—"}</span>
-                      </Item>
-                    );
-                  }
-                  if (v.name === "PNL" || v.name === "Time exit") {
-                    return null;
-                  }
-                  const value = trade[v.name] || "";
-                  if (["Coins", "Confidence"].includes(v.name)) {
-                    return (
-                      <Item
-                        key={v.id}
-                        $layout={layoutOverrides[v.name] || "column"}
-                      >
-                        <strong>{v.name}</strong>
-                        <CreatableSelect
-                          value={value ? { value, label: value } : null}
-                          options={(v.options || []).map((opt) => ({
-                            value: opt,
-                            label: opt,
-                          }))}
-                          onChange={(sel) =>
-                            saveTrade({
-                              ...trade,
-                              [v.name]: sel ? sel.value : "",
-                            })
-                          }
-                          onCreateOption={async (inputValue) => {
-                            const newOptions = [
-                              ...(v.options || []),
-                              inputValue,
-                            ];
-                            await supabase
-                              .from("variables")
-                              .update({ options: newOptions })
-                              .eq("id", v.id);
+          <DetailSection>
+            <h2>Details</h2>
+            {variables
+              .filter((v) => v.type === "fixed")
+              .sort(
+                (a, b) =>
+                  fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
+              )
+              .map((v) => {
+                if (v.name === "Trade number") {
+                  return (
+                    <Item
+                      key={v.id}
+                      $layout={layoutOverrides[v.name] || "column"}
+                    >
+                      <strong>{v.name}</strong>
+                      <span>{trade["Trade number"] || "—"}</span>
+                    </Item>
+                  );
+                }
+                if (v.name === "PNL" || v.name === "Time exit") {
+                  return null;
+                }
+                const value = trade[v.name] || "";
+                if (["Coins", "Confidence"].includes(v.name)) {
+                  return (
+                    <Item
+                      key={v.id}
+                      $layout={layoutOverrides[v.name] || "column"}
+                    >
+                      <strong>{v.name}</strong>
+                      <CreatableSelect
+                        value={value ? { value, label: value } : null}
+                        options={(v.options || []).map((opt) => ({
+                          value: opt,
+                          label: opt,
+                        }))}
+                        onChange={(sel) =>
+                          saveTrade({
+                            ...trade,
+                            [v.name]: sel ? sel.value : "",
+                          })
+                        }
+                        onCreateOption={async (inputValue) => {
+                          const newOptions = [...(v.options || []), inputValue];
+                          await supabase
+                            .from("variables")
+                            .update({ options: newOptions })
+                            .eq("id", v.id);
 
-                            setVariables((prev) =>
-                              prev.map((x) =>
-                                x.id === v.id
-                                  ? { ...x, options: newOptions }
-                                  : x
-                              )
-                            );
+                          setVariables((prev) =>
+                            prev.map((x) =>
+                              x.id === v.id ? { ...x, options: newOptions } : x
+                            )
+                          );
 
-                            saveTrade({ ...trade, [v.name]: inputValue });
-                          }}
-                          placeholder="Select or type..."
-                        />
-                      </Item>
-                    );
-                  }
-                  if (v.name === "Datum") {
-                    return (
-                      <Item
-                        key={v.id}
-                        $layout={layoutOverrides[v.name] || "column"}
-                      >
-                        <strong>{v.name}</strong>
-                        <input
-                          type="date"
-                          value={value}
-                          onChange={(e) =>
-                            saveTrade({ ...trade, [v.name]: e.target.value })
-                          }
-                        />
-                      </Item>
-                    );
-                  }
-                  if (v.name === "Entreetijd") {
-                    return (
-                      <Item
-                        key={v.id}
-                        $layout={layoutOverrides[v.name] || "column"}
-                      >
-                        <strong>{v.name}</strong>
-                        <input
-                          type="time"
-                          value={value}
-                          onChange={(e) =>
-                            saveTrade({ ...trade, [v.name]: e.target.value })
-                          }
-                        />
-                      </Item>
-                    );
-                  }
-                  if (v.name === "Reasons for entry") {
-                    return (
-                      <Item
-                        key={v.id}
-                        $layout={layoutOverrides[v.name] || "column"}
-                      >
-                        <strong>{v.name}</strong>
-                        <textarea
-                          rows={3}
-                          value={value}
-                          onChange={(e) =>
-                            saveTrade({ ...trade, [v.name]: e.target.value })
-                          }
-                        />
-                      </Item>
-                    );
-                  }
+                          saveTrade({ ...trade, [v.name]: inputValue });
+                        }}
+                        placeholder="Select or type..."
+                      />
+                    </Item>
+                  );
+                }
+                if (v.name === "Datum") {
                   return (
                     <Item
                       key={v.id}
@@ -434,7 +377,7 @@ export default function TradeViewPage() {
                     >
                       <strong>{v.name}</strong>
                       <input
-                        type="text"
+                        type="date"
                         value={value}
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
@@ -442,120 +385,169 @@ export default function TradeViewPage() {
                       />
                     </Item>
                   );
-                })}
-            </DetailSection>
-
-            <Divider />
-
-            {/* ✅ Custom variables with drag n drop */}
-            <DetailSection>
-              <h2>Custom Variables</h2>
-              <DndContext
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={variables
-                    .filter((v) => v.type === "custom")
-                    .map((v) => v.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {variables
-                    .filter((v) => v.type === "custom")
-                    .map((v) => (
-                      <SortableItem
-                        key={v.id}
-                        v={v}
-                        trade={trade}
-                        saveTrade={saveTrade}
-                        setVariables={setVariables}
-                        renameVariable={renameVariable}
-                        deleteVariable={deleteVariable}
-                        menuOpen={menuOpen}
-                        setMenuOpen={setMenuOpen}
+                }
+                if (v.name === "Entreetijd") {
+                  return (
+                    <Item
+                      key={v.id}
+                      $layout={layoutOverrides[v.name] || "column"}
+                    >
+                      <strong>{v.name}</strong>
+                      <input
+                        type="time"
+                        value={value}
+                        onChange={(e) =>
+                          saveTrade({ ...trade, [v.name]: e.target.value })
+                        }
                       />
-                    ))}
-                </SortableContext>
-              </DndContext>
-            </DetailSection>
+                    </Item>
+                  );
+                }
+                if (v.name === "Reasons for entry") {
+                  return (
+                    <Item
+                      key={v.id}
+                      $layout={layoutOverrides[v.name] || "column"}
+                    >
+                      <strong>{v.name}</strong>
+                      <textarea
+                        rows={3}
+                        value={value}
+                        onChange={(e) =>
+                          saveTrade({ ...trade, [v.name]: e.target.value })
+                        }
+                      />
+                    </Item>
+                  );
+                }
+                return (
+                  <Item
+                    key={v.id}
+                    $layout={layoutOverrides[v.name] || "column"}
+                  >
+                    <strong>{v.name}</strong>
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={(e) =>
+                        saveTrade({ ...trade, [v.name]: e.target.value })
+                      }
+                    />
+                  </Item>
+                );
+              })}
+          </DetailSection>
 
-            <AddNewVariable onClick={addVariable}>
-              + Add new category
-            </AddNewVariable>
+          <Divider />
 
-            <Divider />
+          {/* ✅ Custom variables with drag n drop */}
+          <DetailSection>
+            <h2>Custom Variables</h2>
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={variables
+                  .filter((v) => v.type === "custom")
+                  .map((v) => v.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {variables
+                  .filter((v) => v.type === "custom")
+                  .map((v) => (
+                    <SortableItem
+                      key={v.id}
+                      v={v}
+                      trade={trade}
+                      saveTrade={saveTrade}
+                      setVariables={setVariables}
+                      renameVariable={renameVariable}
+                      deleteVariable={deleteVariable}
+                      menuOpen={menuOpen}
+                      setMenuOpen={setMenuOpen}
+                    />
+                  ))}
+              </SortableContext>
+            </DndContext>
+          </DetailSection>
 
-            {/* 2️⃣ Exit & PnL sectie */}
-            <DetailSection>
-              <h2>Exit & Result</h2>
-              <Item>
-                <strong>Exit time</strong>
-                <input
-                  type="time"
-                  value={trade["Time exit"] || ""}
-                  onChange={(e) =>
-                    saveTrade({ ...trade, ["Time exit"]: e.target.value })
-                  }
-                />
-              </Item>
-              <Item>
-                <strong>PNL</strong>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={trade["PNL"] || ""}
-                  onChange={(e) =>
-                    saveTrade({ ...trade, PNL: Number(e.target.value) })
-                  }
-                />
-              </Item>
-            </DetailSection>
-          </Sidebar>
+          <AddNewVariable onClick={addVariable}>
+            + Add new category
+          </AddNewVariable>
 
-          <Main>
-            <ChartCard>
-              <h3>Coin Chart</h3>
-              {trade.Chart ? (
-                <a href={trade.Chart} target="_blank" rel="noopener noreferrer">
-                  <img src={trade.Chart} alt="Coin Chart" />
+          <Divider />
+
+          {/* 2️⃣ Exit & PnL sectie */}
+          <DetailSection>
+            <h2>Exit & Result</h2>
+            <Item>
+              <strong>Exit time</strong>
+              <input
+                type="time"
+                value={trade["Time exit"] || ""}
+                onChange={(e) =>
+                  saveTrade({ ...trade, ["Time exit"]: e.target.value })
+                }
+              />
+            </Item>
+            <Item>
+              <strong>PNL</strong>
+              <input
+                type="number"
+                step="0.01"
+                value={trade["PNL"] || ""}
+                onChange={(e) =>
+                  saveTrade({ ...trade, PNL: Number(e.target.value) })
+                }
+              />
+            </Item>
+          </DetailSection>
+        </Sidebar>
+
+        <Main>
+          <ChartCard>
+            <h3>Coin Chart</h3>
+            {trade.Chart ? (
+              <a href={trade.Chart} target="_blank" rel="noopener noreferrer">
+                <img src={trade.Chart} alt="Coin Chart" />
+              </a>
+            ) : (
+              <Empty>Geen chart toegevoegd</Empty>
+            )}
+          </ChartCard>
+
+          <ChartCard>
+            <h3>
+              USDT.D Chart
+              <ToggleButton onClick={() => setShowUsdtChart(!showUsdtChart)}>
+                {showUsdtChart ? "Hide" : "Show"}
+              </ToggleButton>
+            </h3>
+            {showUsdtChart &&
+              (trade["USDT.D chart"] ? (
+                <a
+                  href={trade["USDT.D chart"]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img src={trade["USDT.D chart"]} alt="USDT.D Chart" />
                 </a>
               ) : (
-                <Empty>Geen chart toegevoegd</Empty>
-              )}
-            </ChartCard>
+                <Empty>Geen USDT.D chart toegevoegd</Empty>
+              ))}
+          </ChartCard>
 
-            <ChartCard>
-              <h3>
-                USDT.D Chart
-                <ToggleButton onClick={() => setShowUsdtChart(!showUsdtChart)}>
-                  {showUsdtChart ? "Hide" : "Show"}
-                </ToggleButton>
-              </h3>
-              {showUsdtChart &&
-                (trade["USDT.D chart"] ? (
-                  <a
-                    href={trade["USDT.D chart"]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img src={trade["USDT.D chart"]} alt="USDT.D Chart" />
-                  </a>
-                ) : (
-                  <Empty>Geen USDT.D chart toegevoegd</Empty>
-                ))}
-            </ChartCard>
-
-            <NotesCard>
-              <h3>Trade evaluation</h3>
-              <textarea
-                value={trade["Notes"] || ""}
-                onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
-              />
-            </NotesCard>
-          </Main>
-        </Content>
-      </Wrapper>
-    </LayoutWrapper>
+          <NotesCard>
+            <h3>Trade evaluation</h3>
+            <textarea
+              value={trade["Notes"] || ""}
+              onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
+            />
+          </NotesCard>
+        </Main>
+      </Content>
+    </Wrapper>
   );
 }
 

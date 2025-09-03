@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import styled from "styled-components";
 import Link from "next/link";
-import LayoutWrapper from "../components/LayoutWrapper";
 import { supabase } from "../lib/supabaseClient";
 import AccountValue from "../components/AccountValue";
 import NotesArea from "../components/NotesArea";
@@ -219,330 +218,325 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <LayoutWrapper>
-      <Wrapper>
-        <Header>
-          <h1>{greeting}, Regi.</h1>
-        </Header>
+    <Wrapper>
+      <Header>
+        <h1>{greeting}, Regi.</h1>
+      </Header>
 
-        {/* 📅 Weekly Calendar + Nieuws */}
-        <SectionTitle>WEEK {getWeekNumber(now)}</SectionTitle>
+      {/* 📅 Weekly Calendar + Nieuws */}
+      <SectionTitle>WEEK {getWeekNumber(now)}</SectionTitle>
 
-        <Calendar>
-          {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day, idx) => {
-            const today = new Date().getDay(); // 0 = zondag
-            const isToday = idx === (today + 6) % 7; // maandag=0
+      <Calendar>
+        {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day, idx) => {
+          const today = new Date().getDay(); // 0 = zondag
+          const isToday = idx === (today + 6) % 7; // maandag=0
 
-            const now = new Date();
-            const monday = new Date(now);
-            monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-            const thisDay = new Date(monday);
-            thisDay.setDate(monday.getDate() + idx);
-            const isoDate = thisDay.toISOString().split("T")[0];
+          const now = new Date();
+          const monday = new Date(now);
+          monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+          const thisDay = new Date(monday);
+          thisDay.setDate(monday.getDate() + idx);
+          const isoDate = thisDay.toISOString().split("T")[0];
 
-            const dayEvents = news.filter((ev) => ev.date === isoDate);
+          const dayEvents = news.filter((ev) => ev.date === isoDate);
 
-            return (
-              <Day key={idx} $today={isToday}>
-                <div className="day-label">
-                  {day} {thisDay.getDate()}
-                </div>
+          return (
+            <Day key={idx} $today={isToday}>
+              <div className="day-label">
+                {day} {thisDay.getDate()}
+              </div>
 
-                {dayEvents.length > 0 && (
-                  <EventsForDay>
-                    {dayEvents.map((ev, i) => (
-                      <EventItem key={i}>
-                        <span className="time">
-                          {ev.datetime
-                            ? new Date(ev.datetime).toLocaleTimeString(
-                                "nl-NL",
-                                {
-                                  timeZone: "Europe/Amsterdam",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )
-                            : ev.time}
-                        </span>
+              {dayEvents.length > 0 && (
+                <EventsForDay>
+                  {dayEvents.map((ev, i) => (
+                    <EventItem key={i}>
+                      <span className="time">
+                        {ev.datetime
+                          ? new Date(ev.datetime).toLocaleTimeString("nl-NL", {
+                              timeZone: "Europe/Amsterdam",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ev.time}
+                      </span>
 
-                        <span className="title">{ev.title}</span>
-                      </EventItem>
-                    ))}
-                  </EventsForDay>
-                )}
-              </Day>
-            );
-          })}
-        </Calendar>
+                      <span className="title">{ev.title}</span>
+                    </EventItem>
+                  ))}
+                </EventsForDay>
+              )}
+            </Day>
+          );
+        })}
+      </Calendar>
 
-        {/* 📊 Sessions bar */}
-        <Sessions>
-          <h2>Sessions</h2>
-          <SessionBarWrapper>
-            <SessionBar>
-              {sessions.map((s, idx) => {
-                let start = s.start * 60;
-                let end = s.end * 60;
+      {/* 📊 Sessions bar */}
+      <Sessions>
+        <h2>Sessions</h2>
+        <SessionBarWrapper>
+          <SessionBar>
+            {sessions.map((s, idx) => {
+              let start = s.start * 60;
+              let end = s.end * 60;
 
-                // Als end < start → loopt over middernacht
-                if (end <= start) {
-                  end += 24 * 60;
-                }
+              // Als end < start → loopt over middernacht
+              if (end <= start) {
+                end += 24 * 60;
+              }
 
-                const left = (start / (24 * 60)) * 100;
-                const width = ((end - start) / (24 * 60)) * 100;
+              const left = (start / (24 * 60)) * 100;
+              const width = ((end - start) / (24 * 60)) * 100;
 
-                return (
-                  <SessionBlock
-                    key={idx}
-                    $left={`${left}%`}
-                    $width={`${width}%`}
-                    $color={s.color}
-                  >
-                    {s.name}
-                  </SessionBlock>
-                );
-              })}
+              return (
+                <SessionBlock
+                  key={idx}
+                  $left={`${left}%`}
+                  $width={`${width}%`}
+                  $color={s.color}
+                >
+                  {s.name}
+                </SessionBlock>
+              );
+            })}
 
-              <CurrentTime style={{ left: `${currentPercent}%` }} />
-            </SessionBar>
-          </SessionBarWrapper>
-        </Sessions>
+            <CurrentTime style={{ left: `${currentPercent}%` }} />
+          </SessionBar>
+        </SessionBarWrapper>
+      </Sessions>
 
-        {/* 📈 Summary Stats */}
-        <Sections>
-          <TwoCol>
-            <Card>
-              <h3>Weekly Stats</h3>
-              <StatsGrid>
-                <StatItem>
-                  <span className="icon">💰</span>
-                  <span className="label">PnL</span>
-                  <span className="value">
-                    {weeklyPNL !== null
-                      ? `${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
-                      : "--"}
-                  </span>
-                </StatItem>
-                <StatItem>
-                  <span className="icon">📊</span>
-                  <span className="label">Trades Taken</span>
-                  <span className="value">{trades}</span>
-                </StatItem>
-                <StatItem>
-                  <span className="icon">✅</span>
-                  <span className="label">Win Rate</span>
-                  <span className="value">{winRate.toFixed(0)}%</span>
-                </StatItem>
-              </StatsGrid>
-              <P2Gsection>
-                <h3>P2G Ratio</h3>
+      {/* 📈 Summary Stats */}
+      <Sections>
+        <TwoCol>
+          <Card>
+            <h3>Weekly Stats</h3>
+            <StatsGrid>
+              <StatItem>
+                <span className="icon">💰</span>
+                <span className="label">PnL</span>
+                <span className="value">
+                  {weeklyPNL !== null
+                    ? `${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
+                    : "--"}
+                </span>
+              </StatItem>
+              <StatItem>
+                <span className="icon">📊</span>
+                <span className="label">Trades Taken</span>
+                <span className="value">{trades}</span>
+              </StatItem>
+              <StatItem>
+                <span className="icon">✅</span>
+                <span className="label">Win Rate</span>
+                <span className="value">{winRate.toFixed(0)}%</span>
+              </StatItem>
+            </StatsGrid>
+            <P2Gsection>
+              <h3>P2G Ratio</h3>
+              <div
+                style={{
+                  position: "relative",
+                  height: "40px",
+                  marginTop: "10px",
+                }}
+              >
+                {/* Gradient bar */}
                 <div
                   style={{
-                    position: "relative",
-                    height: "40px",
-                    marginTop: "10px",
+                    position: "absolute",
+                    top: "50%",
+                    left: 0,
+                    right: 0,
+                    height: "6px",
+                    borderRadius: "6px",
+                    background:
+                      "linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)",
                   }}
-                >
-                  {/* Gradient bar */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: 0,
-                      right: 0,
-                      height: "6px",
-                      borderRadius: "6px",
-                      background:
-                        "linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)",
-                    }}
-                  />
-
-                  {/* Marks */}
-                  {[0.0, 0.5, 1.0].map((mark, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: "absolute",
-                        top: "28px",
-                        left: `${(mark / 1) * 100}%`,
-                        transform: "translateX(-50%)",
-                        fontSize: "0.8rem",
-                        color: "#374151",
-                      }}
-                    >
-                      {mark.toFixed(1)}
-                    </div>
-                  ))}
-
-                  {/* Indicator */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: `${Math.min(Math.max((p2g / 1) * 100, 0), 100)}%`,
-                      transform: "translate(-50%, -50%)",
-                      width: "2px",
-                      height: "18px",
-                      background: "#111827",
-                      boxShadow: "0 0 6px rgba(0, 0, 0, 0.08)",
-                    }}
-                  />
-                </div>
-              </P2Gsection>
-            </Card>
-            <Card>
-              <h3>Total Balance</h3>
-              <BalanceCard
-                phantom={phantom}
-                hyper={hyper}
-                lastUpdated={formatLocal(lastUpdated)}
-              />
-            </Card>
-          </TwoCol>
-
-          {/* 🔥 Nieuwe kaarten */}
-          <TwoCol>
-            <Card>
-              <h3>Weekly Winners</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart
-                  data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="trade" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#00ca7dff" radius={[4, 4, 0, 0]} />
-
-                  {/* gemiddelde lijn */}
-                  <ReferenceLine
-                    y={avgWinner}
-                    stroke="#000000ff"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: `Avg: $${avgWinner.toFixed(0)}`,
-                      position: "top",
-                      fill: "#000000ff",
-                      fontWeight: "bold",
-                      fontSize: 13,
-                    }}
-                  />
-
-                  {/* target lijn (dik & solid) */}
-                  <ReferenceLine
-                    y={2000}
-                    stroke="#166534"
-                    strokeWidth={4}
-                    ifOverflow="extendDomain"
-                    label={{
-                      value: `Target $2000`,
-                      position: "insideTopRight",
-                      fill: "#166534",
-                      fontWeight: "bold",
-                      fontSize: 12,
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
-
-            <Card>
-              <h3>Weekly Losers</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart
-                  data={losers.map((val, i) => ({
-                    trade: i + 1,
-                    value: Math.abs(val),
-                  }))}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="trade" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#d4154bff" radius={[4, 4, 0, 0]} />
-
-                  {/* gemiddelde lijn */}
-                  <ReferenceLine
-                    y={avgLoser}
-                    stroke="#000000ff"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: `Avg: $${avgLoser.toFixed(0)}`,
-                      position: "top",
-                      fill: "#000000ff",
-                      fontWeight: "bold",
-                      fontSize: 13,
-                    }}
-                  />
-
-                  {/* target lijn (dik & solid) */}
-                  <ReferenceLine
-                    y={2000}
-                    stroke="#991b1b"
-                    strokeWidth={4}
-                    ifOverflow="extendDomain"
-                    label={{
-                      value: `Target $2000`,
-                      position: "insideTopRight",
-                      fill: "#991b1b",
-                      fontWeight: "bold",
-                      fontSize: 12,
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
-          </TwoCol>
-
-          {/* 📅 Weekly goals + Notes */}
-          <TwoCol>
-            <Card>
-              <h3>Weekly Profit Target {profitTargetPct}%</h3>
-              <ProgressTrack>
-                <ProgressFill
-                  style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
                 />
-                <ProgressLabel
-                  style={{ left: `${Math.min(Math.max(progress, 0), 100)}%` }}
-                >
-                  {progress.toFixed(0)}%
-                </ProgressLabel>
-              </ProgressTrack>
 
-              <h3>Weekly Goals</h3>
-              <GoalsList>
-                <GoalItem>
-                  <span className="icon">🎯</span>
-                  <span>
-                    Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
-                  </span>
-                </GoalItem>
-                <GoalItem>
-                  <span className="icon">⛔</span>
-                  <span>
-                    Aim for 15M/1H Highs/lows. Make sure RR is
-                    <strong>higher than 0.7 else use a Limit order!</strong>
-                  </span>
-                </GoalItem>
-                <GoalItem>
-                  <span className="icon">🎯</span>
-                  <span>
-                    <strong>Wacht op goede USDT.D bias</strong> en kies coin die
-                    meest aligned.
-                  </span>
-                </GoalItem>
-              </GoalsList>
-            </Card>
+                {/* Marks */}
+                {[0.0, 0.5, 1.0].map((mark, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      position: "absolute",
+                      top: "28px",
+                      left: `${(mark / 1) * 100}%`,
+                      transform: "translateX(-50%)",
+                      fontSize: "0.8rem",
+                      color: "#374151",
+                    }}
+                  >
+                    {mark.toFixed(1)}
+                  </div>
+                ))}
 
-            <Card>
-              <h3>Quick Notes</h3>
-              <NotesArea />
-            </Card>
-          </TwoCol>
-        </Sections>
-      </Wrapper>
-    </LayoutWrapper>
+                {/* Indicator */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: `${Math.min(Math.max((p2g / 1) * 100, 0), 100)}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: "2px",
+                    height: "18px",
+                    background: "#111827",
+                    boxShadow: "0 0 6px rgba(0, 0, 0, 0.08)",
+                  }}
+                />
+              </div>
+            </P2Gsection>
+          </Card>
+          <Card>
+            <h3>Total Balance</h3>
+            <BalanceCard
+              phantom={phantom}
+              hyper={hyper}
+              lastUpdated={formatLocal(lastUpdated)}
+            />
+          </Card>
+        </TwoCol>
+
+        {/* 🔥 Nieuwe kaarten */}
+        <TwoCol>
+          <Card>
+            <h3>Weekly Winners</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart
+                data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="trade" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#00ca7dff" radius={[4, 4, 0, 0]} />
+
+                {/* gemiddelde lijn */}
+                <ReferenceLine
+                  y={avgWinner}
+                  stroke="#000000ff"
+                  strokeDasharray="3 3"
+                  label={{
+                    value: `Avg: $${avgWinner.toFixed(0)}`,
+                    position: "top",
+                    fill: "#000000ff",
+                    fontWeight: "bold",
+                    fontSize: 13,
+                  }}
+                />
+
+                {/* target lijn (dik & solid) */}
+                <ReferenceLine
+                  y={2000}
+                  stroke="#166534"
+                  strokeWidth={4}
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: `Target $2000`,
+                    position: "insideTopRight",
+                    fill: "#166534",
+                    fontWeight: "bold",
+                    fontSize: 12,
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card>
+            <h3>Weekly Losers</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart
+                data={losers.map((val, i) => ({
+                  trade: i + 1,
+                  value: Math.abs(val),
+                }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="trade" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#d4154bff" radius={[4, 4, 0, 0]} />
+
+                {/* gemiddelde lijn */}
+                <ReferenceLine
+                  y={avgLoser}
+                  stroke="#000000ff"
+                  strokeDasharray="3 3"
+                  label={{
+                    value: `Avg: $${avgLoser.toFixed(0)}`,
+                    position: "top",
+                    fill: "#000000ff",
+                    fontWeight: "bold",
+                    fontSize: 13,
+                  }}
+                />
+
+                {/* target lijn (dik & solid) */}
+                <ReferenceLine
+                  y={2000}
+                  stroke="#991b1b"
+                  strokeWidth={4}
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: `Target $2000`,
+                    position: "insideTopRight",
+                    fill: "#991b1b",
+                    fontWeight: "bold",
+                    fontSize: 12,
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </TwoCol>
+
+        {/* 📅 Weekly goals + Notes */}
+        <TwoCol>
+          <Card>
+            <h3>Weekly Profit Target {profitTargetPct}%</h3>
+            <ProgressTrack>
+              <ProgressFill
+                style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+              />
+              <ProgressLabel
+                style={{ left: `${Math.min(Math.max(progress, 0), 100)}%` }}
+              >
+                {progress.toFixed(0)}%
+              </ProgressLabel>
+            </ProgressTrack>
+
+            <h3>Weekly Goals</h3>
+            <GoalsList>
+              <GoalItem>
+                <span className="icon">🎯</span>
+                <span>
+                  Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
+                </span>
+              </GoalItem>
+              <GoalItem>
+                <span className="icon">⛔</span>
+                <span>
+                  Aim for 15M/1H Highs/lows. Make sure RR is
+                  <strong>higher than 0.7 else use a Limit order!</strong>
+                </span>
+              </GoalItem>
+              <GoalItem>
+                <span className="icon">🎯</span>
+                <span>
+                  <strong>Wacht op goede USDT.D bias</strong> en kies coin die
+                  meest aligned.
+                </span>
+              </GoalItem>
+            </GoalsList>
+          </Card>
+
+          <Card>
+            <h3>Quick Notes</h3>
+            <NotesArea />
+          </Card>
+        </TwoCol>
+      </Sections>
+    </Wrapper>
   );
 }
 /* ---------------- styled ---------------- */

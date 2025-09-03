@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import styled from "styled-components";
-import LayoutWrapper from "../components/LayoutWrapper";
 
 export default function JournalPage() {
   const [entriesByDay, setEntriesByDay] = useState({});
@@ -203,173 +202,171 @@ export default function JournalPage() {
   const blanks = Array(firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1).fill("");
 
   return (
-    <LayoutWrapper>
-      <PageWrapper>
-        {/* Input Section */}
-        <InputSection>
-          <h3>What's on your mind today...?</h3>
-          <div className="input-box">
-            <textarea
-              type="text"
-              placeholder="Start typing..."
-              value={newEntryToday}
-              onChange={(e) => setNewEntryToday(e.target.value)}
-            />
-            <button onClick={addEntryToday}>Add</button>
-          </div>
-        </InputSection>
+    <PageWrapper>
+      {/* Input Section */}
+      <InputSection>
+        <h3>What's on your mind today...?</h3>
+        <div className="input-box">
+          <textarea
+            type="text"
+            placeholder="Start typing..."
+            value={newEntryToday}
+            onChange={(e) => setNewEntryToday(e.target.value)}
+          />
+          <button onClick={addEntryToday}>Add</button>
+        </div>
+      </InputSection>
 
-        {/* Calendar + Entries */}
-        <ContentSection>
-          <CalendarPane>
-            <HeaderRow>
-              <button onClick={() => changeMonth(-1)}>←</button>
-              <h3>
-                {new Date(viewYear, viewMonth).toLocaleString("nl-NL", {
-                  month: "long",
-                })}{" "}
-                {viewYear}
-              </h3>
-              <RightControls>
-                <button onClick={() => changeMonth(1)}>→</button>
-                <TodayButton
+      {/* Calendar + Entries */}
+      <ContentSection>
+        <CalendarPane>
+          <HeaderRow>
+            <button onClick={() => changeMonth(-1)}>←</button>
+            <h3>
+              {new Date(viewYear, viewMonth).toLocaleString("nl-NL", {
+                month: "long",
+              })}{" "}
+              {viewYear}
+            </h3>
+            <RightControls>
+              <button onClick={() => changeMonth(1)}>→</button>
+              <TodayButton
+                onClick={() => {
+                  const today = new Date();
+                  setViewYear(today.getFullYear());
+                  setViewMonth(today.getMonth());
+                  setSelectedDate(today.toLocaleDateString("en-CA"));
+                  loadCalendar(today.getFullYear(), today.getMonth());
+                }}
+              >
+                Vandaag
+              </TodayButton>
+            </RightControls>
+          </HeaderRow>
+
+          <CalendarGrid>
+            {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((d) => (
+              <DayHeader key={d}>{d}</DayHeader>
+            ))}
+
+            {blanks.map((_, i) => (
+              <DayCell key={`b-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }, (_, i) => {
+              const day = i + 1;
+              const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(
+                2,
+                "0"
+              )}-${String(day).padStart(2, "0")}`;
+              const count = entriesByDay[dateStr] || 0;
+              const isSelected = selectedDate === dateStr;
+              return (
+                <DayCell
+                  key={day}
+                  $hasEntries={count > 0}
+                  $selected={isSelected}
                   onClick={() => {
-                    const today = new Date();
-                    setViewYear(today.getFullYear());
-                    setViewMonth(today.getMonth());
-                    setSelectedDate(today.toLocaleDateString("en-CA"));
-                    loadCalendar(today.getFullYear(), today.getMonth());
+                    setSelectedDate(dateStr);
+                    loadEntries(dateStr);
                   }}
                 >
-                  Vandaag
-                </TodayButton>
-              </RightControls>
-            </HeaderRow>
+                  <span className="day">{day}</span>
+                  {count > 0 && <span className="count">{count}</span>}
+                </DayCell>
+              );
+            })}
+          </CalendarGrid>
+        </CalendarPane>
 
-            <CalendarGrid>
-              {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((d) => (
-                <DayHeader key={d}>{d}</DayHeader>
-              ))}
+        {/* Entries */}
+        <EntryPane>
+          <h2>
+            {new Date(selectedDate).toLocaleDateString("nl-NL", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </h2>
 
-              {blanks.map((_, i) => (
-                <DayCell key={`b-${i}`} />
-              ))}
-              {Array.from({ length: daysInMonth }, (_, i) => {
-                const day = i + 1;
-                const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(
-                  2,
-                  "0"
-                )}-${String(day).padStart(2, "0")}`;
-                const count = entriesByDay[dateStr] || 0;
-                const isSelected = selectedDate === dateStr;
+          {/* Nieuw invoerveld voor geselecteerde dag */}
+          <NoteInput>
+            <textarea
+              placeholder={`Add a note for ${selectedDate}`}
+              value={newEntrySelected}
+              onChange={(e) => setNewEntrySelected(e.target.value)}
+              onKeyDown={(e) =>
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                (e.preventDefault(), addEntryForSelected())
+              }
+              rows={3}
+            />
+            <button onClick={addEntryForSelected}>Add</button>
+          </NoteInput>
+
+          {entries.length === 0 ? (
+            <p>No entries.</p>
+          ) : (
+            <ul>
+              {entries.map((e) => {
+                const isEditing = editingId === e.id;
+                const isExpanded = expandedIds.includes(e.id);
+
+                const displayContent =
+                  !isExpanded && (e.content || "").length > 200
+                    ? (e.content || "").slice(0, 200) + "..."
+                    : e.content || "";
+
                 return (
-                  <DayCell
-                    key={day}
-                    $hasEntries={count > 0}
-                    $selected={isSelected}
-                    onClick={() => {
-                      setSelectedDate(dateStr);
-                      loadEntries(dateStr);
-                    }}
-                  >
-                    <span className="day">{day}</span>
-                    {count > 0 && <span className="count">{count}</span>}
-                  </DayCell>
+                  <li key={e.id}>
+                    <div className="entry-header">
+                      <strong>
+                        {new Date(e.created_at).toLocaleTimeString("nl-NL", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </strong>
+                    </div>
+                    <div className="entry-body">
+                      {isEditing ? (
+                        <>
+                          <textarea
+                            value={editText}
+                            onChange={(ev) => setEditText(ev.target.value)}
+                            rows={4}
+                          />
+                          <button onClick={() => handleSaveEdit(e.id)}>
+                            💾
+                          </button>
+                          <button onClick={handleCancelEdit}>✖️</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="content">{displayContent}</span>
+                          <div className="actions">
+                            {(e.content || "").length > 200 && (
+                              <button onClick={() => toggleExpand(e.id)}>
+                                {isExpanded ? "Show less" : "Show more"}
+                              </button>
+                            )}
+                            <button onClick={() => handleStartEdit(e)}>
+                              ✏️
+                            </button>
+                            <button onClick={() => handleDelete(e.id)}>
+                              🗑️
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </li>
                 );
               })}
-            </CalendarGrid>
-          </CalendarPane>
-
-          {/* Entries */}
-          <EntryPane>
-            <h2>
-              {new Date(selectedDate).toLocaleDateString("nl-NL", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </h2>
-
-            {/* Nieuw invoerveld voor geselecteerde dag */}
-            <NoteInput>
-              <textarea
-                placeholder={`Add a note for ${selectedDate}`}
-                value={newEntrySelected}
-                onChange={(e) => setNewEntrySelected(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  (e.preventDefault(), addEntryForSelected())
-                }
-                rows={3}
-              />
-              <button onClick={addEntryForSelected}>Add</button>
-            </NoteInput>
-
-            {entries.length === 0 ? (
-              <p>No entries.</p>
-            ) : (
-              <ul>
-                {entries.map((e) => {
-                  const isEditing = editingId === e.id;
-                  const isExpanded = expandedIds.includes(e.id);
-
-                  const displayContent =
-                    !isExpanded && (e.content || "").length > 200
-                      ? (e.content || "").slice(0, 200) + "..."
-                      : e.content || "";
-
-                  return (
-                    <li key={e.id}>
-                      <div className="entry-header">
-                        <strong>
-                          {new Date(e.created_at).toLocaleTimeString("nl-NL", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </strong>
-                      </div>
-                      <div className="entry-body">
-                        {isEditing ? (
-                          <>
-                            <textarea
-                              value={editText}
-                              onChange={(ev) => setEditText(ev.target.value)}
-                              rows={4}
-                            />
-                            <button onClick={() => handleSaveEdit(e.id)}>
-                              💾
-                            </button>
-                            <button onClick={handleCancelEdit}>✖️</button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="content">{displayContent}</span>
-                            <div className="actions">
-                              {(e.content || "").length > 200 && (
-                                <button onClick={() => toggleExpand(e.id)}>
-                                  {isExpanded ? "Show less" : "Show more"}
-                                </button>
-                              )}
-                              <button onClick={() => handleStartEdit(e)}>
-                                ✏️
-                              </button>
-                              <button onClick={() => handleDelete(e.id)}>
-                                🗑️
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </EntryPane>
-        </ContentSection>
-      </PageWrapper>
-    </LayoutWrapper>
+            </ul>
+          )}
+        </EntryPane>
+      </ContentSection>
+    </PageWrapper>
   );
 }
 

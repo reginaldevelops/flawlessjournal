@@ -6,7 +6,6 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import styled, { keyframes } from "styled-components";
-import LayoutWrapper from "../components/LayoutWrapper";
 
 // Lucide icons
 import {
@@ -208,295 +207,287 @@ export default function Notebook() {
   };
 
   return (
-    <LayoutWrapper>
-      <Wrapper>
-        <TitleHeader>
-          <h1>Notebook</h1>
-        </TitleHeader>
-        <NoteBookWrapper>
-          {/* Column 1: Tags */}
-          <Column>
-            <Header>
-              <SmallButton onClick={handleAddTag}>
-                <Tag size={18} /> Add tag
-              </SmallButton>
-            </Header>
-            <ListWrapper>
-              {tags.map((tag) => {
-                const TagIcon =
-                  tag.name === "Monthly reviews"
-                    ? Calendar
-                    : tag.name === "Weekly reviews"
-                      ? CalendarDays
-                      : Tag;
+    <Wrapper>
+      <TitleHeader>
+        <h1>Notebook</h1>
+      </TitleHeader>
+      <NoteBookWrapper>
+        {/* Column 1: Tags */}
+        <Column>
+          <Header>
+            <SmallButton onClick={handleAddTag}>
+              <Tag size={18} /> Add tag
+            </SmallButton>
+          </Header>
+          <ListWrapper>
+            {tags.map((tag) => {
+              const TagIcon =
+                tag.name === "Monthly reviews"
+                  ? Calendar
+                  : tag.name === "Weekly reviews"
+                    ? CalendarDays
+                    : Tag;
 
-                return (
-                  <TagRow
-                    key={tag.id}
-                    $active={selectedTag?.id === tag.id}
-                    onClick={() => setSelectedTag(tag)}
+              return (
+                <TagRow
+                  key={tag.id}
+                  $active={selectedTag?.id === tag.id}
+                  onClick={() => setSelectedTag(tag)}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
                   >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 6 }}
-                    >
-                      <TagIcon size={16} /> {tag.name}
-                    </div>
-                    {!tag.fixed && (
-                      <MenuWrapper ref={menuRef}>
-                        <MoreVertical
-                          size={16}
-                          style={{ cursor: "pointer" }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenTagMenu(
-                              openTagMenu === tag.id ? null : tag.id
-                            );
-                          }}
-                        />
-                        {openTagMenu === tag.id && (
-                          <Menu>
-                            <MenuItem
-                              onClick={() => {
-                                const newName = prompt("Rename tag:", tag.name);
-                                if (newName) {
-                                  supabase
-                                    .from("notebook_tags")
-                                    .update({ name: newName })
-                                    .eq("id", tag.id)
-                                    .then(({ error }) => {
-                                      if (!error) {
-                                        setTags(
-                                          tags.map((t) =>
-                                            t.id === tag.id
-                                              ? { ...t, name: newName }
-                                              : t
-                                          )
-                                        );
-                                      }
-                                    });
-                                }
-                                setOpenTagMenu(null);
-                              }}
-                            >
-                              ✏️ Rename
-                            </MenuItem>
-                            <MenuItem
-                              onClick={() => {
+                    <TagIcon size={16} /> {tag.name}
+                  </div>
+                  {!tag.fixed && (
+                    <MenuWrapper ref={menuRef}>
+                      <MoreVertical
+                        size={16}
+                        style={{ cursor: "pointer" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenTagMenu(
+                            openTagMenu === tag.id ? null : tag.id
+                          );
+                        }}
+                      />
+                      {openTagMenu === tag.id && (
+                        <Menu>
+                          <MenuItem
+                            onClick={() => {
+                              const newName = prompt("Rename tag:", tag.name);
+                              if (newName) {
                                 supabase
                                   .from("notebook_tags")
-                                  .delete()
+                                  .update({ name: newName })
                                   .eq("id", tag.id)
-                                  .then(() => {
-                                    setTags(
-                                      tags.filter((t) => t.id !== tag.id)
-                                    );
-                                    if (selectedTag?.id === tag.id)
-                                      setSelectedTag(null);
+                                  .then(({ error }) => {
+                                    if (!error) {
+                                      setTags(
+                                        tags.map((t) =>
+                                          t.id === tag.id
+                                            ? { ...t, name: newName }
+                                            : t
+                                        )
+                                      );
+                                    }
                                   });
-                                setOpenTagMenu(null);
-                              }}
-                            >
-                              🗑️ Delete
-                            </MenuItem>
-                          </Menu>
-                        )}
-                      </MenuWrapper>
-                    )}
-                  </TagRow>
-                );
-              })}
-            </ListWrapper>
-          </Column>
+                              }
+                              setOpenTagMenu(null);
+                            }}
+                          >
+                            ✏️ Rename
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() => {
+                              supabase
+                                .from("notebook_tags")
+                                .delete()
+                                .eq("id", tag.id)
+                                .then(() => {
+                                  setTags(tags.filter((t) => t.id !== tag.id));
+                                  if (selectedTag?.id === tag.id)
+                                    setSelectedTag(null);
+                                });
+                              setOpenTagMenu(null);
+                            }}
+                          >
+                            🗑️ Delete
+                          </MenuItem>
+                        </Menu>
+                      )}
+                    </MenuWrapper>
+                  )}
+                </TagRow>
+              );
+            })}
+          </ListWrapper>
+        </Column>
 
-          {/* Column 2: Notes */}
-          <Column>
-            <Header>
-              <SmallButton onClick={handleNewNote}>
-                <Newspaper size={18} /> New note
-              </SmallButton>
-            </Header>
-            <ListWrapper>
-              {posts.map((post) => (
-                <ListItem
-                  key={post.id}
-                  $active={selectedPost?.id === post.id}
-                  onClick={() => {
-                    setSelectedPost(post);
-                    editor?.commands.setContent(post.content);
+        {/* Column 2: Notes */}
+        <Column>
+          <Header>
+            <SmallButton onClick={handleNewNote}>
+              <Newspaper size={18} /> New note
+            </SmallButton>
+          </Header>
+          <ListWrapper>
+            {posts.map((post) => (
+              <ListItem
+                key={post.id}
+                $active={selectedPost?.id === post.id}
+                onClick={() => {
+                  setSelectedPost(post);
+                  editor?.commands.setContent(post.content);
+                }}
+              >
+                <FileText size={16} />
+                <div>
+                  <strong>{post.title}</strong>
+                  <small>
+                    {formatLocal(post.updated_at || post.created_at)}
+                  </small>
+                </div>
+              </ListItem>
+            ))}
+          </ListWrapper>
+        </Column>
+
+        {/* Column 3: Editor */}
+        <EditorColumn>
+          {selectedPost ? (
+            <>
+              {/* Metadata bar */}
+              <MetaBar>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  <FileText size={16} />
-                  <div>
-                    <strong>{post.title}</strong>
-                    <small>
-                      {formatLocal(post.updated_at || post.created_at)}
-                    </small>
-                  </div>
-                </ListItem>
-              ))}
-            </ListWrapper>
-          </Column>
-
-          {/* Column 3: Editor */}
-          <EditorColumn>
-            {selectedPost ? (
-              <>
-                {/* Metadata bar */}
-                <MetaBar>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <FileText size={20} />
-                    <TitleInput
-                      value={selectedPost.title}
-                      onChange={(e) =>
-                        setSelectedPost({
-                          ...selectedPost,
-                          title: e.target.value,
-                        })
-                      }
-                      placeholder="Untitled note..."
-                    />
-                  </div>
-
-                  <MetaInfo>
-                    <span>Created: {formatLocal(selectedPost.created_at)}</span>
-                    <span>Updated: {formatLocal(selectedPost.updated_at)}</span>
-                  </MetaInfo>
-
-                  <TagSelect
-                    value={selectedPost.tag_id || ""}
+                  <FileText size={20} />
+                  <TitleInput
+                    value={selectedPost.title}
                     onChange={(e) =>
                       setSelectedPost({
                         ...selectedPost,
-                        tag_id: e.target.value,
+                        title: e.target.value,
                       })
                     }
-                  >
-                    {tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                  </TagSelect>
+                    placeholder="Untitled note..."
+                  />
+                </div>
 
-                  <SaveStatus>
-                    {status.includes("Saving") ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Check size={16} color="green" />
-                    )}
-                  </SaveStatus>
+                <MetaInfo>
+                  <span>Created: {formatLocal(selectedPost.created_at)}</span>
+                  <span>Updated: {formatLocal(selectedPost.updated_at)}</span>
+                </MetaInfo>
 
-                  {/* 🗑️ Delete knop */}
-                  <SmallButton
-                    onClick={() => {
-                      if (confirm("Delete this note?")) {
-                        handleDeleteNote();
-                      }
-                    }}
-                  >
-                    🗑️ Delete
-                  </SmallButton>
-                </MetaBar>
+                <TagSelect
+                  value={selectedPost.tag_id || ""}
+                  onChange={(e) =>
+                    setSelectedPost({
+                      ...selectedPost,
+                      tag_id: e.target.value,
+                    })
+                  }
+                >
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </TagSelect>
 
-                {/* Toolbar */}
-                <ToolbarWrapper>
-                  <ToolbarButton
-                    onClick={() => editor.chain().focus().toggleBold().run()}
-                    $active={editor.isActive("bold")}
-                  >
-                    <Bold size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                    $active={editor.isActive("italic")}
-                  >
-                    <Italic size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleUnderline().run()
-                    }
-                    $active={editor.isActive("underline")}
-                  >
-                    <UnderlineIcon size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleHeading({ level: 1 }).run()
-                    }
-                    $active={editor.isActive("heading", { level: 1 })}
-                  >
-                    <Heading1 size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleHeading({ level: 2 }).run()
-                    }
-                    $active={editor.isActive("heading", { level: 2 })}
-                  >
-                    <Heading2 size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleBulletList().run()
-                    }
-                    $active={editor.isActive("bulletList")}
-                  >
-                    <ListIcon size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleOrderedList().run()
-                    }
-                    $active={editor.isActive("orderedList")}
-                  >
-                    <ListOrdered size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleBlockquote().run()
-                    }
-                    $active={editor.isActive("blockquote")}
-                  >
-                    <Quote size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() =>
-                      editor.chain().focus().toggleCodeBlock().run()
-                    }
-                    $active={editor.isActive("codeBlock")}
-                  >
-                    <Code size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() => editor.chain().focus().undo().run()}
-                  >
-                    <Undo size={16} />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    onClick={() => editor.chain().focus().redo().run()}
-                  >
-                    <Redo size={16} />
-                  </ToolbarButton>
-                </ToolbarWrapper>
+                <SaveStatus>
+                  {status.includes("Saving") ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Check size={16} color="green" />
+                  )}
+                </SaveStatus>
 
-                <EditorBox>
-                  <EditorContent editor={editor} />
-                </EditorBox>
-              </>
-            ) : (
-              <Placeholder>Select or create a note</Placeholder>
-            )}
-          </EditorColumn>
-        </NoteBookWrapper>
-      </Wrapper>
-    </LayoutWrapper>
+                {/* 🗑️ Delete knop */}
+                <SmallButton
+                  onClick={() => {
+                    if (confirm("Delete this note?")) {
+                      handleDeleteNote();
+                    }
+                  }}
+                >
+                  🗑️ Delete
+                </SmallButton>
+              </MetaBar>
+
+              {/* Toolbar */}
+              <ToolbarWrapper>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  $active={editor.isActive("bold")}
+                >
+                  <Bold size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleItalic().run()}
+                  $active={editor.isActive("italic")}
+                >
+                  <Italic size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleUnderline().run()}
+                  $active={editor.isActive("underline")}
+                >
+                  <UnderlineIcon size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 1 }).run()
+                  }
+                  $active={editor.isActive("heading", { level: 1 })}
+                >
+                  <Heading1 size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 2 }).run()
+                  }
+                  $active={editor.isActive("heading", { level: 2 })}
+                >
+                  <Heading2 size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() =>
+                    editor.chain().focus().toggleBulletList().run()
+                  }
+                  $active={editor.isActive("bulletList")}
+                >
+                  <ListIcon size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() =>
+                    editor.chain().focus().toggleOrderedList().run()
+                  }
+                  $active={editor.isActive("orderedList")}
+                >
+                  <ListOrdered size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() =>
+                    editor.chain().focus().toggleBlockquote().run()
+                  }
+                  $active={editor.isActive("blockquote")}
+                >
+                  <Quote size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                  $active={editor.isActive("codeBlock")}
+                >
+                  <Code size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().undo().run()}
+                >
+                  <Undo size={16} />
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().redo().run()}
+                >
+                  <Redo size={16} />
+                </ToolbarButton>
+              </ToolbarWrapper>
+
+              <EditorBox>
+                <EditorContent editor={editor} />
+              </EditorBox>
+            </>
+          ) : (
+            <Placeholder>Select or create a note</Placeholder>
+          )}
+        </EditorColumn>
+      </NoteBookWrapper>
+    </Wrapper>
   );
 }
 
@@ -507,7 +498,7 @@ export default function Notebook() {
 const Wrapper = styled.div`
   max-width: 1256px;
   margin: auto;
-  min-height: 96vh;
+  min-height: 90vh;
 `;
 
 const TitleHeader = styled.div`

@@ -4,10 +4,11 @@ import { GlobalStyles } from "./lib/GlobalStyles";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import Header from "./components/Header";
+import Footer from "./components/Footer";
 
 const poppins = Poppins({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"], // welke varianten je nodig hebt
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata = {
@@ -21,8 +22,11 @@ export default function RootLayout({ children }) {
       <body className={poppins.className}>
         <StyledComponentsRegistry>
           <GlobalStyles />
-          <Header />
-          {children}
+          <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#e1c4f4] to-[#a8c5ff]">
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </div>
         </StyledComponentsRegistry>
       </body>
     </html>

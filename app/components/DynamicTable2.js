@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import styled from "styled-components";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
@@ -35,7 +34,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     "Tags",
   ];
 
-  // Bouw kolommen samen
   useEffect(() => {
     const cols = [...fixedCols, ...variables];
     setAllCols(cols);
@@ -145,7 +143,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .from("trades")
       .insert([newTrade])
       .select();
-
     if (error) return console.error("❌ Error adding trade:", error);
     if (data && data.length > 0) router.push(`/trade/${data[0].id}`);
   };
@@ -156,7 +153,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .from("trades")
       .delete()
       .in("id", selectedRows);
-
     if (error) return console.error("❌ Bulk delete error:", error);
     setRows((prev) => prev.filter((r) => !selectedRows.includes(r.id)));
     setSelectedRows([]);
@@ -164,33 +160,48 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   };
 
   return (
-    <Wrapper>
-      <TableManagement>
-        <AddTradeButton onClick={addTrade}>+ Add Trade</AddTradeButton>
-        <RightControls>
-          <BulkWrapper>
-            <BulkButton onClick={() => setBulkOpen(!bulkOpen)}>
+    <div className="p-8 m-4 rounded-2xl bg-inherit">
+      {/* Top controls */}
+      <div className="flex justify-between items-center mb-4">
+        <button
+          onClick={addTrade}
+          className="mr-2 bg-green-600 hover:bg-green-700 text-white text-base px-3 py-1 rounded-lg"
+        >
+          + Add Trade
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setBulkOpen(!bulkOpen)}
+              className="bg-gray-50 border border-gray-300 rounded px-3 py-1 text-sm hover:bg-gray-100"
+            >
               Bulk actions ▾
-            </BulkButton>
+            </button>
             {bulkOpen && (
-              <BulkMenu>
-                <button onClick={bulkDelete} style={{ color: "red" }}>
+              <div className="absolute right-0 top-8 bg-white border border-gray-200 shadow-md rounded flex flex-col">
+                <button
+                  onClick={bulkDelete}
+                  className="px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                >
                   🗑 Delete trades
                 </button>
-              </BulkMenu>
+              </div>
             )}
-          </BulkWrapper>
-          <GearButton onClick={() => setShowModal(true)}>⚙️</GearButton>
-        </RightControls>
-      </TableManagement>
+          </div>
+          <button onClick={() => setShowModal(true)} className="text-xl">
+            ⚙️
+          </button>
+        </div>
+      </div>
 
+      {/* Modal */}
       {showModal && (
-        <ModalOverlay>
-          <ModalContent>
-            <h3>Select columns</h3>
-            <div className="grid">
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto">
+            <h3 className="font-semibold mb-4">Select columns</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
               {allCols.map((col) => (
-                <label key={col}>
+                <label key={col} className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={visibleCols.includes(col)}
@@ -200,11 +211,11 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                 </label>
               ))}
             </div>
-            <ModalFooter>
+            <div className="flex justify-end gap-2">
               <button onClick={() => setVisibleCols(allCols)}>All</button>
               <button onClick={() => setVisibleCols([])}>None</button>
               <button onClick={() => setVisibleCols(fixedCols)}>Default</button>
-              <div className="spacer" />
+              <div className="flex-grow" />
               <button onClick={() => setShowModal(false)}>Cancel</button>
               <button
                 onClick={async () => {
@@ -214,19 +225,21 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     .select();
                   setShowModal(false);
                 }}
+                className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
               >
                 Update
               </button>
-            </ModalFooter>
-          </ModalContent>
-        </ModalOverlay>
+            </div>
+          </div>
+        </div>
       )}
 
-      <TableWrapper>
-        <StyledTable>
-          <thead>
+      {/* Table */}
+      <div className="w-full overflow-x-auto border rounded-lg bg-white">
+        <table className="w-full text-sm text-gray-900">
+          <thead className="bg-gray-50 text-left">
             <tr>
-              <Th>
+              <th className="px-6 py-4 border-b">
                 <input
                   type="checkbox"
                   checked={
@@ -238,23 +251,27 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     )
                   }
                 />
-              </Th>
+              </th>
               {visibleCols.map((col) => (
-                <Th key={col} onClick={() => handleSort(col)}>
+                <th
+                  key={col}
+                  onClick={() => handleSort(col)}
+                  className="px-4 py-2 border-b font-semibold cursor-pointer"
+                >
                   {col}{" "}
                   {sortConfig.key === col
                     ? sortConfig.direction === "asc"
                       ? "▲"
                       : "▼"
                     : ""}
-                </Th>
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {currentRows.map((row) => (
-              <Tr key={row.id}>
-                <Td>
+              <tr key={row.id} className="hover:bg-gray-50">
+                <td className="px-5 py-3 border-b">
                   <input
                     type="checkbox"
                     checked={selectedRows.includes(row.id)}
@@ -268,48 +285,63 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       }
                     }}
                   />
-                </Td>
+                </td>
                 {visibleCols.map((col) => {
                   const val = row[col];
                   if (col === "PnL") {
                     return (
-                      <Td key={col} $positive={Number(val) >= 0}>
+                      <td
+                        key={col}
+                        className={`px-4 py-2 border-b ${
+                          Number(val) >= 0 ? "text-green-600" : "text-red-600"
+                        }`}
+                      >
                         {val ? `$${val}` : "—"}
-                      </Td>
+                      </td>
                     );
                   }
                   if (col === "Tags") {
                     return (
-                      <Td key={col}>
+                      <td key={col} className="px-4 py-2 border-b">
                         {Array.isArray(val) && val.length > 0
-                          ? val.map((t) => <Tag key={t}>{t}</Tag>)
+                          ? val.map((t) => (
+                              <span
+                                key={t}
+                                className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded mr-1"
+                              >
+                                {t}
+                              </span>
+                            ))
                           : "—"}
-                      </Td>
+                      </td>
                     );
                   }
                   return (
-                    <Td
+                    <td
                       key={col}
                       onClick={() => router.push(`/trade/${row.id}`)}
-                      style={{ cursor: "pointer" }}
+                      className="px-4 py-2 border-b cursor-pointer"
                     >
                       {val || "—"}
-                    </Td>
+                    </td>
                   );
                 })}
-              </Tr>
+              </tr>
             ))}
           </tbody>
-        </StyledTable>
-        <PaginationWrapper>
+        </table>
+
+        {/* Pagination */}
+        <div className="flex justify-between items-center p-4 text-sm text-gray-600">
           <span>
             {startIndex + 1} – {Math.min(endIndex, sortedRows.length)} of{" "}
             {sortedRows.length} trades
           </span>
-          <div>
+          <div className="flex items-center gap-2">
             <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((p) => p - 1)}
+              className="px-2 py-1 border rounded disabled:text-gray-400 disabled:bg-gray-50"
             >
               ‹
             </button>
@@ -319,225 +351,13 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
             <button
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage((p) => p + 1)}
+              className="px-2 py-1 border rounded disabled:text-gray-400 disabled:bg-gray-50"
             >
               ›
             </button>
           </div>
-        </PaginationWrapper>
-      </TableWrapper>
-    </Wrapper>
+        </div>
+      </div>
+    </div>
   );
 }
-
-/* ---------------- styled ---------------- */
-const Wrapper = styled.div`
-  padding: 2rem;
-  margin: 1rem;
-  background: inherit;
-  border-radius: 20px;
-`;
-const TableWrapper = styled.div`
-  width: 100%;
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-`;
-const StyledTable = styled.table`
-  border-spacing: 0;
-  border-collapse: collapse;
-  width: 100%;
-  table-layout: auto;
-  font-size: 0.9rem;
-  color: #111;
-`;
-const Th = styled.th`
-  text-align: left;
-  padding: 0.8rem 1rem;
-  font-weight: 600;
-  font-size: 0.85rem;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fafafa;
-`;
-const Tr = styled.tr`
-  &:hover {
-    background: #f9fafb;
-  }
-`;
-const Td = styled.td`
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
-  color: ${({ $positive }) =>
-    $positive === undefined ? "#111" : $positive ? "#16a34a" : "#dc2626"};
-`;
-const Tag = styled.span`
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  margin-right: 0.3rem;
-`;
-const AddTradeButton = styled.button`
-  margin-right: 1rem;
-  background: #039d1aff;
-  color: #fff;
-  font-size: 0.9rem;
-  padding: 0.6rem 1rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  &:hover {
-    background: #026c12ff;
-  }
-`;
-const GearButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-`;
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 100;
-`;
-const ModalContent = styled.div`
-  background: #fff;
-  border-radius: 8px;
-  padding: 1.5rem;
-  width: 600px;
-  max-height: 80vh;
-  overflow-y: auto;
-  h3 {
-    margin-bottom: 1rem;
-    font-size: 1rem;
-    font-weight: 600;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.6rem;
-    margin-bottom: 1rem;
-  }
-`;
-const ModalFooter = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  .spacer {
-    flex-grow: 1;
-  }
-  button {
-    padding: 0.4rem 0.8rem;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-  button:hover {
-    background: #f3f4f6;
-  }
-`;
-const TableManagement = styled.div`
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0px;
-`;
-const RightControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-`;
-const BulkWrapper = styled.div`
-  position: relative;
-`;
-const BulkButton = styled.button`
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 0.4rem 0.8rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-const BulkMenu = styled.div`
-  position: absolute;
-  right: 0;
-  top: 2.2rem;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  z-index: 20;
-  button {
-    background: none;
-    border: none;
-    padding: 0.6rem 1rem;
-    font-size: 0.85rem;
-    cursor: pointer;
-    text-align: left;
-    &:hover {
-      background: #f3f4f6;
-    }
-  }
-`;
-
-const PaginationWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.8rem 1rem;
-  font-size: 0.85rem;
-  color: #374151;
-
-  span {
-    font-weight: 500;
-    color: #4b5563;
-  }
-
-  div {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  button {
-    min-width: 32px;
-    height: 32px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: #ffffff;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #374151;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-
-  button:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-
-  button:disabled {
-    color: #9ca3af;
-    cursor: not-allowed;
-    background: #f9fafb;
-  }
-`;

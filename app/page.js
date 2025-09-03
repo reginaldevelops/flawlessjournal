@@ -1,18 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import LayoutWrapper from "./components/LayoutWrapper";
 import styled, { keyframes } from "styled-components";
 
 export default function HomePage() {
   return (
-    <LayoutWrapper>
-      <Hero>
-        <ButtonBar>
-          <StyledLink href="/trades">Continue</StyledLink>
-        </ButtonBar>
-      </Hero>
-    </LayoutWrapper>
+    <Hero>
+      <ButtonBar>
+        <StyledLink href="/trades">Continue</StyledLink>
+      </ButtonBar>
+    </Hero>
   );
 }
 
