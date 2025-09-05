@@ -23,14 +23,6 @@ import {
 
 import BalanceCard from "../components/BalanceCard";
 
-// ⏰ Greeting
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Goedemorgen";
-  if (hour < 18) return "Goedemiddag";
-  return "Goedenavond";
-}
-
 // 📊 Percent van dag
 const getPercentOfDay = (date) => {
   const hours = date.getHours();
@@ -81,7 +73,6 @@ const sessions = sessionsUTC.map((s) => ({
 }));
 
 export default function Dashboard() {
-  const greeting = getGreeting();
   const [now, setNow] = useState(new Date());
   const [news, setNews] = useState([]);
   const [weeklyPNL, setWeeklyPNL] = useState(null);
@@ -219,10 +210,6 @@ export default function Dashboard() {
 
   return (
     <Wrapper>
-      <Header>
-        <h1>{greeting}, Regi.</h1>
-      </Header>
-
       {/* 📅 Weekly Calendar + Nieuws */}
       <SectionTitle>WEEK {getWeekNumber(now)}</SectionTitle>
 
@@ -549,20 +536,11 @@ const Wrapper = styled.div`
   margin: auto;
 `;
 
-const Header = styled.div`
-  margin-bottom: 2rem;
-  h1 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #1e293b;
-  }
-`;
-
 const Calendar = styled.div`
   display: flex;
   justify-content: space-between;
-  margin-bottom: 2rem;
   gap: 0.75rem;
+  margin-bottom: 1em;
 `;
 
 const Day = styled.div`
@@ -628,7 +606,7 @@ const EventItem = styled.div`
 `;
 
 const Sessions = styled.div`
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 
   h2 {
     margin-bottom: 0.5rem;

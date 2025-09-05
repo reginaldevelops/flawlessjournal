@@ -208,9 +208,6 @@ export default function Notebook() {
 
   return (
     <Wrapper>
-      <TitleHeader>
-        <h1>Notebook</h1>
-      </TitleHeader>
       <NoteBookWrapper>
         {/* Column 1: Tags */}
         <Column>
@@ -496,11 +493,6 @@ const Wrapper = styled.div`
   min-height: 90vh;
 `;
 
-const TitleHeader = styled.div`
-  padding: 2em 0em;
-  text-align: center;
-`;
-
 const NoteBookWrapper = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 3fr;
@@ -642,13 +634,6 @@ const MetaBar = styled.div`
   border-bottom: 1px solid #e5e7eb;
   background: #fff;
   justify-content: space-between;
-`;
-
-const MetaInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  font-size: 12px;
-  color: #6b7280;
 `;
 
 const TagSelect = styled.select`

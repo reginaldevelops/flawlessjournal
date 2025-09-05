@@ -56,10 +56,10 @@ export default function TradeDataPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-transparent">
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)] md:h-screen md:ml-16 pt-16 md:pt-0">
         <div className="flex flex-col items-center">
           <svg
-            className="animate-spin h-12 w-12 text-black-600"
+            className="animate-spin h-12 w-12 text-black"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -71,12 +71,12 @@ export default function TradeDataPage() {
               r="10"
               stroke="currentColor"
               strokeWidth="4"
-            ></circle>
+            />
             <path
               className="opacity-75"
               fill="currentColor"
               d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-            ></path>
+            />
           </svg>
           <p className="mt-4 text-lg font-semibold text-black">
             Loading trades...
@@ -105,12 +105,6 @@ export default function TradeDataPage() {
 
   return (
     <div className="px-2 py-8 space-y-8 max-w-6xl mx-auto flex-1 min-h-0 w-full">
-      <header className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-          Tradelist
-        </h1>
-      </header>
-
       {/* Grid met analytics cards */}
       <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[200px]">
         <StatCard>

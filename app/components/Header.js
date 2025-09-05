@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Menu, X, BarChart2, List, PenSquare, Book } from "lucide-react";
 
 export default function LayoutHeader() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  const navItems = [
+    { href: "/dashboard", icon: <BarChart2 size={24} />, label: "Dash" },
+    { href: "/trades", icon: <List size={24} />, label: "Trades" },
+    { href: "/journal", icon: <PenSquare size={24} />, label: "Journal" },
+    { href: "/notebook", icon: <Book size={24} />, label: "Notebook" },
+  ];
 
   return (
     <>
@@ -21,30 +30,20 @@ export default function LayoutHeader() {
 
         {/* Menu items als icons */}
         <nav className="flex flex-col items-center gap-6 mt-10 text-gray-200">
-          <Link
-            href="/dashboard"
-            className="hover:text-[#00c8ff] flex flex-col items-center"
-          >
-            <BarChart2 size={24} />
-          </Link>
-          <Link
-            href="/trades"
-            className="hover:text-[#00c8ff] flex flex-col items-center"
-          >
-            <List size={24} />
-          </Link>
-          <Link
-            href="/journal"
-            className="hover:text-[#00c8ff] flex flex-col items-center"
-          >
-            <PenSquare size={24} />
-          </Link>
-          <Link
-            href="/notebook"
-            className="hover:text-[#00c8ff] flex flex-col items-center"
-          >
-            <Book size={24} />
-          </Link>
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center ${
+                  active ? "text-[#00c8ff]" : "hover:text-[#00c8ff]"
+                }`}
+              >
+                {item.icon}
+              </Link>
+            );
+          })}
         </nav>
       </aside>
 
@@ -68,43 +67,29 @@ export default function LayoutHeader() {
         {/* Mobile dropdown (icon-only) */}
         {open && (
           <div className="bg-[#111] border-t border-[#333] flex flex-row justify-around py-4">
-            <Link
-              href="/dashboard"
-              onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
-            >
-              <BarChart2 size={22} />
-              <span className="text-xs">Dash</span>
-            </Link>
-            <Link
-              href="/trades"
-              onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
-            >
-              <List size={22} />
-              <span className="text-xs">Trades</span>
-            </Link>
-            <Link
-              href="/journal"
-              onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
-            >
-              <PenSquare size={22} />
-              <span className="text-xs">Journal</span>
-            </Link>
-            <Link
-              href="/notebook"
-              onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
-            >
-              <Book size={22} />
-              <span className="text-xs">Notebook</span>
-            </Link>
+            {navItems.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`flex flex-col items-center gap-1 px-2 ${
+                    active
+                      ? "text-[#00c8ff]"
+                      : "text-gray-200 hover:text-[#00c8ff]"
+                  }`}
+                >
+                  {item.icon}
+                  <span className="text-xs">{item.label}</span>
+                </Link>
+              );
+            })}
           </div>
         )}
       </header>
 
-      {/* Content wrapper (zorg dat er ruimte is naast sidebar op desktop) */}
+      {/* Content wrapper (ruimte naast sidebar op desktop) */}
       <main className="md:ml-16 pt-16 md:pt-0">
         {/* hier komt je page content */}
       </main>

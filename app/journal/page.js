@@ -388,7 +388,7 @@ const InputSection = styled.section`
   justify-content: center;
   text-align: center;
   background: url("/relaxingclouds.png") center/cover no-repeat;
-  min-height: 25vh;
+  min-height: 35vh;
 
   &::before {
     content: "";
@@ -457,7 +457,7 @@ const ContentSection = styled.section`
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 2rem;
-  padding: 2.5rem;
+  padding: 1rem;
   background: white;
   color: #222;
   overflow: auto; /* optional: scroll if entries overflow */
