@@ -18,8 +18,8 @@ export default function ProfitFactorCard({ value }) {
       </div>
 
       {/* Chart rechts */}
-      <div className="w-24 h-24">
-        <ResponsiveContainer>
+      <div style={{ width: "100%", maxWidth: 100, height: 100 }}>
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}

@@ -203,21 +203,6 @@ export default function JournalPage() {
 
   return (
     <PageWrapper>
-      {/* Input Section */}
-      <InputSection>
-        <h3>What's on your mind today...?</h3>
-        <div className="input-box">
-          <textarea
-            type="text"
-            placeholder="Start typing..."
-            value={newEntryToday}
-            onChange={(e) => setNewEntryToday(e.target.value)}
-          />
-          <button onClick={addEntryToday}>Add</button>
-        </div>
-      </InputSection>
-
-      {/* Calendar + Entries */}
       <ContentSection>
         <CalendarPane>
           <HeaderRow>
@@ -375,92 +360,25 @@ const PageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   background: inherit;
-  min-height: 0;
   flex: 1;
-`;
-
-/* Input section */
-const InputSection = styled.section`
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background: url("/relaxingclouds.png") center/cover no-repeat;
-  min-height: 35vh;
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.6);
-  }
-
-  > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  h3 {
-    margin-bottom: 1.5rem;
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #222;
-  }
-
-  .input-box {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-  }
-
-  textarea {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    background: #fff;
-    resize: vertical;
-    transition: 0.2s;
-
-    &:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 2px #2563eb33;
-    }
-  }
-
-  button {
-    align-self: flex-end;
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.2rem;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.9rem;
-    transition: 0.2s;
-
-    &:hover {
-      background: #1e40af;
-    }
-  }
 `;
 
 /* Content section */
 const ContentSection = styled.section`
-  flex: 1;
-  min-height: 0; /* 👈 critical fix inside flex */
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 2rem;
   padding: 1rem;
   background: white;
   color: #222;
-  overflow: auto; /* optional: scroll if entries overflow */
+  overflow: auto;
+  max-width: 1250px;
+  margin: auto auto;
+  width: 100%;
+  border-radius: 10px;
+
+  height: 80vh; /* ⬅️ maximaal 80% van viewport */
+  min-height: 0; /* voorkomt dat flexbox het blijft rekken */
 `;
 
 const CalendarPane = styled.div`

@@ -27,8 +27,8 @@ export default function WinRateCard({ rows = [] }) {
       </div>
 
       {/* Chart + legend rechts */}
-      <div className="flex flex-col items-center">
-        <div className="w-24 h-24">
+      <div className="flex flex-col items-center leading-tight">
+        <div className="w-24 h-20">
           <ResponsiveContainer>
             <PieChart>
               <Pie
@@ -47,7 +47,7 @@ export default function WinRateCard({ rows = [] }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="flex gap-4 text-xs mt-1">
+        <div className="flex gap-3 text-xs mt-[-20px]">
           <span className="text-green-600">Wins: {wins}</span>
           <span className="text-red-600">Losses: {losses}</span>
         </div>
