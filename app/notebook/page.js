@@ -489,6 +489,7 @@ export default function Notebook() {
 
 const Wrapper = styled.div`
   max-width: 1256px;
+  width: 100%;
   margin: auto;
   min-height: 90vh;
 `;
@@ -496,7 +497,7 @@ const Wrapper = styled.div`
 const NoteBookWrapper = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 3fr;
-  height: 80vh;
+  height: 99vh;
   margin: auto;
 `;
 
