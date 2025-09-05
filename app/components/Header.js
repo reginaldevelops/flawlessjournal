@@ -2,12 +2,22 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { usePathname } from "next/navigation";
-import { Menu, X, BarChart2, List, PenSquare, Book } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "../lib/supabaseClient";
+import {
+  Menu,
+  X,
+  BarChart2,
+  List,
+  PenSquare,
+  Book,
+  LogOut,
+} from "lucide-react";
 
 export default function LayoutHeader() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
 
   const navItems = [
     { href: "/dashboard", icon: <BarChart2 size={24} />, label: "Dash" },
@@ -16,17 +26,22 @@ export default function LayoutHeader() {
     { href: "/notebook", icon: <Book size={24} />, label: "Notebook" },
   ];
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex fixed top-0 left-0 h-screen w-16 bg-[#0b0b0d] border-r border-[#222] flex-col items-center py-6 space-y-8">
         {/* Logo boven */}
-        <Link
+        <span
           href="/"
           className="text-white font-bold text-xl hover:text-[#00c8ff]"
         >
           FJ
-        </Link>
+        </span>
 
         {/* Menu items als icons */}
         <nav className="flex flex-col items-center gap-6 mt-10 text-gray-200">
@@ -45,6 +60,14 @@ export default function LayoutHeader() {
             );
           })}
         </nav>
+
+        {/* Logout button */}
+        <button
+          onClick={handleLogout}
+          className="mt-auto text-gray-400 hover:text-red-500"
+        >
+          <LogOut size={22} />
+        </button>
       </aside>
 
       {/* Mobile top header */}
@@ -52,7 +75,7 @@ export default function LayoutHeader() {
         <div className="flex justify-between items-center px-6 py-4">
           {/* Logo */}
           <div className="text-white font-bold text-lg">
-            <Link href="/">FJ</Link>
+            <span>FJ</span>
           </div>
 
           {/* Toggle */}
@@ -64,7 +87,7 @@ export default function LayoutHeader() {
           </button>
         </div>
 
-        {/* Mobile dropdown (icon-only) */}
+        {/* Mobile dropdown */}
         {open && (
           <div className="bg-[#111] border-t border-[#333] flex flex-row justify-around py-4">
             {navItems.map((item) => {
@@ -85,14 +108,24 @@ export default function LayoutHeader() {
                 </Link>
               );
             })}
+
+            {/* Logout mobile */}
+            <button
+              onClick={() => {
+                setOpen(false);
+                handleLogout();
+              }}
+              className="flex flex-col items-center gap-1 px-2 text-gray-200 hover:text-red-500"
+            >
+              <LogOut size={24} />
+              <span className="text-xs">Logout</span>
+            </button>
           </div>
         )}
       </header>
 
-      {/* Content wrapper (ruimte naast sidebar op desktop) */}
-      <main className="md:ml-16 pt-16 md:pt-0">
-        {/* hier komt je page content */}
-      </main>
+      {/* Content wrapper */}
+      <main className="md:ml-16 pt-16 md:pt-0">{/* page content */}</main>
     </>
   );
 }

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { EditorContent, useEditor } from "@tiptap/react";
+import Link from "@tiptap/extension-link";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
-import styled, { keyframes } from "styled-components";
 
 // Lucide icons
 import {
@@ -39,16 +39,12 @@ export default function Notebook() {
   const [openTagMenu, setOpenTagMenu] = useState(null);
   const menuRef = useRef(null);
 
-  // ✅ helper: altijd veilige NL-tijd
+  // ✅ helper: veilige NL tijd
   function formatLocal(dateString) {
     if (!dateString) return "—";
-
-    // forceer UTC als er geen Z in zit
     let fixed = dateString.endsWith("Z") ? dateString : dateString + "Z";
     const d = new Date(fixed);
-
     if (isNaN(d.getTime())) return "—";
-
     return d.toLocaleString("nl-NL", {
       year: "numeric",
       month: "2-digit",
@@ -58,7 +54,7 @@ export default function Notebook() {
     });
   }
 
-  // Close menu when clicking outside
+  // Close tag menu
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -66,9 +62,7 @@ export default function Notebook() {
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Load tags
@@ -81,9 +75,7 @@ export default function Notebook() {
 
       if (!error && data) {
         setTags(data);
-        if (!selectedTag && data.length > 0) {
-          setSelectedTag(data[0]);
-        }
+        if (!selectedTag && data.length > 0) setSelectedTag(data[0]);
       }
     };
     loadTags();
@@ -91,8 +83,8 @@ export default function Notebook() {
 
   // Load posts when tag changes
   useEffect(() => {
+    if (!selectedTag) return;
     const loadPosts = async () => {
-      if (!selectedTag) return;
       const { data, error } = await supabase
         .from("notebook")
         .select("*")
@@ -100,11 +92,21 @@ export default function Notebook() {
         .order("updated_at", { ascending: false });
       if (!error) setPosts(data || []);
     };
-    if (selectedTag) loadPosts();
+    loadPosts();
   }, [selectedTag]);
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline],
+    extensions: [
+      StarterKit,
+      Underline,
+      Link.configure({
+        openOnClick: true, // klikbare links
+        autolink: true, // auto-detect URLs
+        HTMLAttributes: {
+          class: "text-blue-600 underline hover:text-blue-800", // Tailwind styling
+        },
+      }),
+    ],
     immediatelyRender: false,
   });
 
@@ -141,7 +143,7 @@ export default function Notebook() {
           .update({
             title: selectedPost.title,
             content,
-            updated_at: new Date().toISOString(), // ✅ UTC opslaan
+            updated_at: new Date().toISOString(),
           })
           .eq("id", selectedPost.id);
       }
@@ -161,7 +163,6 @@ export default function Notebook() {
   // Auto-save title
   useEffect(() => {
     if (!selectedPost?.id || !selectedPost.title) return;
-
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(async () => {
       setStatus("⌛ Saving…");
@@ -169,7 +170,7 @@ export default function Notebook() {
         .from("notebook")
         .update({
           title: selectedPost.title,
-          updated_at: new Date().toISOString(), // ✅ UTC opslaan
+          updated_at: new Date().toISOString(),
         })
         .eq("id", selectedPost.id);
       setStatus("✅ Saved");
@@ -194,29 +195,28 @@ export default function Notebook() {
   const handleAddTag = async () => {
     const newTag = prompt("New tag:");
     if (!newTag) return;
-
     const { data, error } = await supabase
       .from("notebook_tags")
       .insert([{ name: newTag, fixed: false }])
       .select()
       .single();
-
-    if (!error && data) {
-      setTags([...tags, data]);
-    }
+    if (!error && data) setTags([...tags, data]);
   };
 
   return (
-    <Wrapper>
-      <NoteBookWrapper>
-        {/* Column 1: Tags */}
-        <Column>
-          <Header>
-            <SmallButton onClick={handleAddTag}>
+    <div className="max-w-[1256px] w-full mx-auto min-h-[90vh]">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_3fr] h-[99vh]">
+        {/* Tags column */}
+        <div className="flex flex-col border-r border-gray-200 m-1 bg-gray-50">
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b">
+            <button
+              onClick={handleAddTag}
+              className="flex items-center gap-1 text-sm text-gray-600"
+            >
               <Tag size={18} /> Add tag
-            </SmallButton>
-          </Header>
-          <ListWrapper>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
             {tags.map((tag) => {
               const TagIcon =
                 tag.name === "Monthly reviews"
@@ -224,33 +224,35 @@ export default function Notebook() {
                   : tag.name === "Weekly reviews"
                     ? CalendarDays
                     : Tag;
-
               return (
-                <TagRow
+                <div
                   key={tag.id}
-                  $active={selectedTag?.id === tag.id}
                   onClick={() => setSelectedTag(tag)}
+                  className={`flex items-center justify-between px-4 py-2 cursor-pointer ${
+                    selectedTag?.id === tag.id
+                      ? "bg-sky-100 border-l-4 border-sky-500"
+                      : "hover:bg-gray-100"
+                  }`}
                 >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
+                  <div className="flex items-center gap-2">
                     <TagIcon size={16} /> {tag.name}
                   </div>
                   {!tag.fixed && (
-                    <MenuWrapper ref={menuRef}>
+                    <div className="relative" ref={menuRef}>
                       <MoreVertical
                         size={16}
-                        style={{ cursor: "pointer" }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenTagMenu(
                             openTagMenu === tag.id ? null : tag.id
                           );
                         }}
+                        className="cursor-pointer"
                       />
                       {openTagMenu === tag.id && (
-                        <Menu>
-                          <MenuItem
+                        <div className="absolute top-5 right-0 bg-white border rounded shadow-md text-sm z-10">
+                          <div
+                            className="px-3 py-1 hover:bg-gray-100 cursor-pointer"
                             onClick={() => {
                               const newName = prompt("Rename tag:", tag.name);
                               if (newName) {
@@ -274,8 +276,9 @@ export default function Notebook() {
                             }}
                           >
                             ✏️ Rename
-                          </MenuItem>
-                          <MenuItem
+                          </div>
+                          <div
+                            className="px-3 py-1 hover:bg-gray-100 cursor-pointer text-red-600"
                             onClick={() => {
                               supabase
                                 .from("notebook_tags")
@@ -290,61 +293,62 @@ export default function Notebook() {
                             }}
                           >
                             🗑️ Delete
-                          </MenuItem>
-                        </Menu>
+                          </div>
+                        </div>
                       )}
-                    </MenuWrapper>
+                    </div>
                   )}
-                </TagRow>
+                </div>
               );
             })}
-          </ListWrapper>
-        </Column>
+          </div>
+        </div>
 
-        {/* Column 2: Notes */}
-        <Column>
-          <Header>
-            <SmallButton onClick={handleNewNote}>
+        {/* Notes column */}
+        <div className="flex flex-col border-r border-gray-200 m-1 bg-gray-50">
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b">
+            <button
+              onClick={handleNewNote}
+              className="flex items-center gap-1 text-sm text-gray-600"
+            >
               <Newspaper size={18} /> New note
-            </SmallButton>
-          </Header>
-          <ListWrapper>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
             {posts.map((post) => (
-              <ListItem
+              <div
                 key={post.id}
-                $active={selectedPost?.id === post.id}
                 onClick={() => {
                   setSelectedPost(post);
                   editor?.commands.setContent(post.content);
                 }}
+                className={`flex items-center gap-2 px-4 py-2 cursor-pointer ${
+                  selectedPost?.id === post.id
+                    ? "bg-sky-100 border-l-4 border-sky-500"
+                    : "hover:bg-gray-100"
+                }`}
               >
                 <FileText size={16} />
                 <div>
-                  <strong>{post.title}</strong>
-                  <small>
+                  <strong className="block text-gray-800">{post.title}</strong>
+                  <small className="text-xs text-gray-500">
                     {formatLocal(post.updated_at || post.created_at)}
                   </small>
                 </div>
-              </ListItem>
+              </div>
             ))}
-          </ListWrapper>
-        </Column>
+          </div>
+        </div>
 
-        {/* Column 3: Editor */}
-        <EditorColumn>
+        {/* Editor column */}
+        <div className="flex flex-col m-1 bg-gray-50 overflow-y-auto">
           {selectedPost ? (
             <>
-              {/* Metadata bar */}
-              <MetaBar>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
-                >
+              {/* Meta bar */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2 border-b bg-white">
+                <div className="flex items-center gap-2 flex-1">
                   <FileText size={20} />
-                  <TitleInput
+                  <input
                     value={selectedPost.title}
                     onChange={(e) =>
                       setSelectedPost({
@@ -352,344 +356,131 @@ export default function Notebook() {
                         title: e.target.value,
                       })
                     }
-                    placeholder="Untitled note..."
+                    className="flex-1 text-lg font-semibold border-none outline-none"
                   />
                 </div>
 
-                <TagSelect
+                <select
                   value={selectedPost.tag_id || ""}
                   onChange={(e) =>
-                    setSelectedPost({
-                      ...selectedPost,
-                      tag_id: e.target.value,
-                    })
+                    setSelectedPost({ ...selectedPost, tag_id: e.target.value })
                   }
+                  className="border rounded px-2 py-1 text-xs"
                 >
                   {tags.map((tag) => (
                     <option key={tag.id} value={tag.id}>
                       {tag.name}
                     </option>
                   ))}
-                </TagSelect>
+                </select>
 
-                <SaveStatus>
+                <div className="flex items-center text-xs text-gray-500">
                   {status.includes("Saving") ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    <Check size={16} color="green" />
+                    <Check size={16} className="text-green-600" />
                   )}
-                </SaveStatus>
+                </div>
 
-                {/* 🗑️ Delete knop */}
-                <SmallButton
+                <button
                   onClick={() => {
-                    if (confirm("Delete this note?")) {
-                      handleDeleteNote();
-                    }
+                    if (confirm("Delete this note?")) handleDeleteNote();
                   }}
+                  className="text-xs text-red-600 hover:text-red-800"
                 >
                   🗑️ Delete
-                </SmallButton>
-              </MetaBar>
+                </button>
+              </div>
 
               {/* Toolbar */}
-              <ToolbarWrapper>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  $active={editor.isActive("bold")}
-                >
-                  <Bold size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleItalic().run()}
-                  $active={editor.isActive("italic")}
-                >
-                  <Italic size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleUnderline().run()}
-                  $active={editor.isActive("underline")}
-                >
-                  <UnderlineIcon size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() =>
-                    editor.chain().focus().toggleHeading({ level: 1 }).run()
-                  }
-                  $active={editor.isActive("heading", { level: 1 })}
-                >
-                  <Heading1 size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() =>
-                    editor.chain().focus().toggleHeading({ level: 2 }).run()
-                  }
-                  $active={editor.isActive("heading", { level: 2 })}
-                >
-                  <Heading2 size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() =>
-                    editor.chain().focus().toggleBulletList().run()
-                  }
-                  $active={editor.isActive("bulletList")}
-                >
-                  <ListIcon size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() =>
-                    editor.chain().focus().toggleOrderedList().run()
-                  }
-                  $active={editor.isActive("orderedList")}
-                >
-                  <ListOrdered size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() =>
-                    editor.chain().focus().toggleBlockquote().run()
-                  }
-                  $active={editor.isActive("blockquote")}
-                >
-                  <Quote size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                  $active={editor.isActive("codeBlock")}
-                >
-                  <Code size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().undo().run()}
-                >
-                  <Undo size={16} />
-                </ToolbarButton>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().redo().run()}
-                >
-                  <Redo size={16} />
-                </ToolbarButton>
-              </ToolbarWrapper>
+              <div className="flex gap-1 px-2 py-1 border-b bg-gray-100">
+                {[
+                  {
+                    icon: <Bold size={16} />,
+                    action: () => editor.chain().focus().toggleBold().run(),
+                    active: editor.isActive("bold"),
+                  },
+                  {
+                    icon: <Italic size={16} />,
+                    action: () => editor.chain().focus().toggleItalic().run(),
+                    active: editor.isActive("italic"),
+                  },
+                  {
+                    icon: <UnderlineIcon size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleUnderline().run(),
+                    active: editor.isActive("underline"),
+                  },
+                  {
+                    icon: <Heading1 size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleHeading({ level: 1 }).run(),
+                    active: editor.isActive("heading", { level: 1 }),
+                  },
+                  {
+                    icon: <Heading2 size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleHeading({ level: 2 }).run(),
+                    active: editor.isActive("heading", { level: 2 }),
+                  },
+                  {
+                    icon: <ListIcon size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleBulletList().run(),
+                    active: editor.isActive("bulletList"),
+                  },
+                  {
+                    icon: <ListOrdered size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleOrderedList().run(),
+                    active: editor.isActive("orderedList"),
+                  },
+                  {
+                    icon: <Quote size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleBlockquote().run(),
+                    active: editor.isActive("blockquote"),
+                  },
+                  {
+                    icon: <Code size={16} />,
+                    action: () =>
+                      editor.chain().focus().toggleCodeBlock().run(),
+                    active: editor.isActive("codeBlock"),
+                  },
+                  {
+                    icon: <Undo size={16} />,
+                    action: () => editor.chain().focus().undo().run(),
+                  },
+                  {
+                    icon: <Redo size={16} />,
+                    action: () => editor.chain().focus().redo().run(),
+                  },
+                ].map((btn, i) => (
+                  <button
+                    key={i}
+                    onClick={btn.action}
+                    className={`p-1 rounded ${btn.active ? "bg-sky-100" : "hover:bg-gray-200"}`}
+                  >
+                    {btn.icon}
+                  </button>
+                ))}
+              </div>
 
-              <EditorBox>
-                <EditorContent editor={editor} />
-              </EditorBox>
+              <div className="flex-1 p-4 overflow-y-auto">
+                <EditorContent
+                  editor={editor}
+                  className="prose max-w-none focus:outline-none leading-relaxed"
+                  spellCheck={false}
+                />
+              </div>
             </>
           ) : (
-            <Placeholder>Select or create a note</Placeholder>
+            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+              Select or create a note
+            </div>
           )}
-        </EditorColumn>
-      </NoteBookWrapper>
-    </Wrapper>
+        </div>
+      </div>
+    </div>
   );
 }
-
-/* ============================= */
-/* ===== styled components ===== */
-/* ============================= */
-
-const Wrapper = styled.div`
-  max-width: 1256px;
-  width: 100%;
-  margin: auto;
-  min-height: 90vh;
-`;
-
-const NoteBookWrapper = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr 3fr;
-  height: 99vh;
-  margin: auto;
-`;
-
-const Column = styled.div`
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #e5e7eb;
-  margin: 0.3rem;
-  background: #fafafa;
-`;
-
-const EditorColumn = styled(Column)`
-  border-right: none;
-  overflow-y: auto;
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  font-weight: 600;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-`;
-
-const ListWrapper = styled.div`
-  flex: 1;
-  overflow-y: auto;
-`;
-
-const ListItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  cursor: pointer;
-  background: ${(p) => (p.$active ? "#e0f2fe" : "transparent")};
-  border-left: ${(p) =>
-    p.$active ? "4px solid #3b82f6" : "4px solid transparent"};
-
-  &:hover {
-    background: #f3f4f6;
-  }
-
-  strong {
-    display: block;
-    font-weight: 500;
-    color: #111827;
-  }
-
-  small {
-    font-size: 12px;
-    color: #6b7280;
-  }
-`;
-
-const TagRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  cursor: pointer;
-  background: ${(p) => (p.$active ? "#e0f2fe" : "transparent")};
-  border-left: ${(p) =>
-    p.$active ? "4px solid #3b82f6" : "4px solid transparent"};
-
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-const MenuWrapper = styled.div`
-  position: relative;
-`;
-
-const Menu = styled.div`
-  position: absolute;
-  right: 0;
-  top: 20px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  z-index: 10;
-  min-width: 120px;
-  animation: ${fadeIn} 0.15s ease-out;
-`;
-
-const MenuItem = styled.div`
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 14px;
-
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-
-const Button = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 12px;
-  padding: 8px 12px;
-  border: none;
-  color: grey;
-  font-size: 14px;
-  cursor: pointer;
-`;
-
-const SmallButton = styled(Button)`
-  margin: 0;
-`;
-
-const TitleInput = styled.input`
-  flex: 1;
-  font-size: 20px;
-  font-weight: bold;
-  padding: 8px 12px;
-  border: none;
-  outline: none;
-`;
-
-const MetaBar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
-  justify-content: space-between;
-`;
-
-const TagSelect = styled.select`
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
-`;
-
-const SaveStatus = styled.div`
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: #6b7280;
-`;
-
-const ToolbarWrapper = styled.div`
-  display: flex;
-  gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fafafa;
-`;
-
-const ToolbarButton = styled.button`
-  background: ${(p) => (p.$active ? "#e0f2fe" : "transparent")};
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  color: #374151;
-
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-
-const EditorBox = styled.div`
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-
-  .ProseMirror {
-    min-height: 300px;
-    outline: none;
-  }
-`;
-
-const Placeholder = styled.div`
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #9ca3af;
-  font-size: 14px;
-`;

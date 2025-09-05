@@ -202,41 +202,47 @@ export default function JournalPage() {
   const blanks = Array(firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1).fill("");
 
   return (
-    <PageWrapper>
-      <ContentSection>
-        <CalendarPane>
-          <HeaderRow>
-            <button onClick={() => changeMonth(-1)}>←</button>
-            <h3>
+    <div className="flex flex-col flex-1 bg-white">
+      <section className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[300px,1fr] md:gap-8 md:p-8 bg-white text-gray-900 overflow-auto max-w-[1250px] mx-auto w-full rounded-lg min-h-0">
+        {/* 📅 Kalender */}
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <button className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200">
+              ←
+            </button>
+            <h3 className="font-semibold text-gray-800 px-3">
               {new Date(viewYear, viewMonth).toLocaleString("nl-NL", {
                 month: "long",
               })}{" "}
               {viewYear}
             </h3>
-            <RightControls>
-              <button onClick={() => changeMonth(1)}>→</button>
-              <TodayButton
-                onClick={() => {
-                  const today = new Date();
-                  setViewYear(today.getFullYear());
-                  setViewMonth(today.getMonth());
-                  setSelectedDate(today.toLocaleDateString("en-CA"));
-                  loadCalendar(today.getFullYear(), today.getMonth());
-                }}
-              >
+            <div className="flex items-center gap-1">
+              <button className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200">
+                →
+              </button>
+              <button className="bg-white border border-gray-300 text-blue-600 font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600">
                 Vandaag
-              </TodayButton>
-            </RightControls>
-          </HeaderRow>
+              </button>
+            </div>
+          </div>
 
-          <CalendarGrid>
+          <div className="grid grid-cols-7 gap-1">
             {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((d) => (
-              <DayHeader key={d}>{d}</DayHeader>
+              <div
+                key={d}
+                className="text-center text-xs font-semibold text-gray-500"
+              >
+                {d}
+              </div>
             ))}
 
             {blanks.map((_, i) => (
-              <DayCell key={`b-${i}`} />
+              <div
+                key={`b-${i}`}
+                className="min-h-[55px] border border-gray-200 rounded"
+              ></div>
             ))}
+
             {Array.from({ length: daysInMonth }, (_, i) => {
               const day = i + 1;
               const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(
@@ -245,27 +251,45 @@ export default function JournalPage() {
               )}-${String(day).padStart(2, "0")}`;
               const count = entriesByDay[dateStr] || 0;
               const isSelected = selectedDate === dateStr;
+
               return (
-                <DayCell
+                <div
                   key={day}
-                  $hasEntries={count > 0}
-                  $selected={isSelected}
                   onClick={() => {
                     setSelectedDate(dateStr);
                     loadEntries(dateStr);
                   }}
+                  className={`min-h-[55px] border border-gray-200 rounded p-1 cursor-pointer flex flex-col justify-between transition
+                    ${
+                      isSelected
+                        ? "bg-blue-600 text-white hover:bg-blue-800"
+                        : count > 0
+                          ? "bg-sky-100 hover:bg-slate-50"
+                          : "bg-white hover:bg-slate-50"
+                    }`}
                 >
-                  <span className="day">{day}</span>
-                  {count > 0 && <span className="count">{count}</span>}
-                </DayCell>
+                  <span className="text-sm font-medium">{day}</span>
+                  {count > 0 && (
+                    <span
+                      className={`text-[0.7rem] self-end rounded-full px-1
+                        ${
+                          isSelected
+                            ? "bg-white text-blue-600"
+                            : "bg-blue-600 text-white"
+                        }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </div>
               );
             })}
-          </CalendarGrid>
-        </CalendarPane>
+          </div>
+        </div>
 
-        {/* Entries */}
-        <EntryPane>
-          <h2>
+        {/* 📝 Entries */}
+        <div>
+          <h2 className="mb-4 text-xl font-bold text-gray-900">
             {new Date(selectedDate).toLocaleDateString("nl-NL", {
               day: "numeric",
               month: "long",
@@ -273,8 +297,8 @@ export default function JournalPage() {
             })}
           </h2>
 
-          {/* Nieuw invoerveld voor geselecteerde dag */}
-          <NoteInput>
+          {/* Nieuwe entry */}
+          <div className="flex flex-col gap-2 mb-4">
             <textarea
               placeholder={`Add a note for ${selectedDate}`}
               value={newEntrySelected}
@@ -285,14 +309,20 @@ export default function JournalPage() {
                 (e.preventDefault(), addEntryForSelected())
               }
               rows={3}
+              className="w-full p-3 border border-gray-300 rounded-lg text-sm bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
-            <button onClick={addEntryForSelected}>Add</button>
-          </NoteInput>
+            <button
+              onClick={addEntryForSelected}
+              className="self-end bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-blue-800"
+            >
+              Add
+            </button>
+          </div>
 
           {entries.length === 0 ? (
             <p>No entries.</p>
           ) : (
-            <ul>
+            <ul className="space-y-2">
               {entries.map((e) => {
                 const isEditing = editingId === e.id;
                 const isExpanded = expandedIds.includes(e.id);
@@ -303,42 +333,65 @@ export default function JournalPage() {
                     : e.content || "";
 
                 return (
-                  <li key={e.id}>
-                    <div className="entry-header">
-                      <strong>
-                        {new Date(e.created_at).toLocaleTimeString("nl-NL", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </strong>
+                  <li
+                    key={e.id}
+                    className="bg-slate-50 border border-gray-200 rounded p-3 flex flex-col gap-2"
+                  >
+                    <div className="text-xs font-semibold text-gray-800">
+                      {new Date(e.created_at).toLocaleTimeString("nl-NL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </div>
-                    <div className="entry-body">
+                    <div className="flex flex-col gap-2">
                       {isEditing ? (
                         <>
                           <textarea
                             value={editText}
                             onChange={(ev) => setEditText(ev.target.value)}
                             rows={4}
+                            className="w-full p-2 border border-gray-300 rounded text-sm"
                           />
-                          <button onClick={() => handleSaveEdit(e.id)}>
-                            💾
-                          </button>
-                          <button onClick={handleCancelEdit}>✖️</button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveEdit(e.id)}
+                              className="text-blue-600 text-sm hover:underline"
+                            >
+                              💾 Save
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="text-red-600 text-sm hover:underline"
+                            >
+                              ✖ Cancel
+                            </button>
+                          </div>
                         </>
                       ) : (
                         <>
-                          <span className="content">{displayContent}</span>
-                          <div className="actions">
+                          <span className="whitespace-pre-wrap break-words text-sm">
+                            {displayContent}
+                          </span>
+                          <div className="flex gap-2 flex-wrap text-sm">
                             {(e.content || "").length > 200 && (
-                              <button onClick={() => toggleExpand(e.id)}>
+                              <button
+                                onClick={() => toggleExpand(e.id)}
+                                className="text-blue-600 hover:underline"
+                              >
                                 {isExpanded ? "Show less" : "Show more"}
                               </button>
                             )}
-                            <button onClick={() => handleStartEdit(e)}>
-                              ✏️
+                            <button
+                              onClick={() => handleStartEdit(e)}
+                              className="text-blue-600 hover:underline"
+                            >
+                              ✏️ Edit
                             </button>
-                            <button onClick={() => handleDelete(e.id)}>
-                              🗑️
+                            <button
+                              onClick={() => handleDelete(e.id)}
+                              className="text-red-600 hover:underline"
+                            >
+                              🗑️ Delete
                             </button>
                           </div>
                         </>
@@ -349,249 +402,8 @@ export default function JournalPage() {
               })}
             </ul>
           )}
-        </EntryPane>
-      </ContentSection>
-    </PageWrapper>
+        </div>
+      </section>
+    </div>
   );
 }
-
-/* ---------------- styled ---------------- */
-const PageWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  background: inherit;
-  flex: 1;
-`;
-
-/* Content section */
-const ContentSection = styled.section`
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 2rem;
-  padding: 2rem;
-  background: white;
-  color: #222;
-  overflow: auto;
-  max-width: 1250px;
-  margin: auto auto;
-  width: 100%;
-  border-radius: 10px;
-
-  height: 99vh; /* ⬅️ maximaal 80% van viewport */
-  min-height: 0; /* voorkomt dat flexbox het blijft rekken */
-`;
-
-const CalendarPane = styled.div`
-  h3 {
-    text-align: center;
-    margin-bottom: 1rem;
-    font-weight: 600;
-    color: #333;
-  }
-`;
-
-const HeaderRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-
-  h3 {
-    margin: 0;
-    font-weight: 600;
-    color: #333;
-  }
-
-  button {
-    background: #f1f5f9;
-    border: 1px solid #ccc;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: 0.2s;
-
-    &:hover {
-      background: #e2e8f0;
-    }
-  }
-`;
-
-const RightControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-`;
-
-const TodayButton = styled.button`
-  background: #fff;
-  border: 1px solid #ccc;
-  color: #2563eb;
-  font-weight: 500;
-  padding: 0.3rem 0.7rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: 0.2s;
-
-  &:hover {
-    background: #eff6ff;
-    border-color: #2563eb;
-  }
-`;
-
-const CalendarGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.4rem;
-`;
-
-const DayHeader = styled.div`
-  text-align: center;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #666;
-`;
-
-const DayCell = styled.div`
-  min-height: 55px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 4px;
-  cursor: pointer;
-  background: ${(p) =>
-    p.$selected ? "#2563eb" : p.$hasEntries ? "#e0f2fe" : "white"};
-  color: ${(p) => (p.$selected ? "white" : "#111")};
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: 0.2s;
-
-  &:hover {
-    background: ${(p) => (p.$selected ? "#1e40af" : "#f9fafb")};
-  }
-
-  .day {
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .count {
-    font-size: 0.7rem;
-    align-self: flex-end;
-    background: ${(p) => (p.$selected ? "white" : "#2563eb")};
-    color: ${(p) => (p.$selected ? "#2563eb" : "white")};
-    border-radius: 999px;
-    padding: 0 5px;
-  }
-`;
-
-const EntryPane = styled.div`
-  h2 {
-    margin-bottom: 1rem;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #222;
-  }
-
-  ul {
-    list-style: none;
-    padding-left: 0;
-  }
-
-  li {
-    margin-bottom: 0.8rem;
-    padding: 0.8rem 1rem;
-    background: #f9fafb;
-    border-radius: 6px;
-    border: 1px solid #eee;
-    color: #333;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .entry-header {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #111;
-  }
-
-  .entry-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .content {
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  textarea {
-    flex: 1;
-    padding: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.95rem;
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-
-  .actions button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: #2563eb;
-  }
-
-  .actions button:hover {
-    text-decoration: underline;
-  }
-`;
-
-const NoteInput = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 1.2rem;
-
-  textarea {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    background: #fff;
-    resize: vertical;
-    transition: 0.2s;
-
-    &:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 2px #2563eb33;
-    }
-  }
-
-  button {
-    align-self: flex-end;
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.2rem;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.9rem;
-    transition: 0.2s;
-
-    &:hover {
-      background: #1e40af;
-    }
-  }
-`;

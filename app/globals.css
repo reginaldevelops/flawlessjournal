@@ -21,3 +21,11 @@
     @apply text-2xl font-semibold;
   }
 }
+
+.ProseMirror:focus {
+  outline: none !important;
+}
+
+.ProseMirror *::selection {
+  background-color: #dbeafe; /* Tailwind's blue-100 */
+}

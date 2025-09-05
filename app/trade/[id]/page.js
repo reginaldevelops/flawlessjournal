@@ -3,7 +3,6 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import styled from "styled-components";
 import CreatableSelect from "react-select/creatable";
 
 /* 🟢 DnD-kit imports */
@@ -32,26 +31,36 @@ function SortableItem({
   const value = trade[v.name] || null;
 
   return (
-    <SortableItemWrapper
+    <div
       ref={setNodeRef}
-      $transform={CSS.Transform.toString(transform)}
-      $transition={transition}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className="flex flex-col gap-1 bg-white rounded-xl shadow mb-2 text-sm p-2"
     >
-      <VariableHeader>
-        <DragHandle {...attributes} {...listeners}>
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab px-1 text-lg select-none"
+        >
           ⠿
-        </DragHandle>
-        <span>{v.name}</span>
+        </div>
+        <span className="text-sm">{v.name}</span>
         {v.editable && (
-          <MenuWrapper>
-            <MenuButton
+          <div className="relative">
+            <button
               onClick={() => setMenuOpen(menuOpen === v.id ? null : v.id)}
+              className="bg-none border-none text-lg cursor-pointer"
             >
               ⋮
-            </MenuButton>
+            </button>
             {menuOpen === v.id && (
-              <Dropdown>
+              <div className="absolute top-6 right-0 bg-white border border-gray-200 rounded-md shadow-md flex flex-col z-10">
                 <button
+                  className="px-2 py-1 text-sm hover:bg-gray-100 text-left"
                   onClick={() => {
                     const newName = prompt("New name?", v.name);
                     if (newName) renameVariable(v, newName.trim());
@@ -60,16 +69,16 @@ function SortableItem({
                   ✏ Rename
                 </button>
                 <button
+                  className="px-2 py-1 text-sm hover:bg-gray-100 text-red-600 text-left"
                   onClick={() => deleteVariable(v)}
-                  style={{ color: "red" }}
                 >
                   🗑 Delete
                 </button>
-              </Dropdown>
+              </div>
             )}
-          </MenuWrapper>
+          </div>
         )}
-      </VariableHeader>
+      </div>
 
       <CreatableSelect
         isClearable
@@ -103,7 +112,7 @@ function SortableItem({
         styles={{
           control: (base) => ({
             ...base,
-            width: "100%", // full width
+            width: "100%",
             fontSize: "0.85rem",
           }),
           menu: (base) => ({
@@ -112,7 +121,7 @@ function SortableItem({
           }),
         }}
       />
-    </SortableItemWrapper>
+    </div>
   );
 }
 
@@ -123,7 +132,6 @@ export default function TradeViewPage() {
   const [menuOpen, setMenuOpen] = useState(null);
   const [showUsdtChart, setShowUsdtChart] = useState(true);
 
-  /* ---------- vaste volgorde ---------- */
   const fixedOrder = [
     "Trade number",
     "Coins",
@@ -138,7 +146,6 @@ export default function TradeViewPage() {
     "PNL",
   ];
 
-  /* ---------- layout overrides ---------- */
   const layoutOverrides = {
     "Trade number": "row",
     Coins: "row",
@@ -175,14 +182,13 @@ export default function TradeViewPage() {
     if (id) loadTrade();
   }, [id]);
 
-  /* ---------- Load all variables ---------- */
-  /* ---------- Load all variables (fixed + custom) ---------- */
+  /* ---------- Load variables ---------- */
   useEffect(() => {
     const loadVariables = async () => {
       const { data, error } = await supabase
         .from("variables")
         .select("*")
-        .order("order", { ascending: true }); // 🟢 added order
+        .order("order", { ascending: true });
 
       if (!error && data) {
         setVariables(data);
@@ -193,7 +199,6 @@ export default function TradeViewPage() {
     loadVariables();
   }, []);
 
-  /* ---------- Save trade ---------- */
   const saveTrade = async (updated) => {
     setTrade(updated);
     const { error } = await supabase
@@ -263,9 +268,8 @@ export default function TradeViewPage() {
     setMenuOpen(null);
   };
 
-  if (!trade) return <Wrapper>Loading trade...</Wrapper>;
+  if (!trade) return <div className="p-4">Loading trade...</div>;
 
-  /* 🟢 Handle reorder */
   const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -275,13 +279,11 @@ export default function TradeViewPage() {
     const newIndex = customVars.findIndex((v) => v.id === over.id);
     const reordered = arrayMove(customVars, oldIndex, newIndex);
 
-    // 🔹 Merge back with fixed vars
     setVariables((prev) => {
       const others = prev.filter((v) => v.type !== "custom");
       return [...others, ...reordered];
     });
 
-    // 🔹 Persist order in Supabase
     await Promise.all(
       reordered.map((v, index) =>
         supabase.from("variables").update({ order: index }).eq("id", v.id)
@@ -290,24 +292,43 @@ export default function TradeViewPage() {
   };
 
   return (
-    <Wrapper>
-      <Header>
-        <h2>{trade.Coins || "Unknown Coin"}</h2>
-        <HeaderActions>
+    <div className="flex flex-col max-w-[1556px] mx-auto">
+      {/* Header */}
+      <div className="flex justify-between px-6 py-4 bg-transparent">
+        <h2 className="text-3xl font-semibold">
+          {trade.Coins || "Unknown Coin"}
+        </h2>
+        <div className="flex items-center gap-3 text-2xl">
           <span>{trade.Datum || "—"}</span>
-          <DeleteButton onClick={deleteTrade}>🗑️</DeleteButton>
-        </HeaderActions>
-      </Header>
+          <button
+            onClick={deleteTrade}
+            className="text-white bg-red-800 hover:bg-red-500 text-sl p-1"
+          >
+            DEL
+          </button>
+        </div>
+      </div>
 
-      <Content>
-        <Sidebar>
-          <PnLHighlight $positive={Number(trade["PNL"]) >= 0}>
-            <span>Net PnL</span>
+      <div className="grid grid-cols-1 md:grid-cols-[400px,1fr] gap-6 p-6">
+        {/* Sidebar */}
+        <div className="flex flex-col gap-4">
+          {/* PnL Highlight */}
+          <div
+            className={`flex justify-between items-center px-4 py-3 rounded-lg text-2xl font-semibold shadow-inner ${
+              Number(trade["PNL"]) >= 0
+                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                : "bg-red-50 text-red-600 border border-red-200"
+            }`}
+          >
+            <span className="text-sm font-medium text-gray-500">Net PnL</span>
             {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
-          </PnLHighlight>
+          </div>
 
-          <DetailSection>
-            <h2>Details</h2>
+          {/* Fixed vars */}
+          <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">
+              Details
+            </h2>
             {variables
               .filter((v) => v.type === "fixed")
               .sort(
@@ -317,26 +338,41 @@ export default function TradeViewPage() {
               .map((v) => {
                 if (v.name === "Trade number") {
                   return (
-                    <Item
+                    <div
                       key={v.id}
-                      $layout={layoutOverrides[v.name] || "column"}
+                      className="flex flex-row items-center gap-2"
                     >
-                      <strong>{v.name}</strong>
-                      <span>{trade["Trade number"] || "—"}</span>
-                    </Item>
+                      <strong className="w-[120px] text-sm text-gray-600">
+                        {v.name}
+                      </strong>
+                      <span className="text-sm">
+                        {trade["Trade number"] || "—"}
+                      </span>
+                    </div>
                   );
                 }
-                if (v.name === "PNL" || v.name === "Time exit") {
-                  return null;
-                }
+                if (v.name === "PNL" || v.name === "Time exit") return null;
+
                 const value = trade[v.name] || "";
+                const layout = layoutOverrides[v.name] || "column";
+
                 if (["Coins", "Confidence"].includes(v.name)) {
                   return (
-                    <Item
+                    <div
                       key={v.id}
-                      $layout={layoutOverrides[v.name] || "column"}
+                      className={`flex ${
+                        layout === "row"
+                          ? "flex-row items-center gap-2"
+                          : "flex-col gap-1"
+                      }`}
                     >
-                      <strong>{v.name}</strong>
+                      <strong
+                        className={`text-sm text-gray-600 ${
+                          layout === "row" ? "w-[120px] flex-shrink-0" : "mb-1"
+                        }`}
+                      >
+                        {v.name}
+                      </strong>
                       <CreatableSelect
                         value={value ? { value, label: value } : null}
                         options={(v.options || []).map((opt) => ({
@@ -349,100 +385,108 @@ export default function TradeViewPage() {
                             [v.name]: sel ? sel.value : "",
                           })
                         }
-                        onCreateOption={async (inputValue) => {
-                          const newOptions = [...(v.options || []), inputValue];
-                          await supabase
-                            .from("variables")
-                            .update({ options: newOptions })
-                            .eq("id", v.id);
-
-                          setVariables((prev) =>
-                            prev.map((x) =>
-                              x.id === v.id ? { ...x, options: newOptions } : x
-                            )
-                          );
-
-                          saveTrade({ ...trade, [v.name]: inputValue });
-                        }}
                         placeholder="Select or type..."
                       />
-                    </Item>
+                    </div>
                   );
                 }
+
                 if (v.name === "Datum") {
                   return (
-                    <Item
+                    <div
                       key={v.id}
-                      $layout={layoutOverrides[v.name] || "column"}
+                      className="flex flex-row items-center gap-2"
                     >
-                      <strong>{v.name}</strong>
+                      <strong className="w-[120px] text-sm text-gray-600">
+                        {v.name}
+                      </strong>
                       <input
                         type="date"
                         value={value}
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
+                        className="border rounded px-2 py-1 text-sm flex-1"
                       />
-                    </Item>
+                    </div>
                   );
                 }
+
                 if (v.name === "Entreetijd") {
                   return (
-                    <Item
+                    <div
                       key={v.id}
-                      $layout={layoutOverrides[v.name] || "column"}
+                      className="flex flex-row items-center gap-2"
                     >
-                      <strong>{v.name}</strong>
+                      <strong className="w-[120px] text-sm text-gray-600">
+                        {v.name}
+                      </strong>
                       <input
                         type="time"
                         value={value}
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
+                        className="border rounded px-2 py-1 text-sm flex-1"
                       />
-                    </Item>
+                    </div>
                   );
                 }
+
                 if (v.name === "Reasons for entry") {
                   return (
-                    <Item
-                      key={v.id}
-                      $layout={layoutOverrides[v.name] || "column"}
-                    >
-                      <strong>{v.name}</strong>
+                    <div key={v.id} className="flex flex-col gap-1">
+                      <strong className="text-sm text-gray-600">
+                        {v.name}
+                      </strong>
                       <textarea
                         rows={3}
                         value={value}
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
+                        className="border rounded px-2 py-1 text-sm resize-y"
                       />
-                    </Item>
+                    </div>
                   );
                 }
+
                 return (
-                  <Item
+                  <div
                     key={v.id}
-                    $layout={layoutOverrides[v.name] || "column"}
+                    className={`flex ${
+                      layout === "row"
+                        ? "flex-row items-center gap-2"
+                        : "flex-col gap-1"
+                    }`}
                   >
-                    <strong>{v.name}</strong>
+                    <strong
+                      className={`text-sm text-gray-600 ${
+                        layout === "row" ? "w-[120px] flex-shrink-0" : "mb-1"
+                      }`}
+                    >
+                      {v.name}
+                    </strong>
                     <input
                       type="text"
                       value={value}
                       onChange={(e) =>
                         saveTrade({ ...trade, [v.name]: e.target.value })
                       }
+                      className="border rounded px-2 py-1 text-sm flex-1"
                     />
-                  </Item>
+                  </div>
                 );
               })}
-          </DetailSection>
+          </div>
 
-          <Divider />
+          <hr className="border-gray-200 my-2" />
 
-          {/* ✅ Custom variables with drag n drop */}
-          <DetailSection>
-            <h2>Custom Variables</h2>
+          {/* Custom vars drag-drop */}
+          <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">
+              Custom Variables
+            </h2>
             <DndContext
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
@@ -470,29 +514,37 @@ export default function TradeViewPage() {
                   ))}
               </SortableContext>
             </DndContext>
-          </DetailSection>
+          </div>
 
-          <AddNewVariable onClick={addVariable}>
+          <button
+            onClick={addVariable}
+            className="mt-2 text-sm text-sky-500 hover:underline"
+          >
             + Add new category
-          </AddNewVariable>
+          </button>
 
-          <Divider />
+          <hr className="border-gray-200 my-2" />
 
-          {/* 2️⃣ Exit & PnL sectie */}
-          <DetailSection>
-            <h2>Exit & Result</h2>
-            <Item>
-              <strong>Exit time</strong>
+          {/* Exit & PnL */}
+          <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">
+              Exit & Result
+            </h2>
+            <div className="flex flex-row items-center gap-2">
+              <strong className="w-[120px] text-sm text-gray-600">
+                Exit time
+              </strong>
               <input
                 type="time"
                 value={trade["Time exit"] || ""}
                 onChange={(e) =>
                   saveTrade({ ...trade, ["Time exit"]: e.target.value })
                 }
+                className="border rounded px-2 py-1 text-sm flex-1"
               />
-            </Item>
-            <Item>
-              <strong>PNL</strong>
+            </div>
+            <div className="flex flex-row items-center gap-2">
+              <strong className="w-[120px] text-sm text-gray-600">PNL</strong>
               <input
                 type="number"
                 step="0.01"
@@ -500,29 +552,40 @@ export default function TradeViewPage() {
                 onChange={(e) =>
                   saveTrade({ ...trade, PNL: Number(e.target.value) })
                 }
+                className="border rounded px-2 py-1 text-sm flex-1"
               />
-            </Item>
-          </DetailSection>
-        </Sidebar>
+            </div>
+          </div>
+        </div>
 
-        <Main>
-          <ChartCard>
-            <h3>Coin Chart</h3>
+        {/* Main content */}
+        <div className="flex flex-col gap-4">
+          <div className="bg-white rounded-xl shadow p-4">
+            <h3 className="font-semibold mb-2">Coin Chart</h3>
             {trade.Chart ? (
               <a href={trade.Chart} target="_blank" rel="noopener noreferrer">
-                <img src={trade.Chart} alt="Coin Chart" />
+                <img
+                  src={trade.Chart}
+                  alt="Coin Chart"
+                  className="max-w-full max-h-[800px] object-contain rounded"
+                />
               </a>
             ) : (
-              <Empty>Geen chart toegevoegd</Empty>
+              <div className="text-sm text-gray-400 text-center py-8">
+                Geen chart toegevoegd
+              </div>
             )}
-          </ChartCard>
+          </div>
 
-          <ChartCard>
-            <h3>
+          <div className="bg-white rounded-xl shadow p-4">
+            <h3 className="font-semibold mb-2 flex items-center">
               USDT.D Chart
-              <ToggleButton onClick={() => setShowUsdtChart(!showUsdtChart)}>
+              <button
+                onClick={() => setShowUsdtChart(!showUsdtChart)}
+                className="ml-2 text-xs px-2 py-1 border rounded bg-gray-50 hover:bg-gray-100"
+              >
                 {showUsdtChart ? "Hide" : "Show"}
-              </ToggleButton>
+              </button>
             </h3>
             {showUsdtChart &&
               (trade["USDT.D chart"] ? (
@@ -531,281 +594,29 @@ export default function TradeViewPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <img src={trade["USDT.D chart"]} alt="USDT.D Chart" />
+                  <img
+                    src={trade["USDT.D chart"]}
+                    alt="USDT.D Chart"
+                    className="max-w-full max-h-[800px] object-contain rounded"
+                  />
                 </a>
               ) : (
-                <Empty>Geen USDT.D chart toegevoegd</Empty>
+                <div className="text-sm text-gray-400 text-center py-8">
+                  Geen USDT.D chart toegevoegd
+                </div>
               ))}
-          </ChartCard>
+          </div>
 
-          <NotesCard>
-            <h3>Trade evaluation</h3>
+          <div className="bg-white rounded-xl shadow p-4">
+            <h3 className="font-semibold mb-2">Trade evaluation</h3>
             <textarea
               value={trade["Notes"] || ""}
               onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
+              className="w-full min-h-[150px] border rounded px-2 py-1 text-sm"
             />
-          </NotesCard>
-        </Main>
-      </Content>
-    </Wrapper>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
-
-/* ---------------- styled ---------------- */
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  background: #f9fafb;
-`;
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  padding: 1rem 2rem;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-`;
-const Content = styled.div`
-  display: grid;
-  grid-template-columns: 400px 1fr;
-  gap: 1.5rem;
-  padding: 1.5rem 2rem;
-`;
-const Sidebar = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-`;
-const PnLHighlight = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  font-size: 2rem;
-  font-weight: 600;
-  background: ${(p) => (p.$positive ? "#ecfdf5" : "#fef2f2")};
-  color: ${(p) => (p.$positive ? "#059669" : "#dc2626")};
-  border: 1px solid ${(p) => (p.$positive ? "#a7f3d0" : "#fecaca")};
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-  span {
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #6b7280;
-  }
-`;
-const DetailSection = styled.div`
-  background: #fff;
-  border-radius: 12px;
-  padding: 1.2rem 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  h2 {
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 0.4rem;
-    color: #374151;
-  }
-`;
-
-const Item = styled.div`
-  display: flex;
-  flex-direction: ${(p) => (p.$layout === "row" ? "row" : "column")};
-  align-items: flex-start;
-  gap: 0.6rem;
-  width: 100%;
-  box-sizing: border-box;
-
-  span {
-    font-size: 0.85rem;
-  }
-
-  strong {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #6b7280;
-    min-width: ${(p) => (p.$layout === "row" ? "120px" : "auto")};
-    text-align: left;
-    flex-shrink: 0;
-  }
-  /* Geldt voor alle inputs/selects/textarea */
-  input,
-  select,
-  textarea {
-    flex: 1;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    padding: 0.3rem 0.25rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: #fafafa;
-  }
-
-  /* Textarea specifiek */
-  textarea {
-    min-height: 150px;
-    resize: vertical;
-  }
-
-  /* Date & Time pickers */
-  input[type="date"],
-  input[type="time"] {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    line-height: 1.2;
-  }
-
-  /* React-select dropdown fix */
-  .css-13cymwt-control,   /* standaard react-select class */
-  .css-t3ipsp-control {
-    min-height: 10px;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
-    font-size: 0.85rem;
-  }
-`;
-
-const VariableHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  span {
-    font-size: 0.85em;
-  }
-`;
-const MenuWrapper = styled.div`
-  position: relative;
-`;
-const MenuButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-`;
-const Dropdown = styled.div`
-  position: absolute;
-  top: 1.5rem;
-  right: 0;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
-  button {
-    background: none;
-    border: none;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.85rem;
-    cursor: pointer;
-    text-align: left;
-    &:hover {
-      background: #f3f4f6;
-    }
-  }
-`;
-const Divider = styled.div`
-  border-bottom: 1px solid #e5e7eb;
-  margin: 0.8rem 0;
-`;
-const Main = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-`;
-const ChartCard = styled.div`
-  background: #fff;
-  border-radius: 12px;
-  padding: 1rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  img {
-    max-width: 100%;
-    max-height: 800px;
-    object-fit: contain;
-    border-radius: 8px;
-    display: block;
-    margin: 0 auto;
-  }
-`;
-const ToggleButton = styled.button`
-  margin-left: 1rem;
-  font-size: 0.75rem;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #f9fafb;
-  cursor: pointer;
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-const Empty = styled.div`
-  font-size: 0.85rem;
-  color: #aaa;
-  text-align: center;
-  padding: 2rem 0;
-`;
-const NotesCard = styled.div`
-  background: #fff;
-  border-radius: 12px;
-  padding: 1rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  textarea {
-    width: 100%;
-    min-height: 150px;
-    font-size: 0.9rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 0.6rem;
-  }
-`;
-const AddNewVariable = styled.div`
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-  color: #0ea5e9;
-  cursor: pointer;
-  &:hover {
-    text-decoration: underline;
-  }
-`;
-const HeaderActions = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-`;
-const DeleteButton = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.2rem;
-  color: #dc2626;
-  &:hover {
-    color: #b91c1c;
-  }
-`;
-const SortableItemWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  margin-bottom: 0.8rem;
-  transform: ${(p) => p.$transform};
-  transition: ${(p) => p.$transition};
-  font-size: 0.8em;
-`;
-
-const DragHandle = styled.div`
-  cursor: grab;
-  padding: 0 0.3rem;
-  font-size: 1rem;
-  user-select: none;
-`;

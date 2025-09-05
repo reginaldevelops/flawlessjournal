@@ -1,16 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import styled from "styled-components";
 import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
 import AccountValue from "../components/AccountValue";
 import NotesArea from "../components/NotesArea";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -18,9 +13,8 @@ import {
   YAxis,
   CartesianGrid,
   ReferenceLine,
-  Line,
+  Tooltip,
 } from "recharts";
-
 import BalanceCard from "../components/BalanceCard";
 
 // 📊 Percent van dag
@@ -32,12 +26,11 @@ const getPercentOfDay = (date) => {
 
 // 📅 Weeknummer in lokale tijd
 function getWeekNumber(d = new Date()) {
-  // kopie in lokale tijd
   d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dayNum = d.getDay() || 7; // zondag=7
+  const dayNum = d.getDay() || 7;
   d.setDate(d.getDate() + 4 - dayNum);
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
 }
 
 // ⏱ Formatter voor NL-tijd
@@ -58,12 +51,12 @@ function utcHourToLocal(utcHour) {
   return d.getHours();
 }
 
-// 🌍 Sessies in UTC (gebaseerd op jouw NL-blokken)
+// 🌍 Sessies
 const sessionsUTC = [
-  { name: "Tokyo", start: 0, end: 5, color: "#aec6cf" }, // 01–07 NL
-  { name: "London", start: 6, end: 10, color: "#991b1b" }, // 08–13 NL
-  { name: "New York", start: 12, end: 19, color: "#ffb347" }, // 14–20 NL
-  { name: "PH", start: 19, end: 20, color: "#ffb347" }, // 21–22 NL
+  { name: "Tokyo", start: 0, end: 5, color: "#aec6cf" },
+  { name: "London", start: 6, end: 10, color: "#991b1b" },
+  { name: "New York", start: 12, end: 19, color: "#ffb347" },
+  { name: "PH", start: 19, end: 20, color: "#ffb347" },
 ];
 
 const sessions = sessionsUTC.map((s) => ({
@@ -145,12 +138,7 @@ export default function Dashboard() {
 
       data.forEach((row) => {
         const pnlRaw = row.data?.PNL;
-        if (
-          pnlRaw !== undefined &&
-          pnlRaw !== null &&
-          pnlRaw !== "" &&
-          pnlRaw !== "-"
-        ) {
+        if (pnlRaw && pnlRaw !== "-") {
           const pnl = parseFloat(pnlRaw);
           if (!isNaN(pnl)) {
             totalTrades++;
@@ -191,7 +179,7 @@ export default function Dashboard() {
 
   const currentPercent = getPercentOfDay(now);
   const totalBalance = phantom + hyper;
-  const profitTargetPct = 2; // target = 2% van total balance
+  const profitTargetPct = 2;
   const targetUSD = (profitTargetPct / 100) * totalBalance;
   const progress = totalBalance > 0 ? (weeklyPNL / targetUSD) * 100 : 0;
 
@@ -209,16 +197,17 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <Wrapper>
-      {/* 📅 Weekly Calendar + Nieuws */}
-      <SectionTitle>WEEK {getWeekNumber(now)}</SectionTitle>
+    <div className="px-2 py-6 sm:py-8 font-inter text-gray-700 w-full max-w-[1150px] mx-auto rounded-lg">
+      <h2 className="text-lg sm:text-xl font-semibold text-slate-800 mb-3">
+        WEEK {getWeekNumber(now)}
+      </h2>
 
-      <Calendar>
+      {/* 📅 Calendar */}
+      <div className="flex justify-between gap-2 sm:gap-3 mb-4">
         {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day, idx) => {
-          const today = new Date().getDay(); // 0 = zondag
-          const isToday = idx === (today + 6) % 7; // maandag=0
+          const today = new Date().getDay();
+          const isToday = idx === (today + 6) % 7;
 
-          const now = new Date();
           const monday = new Date(now);
           monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
           const thisDay = new Date(monday);
@@ -228,16 +217,25 @@ export default function Dashboard() {
           const dayEvents = news.filter((ev) => ev.date === isoDate);
 
           return (
-            <Day key={idx} $today={isToday}>
-              <div className="day-label">
+            <div
+              key={idx}
+              className={`flex-1 text-center p-2 sm:p-3 rounded-lg flex flex-col items-center min-h-[90px] max-h-[140px] overflow-y-auto no-scrollbar shadow-sm ${
+                isToday
+                  ? "border border-blue-300 bg-blue-100 text-blue-900 shadow-md"
+                  : "border border-gray-200 bg-white text-gray-500"
+              }`}
+            >
+              <div className="mb-1 text-xs sm:text-sm">
                 {day} {thisDay.getDate()}
               </div>
-
               {dayEvents.length > 0 && (
-                <EventsForDay>
+                <div className="text-[0.7rem] sm:text-xs text-left w-full">
                   {dayEvents.map((ev, i) => (
-                    <EventItem key={i}>
-                      <span className="time">
+                    <div
+                      key={i}
+                      className="mt-1 px-2 py-1 rounded bg-slate-100 flex flex-col items-start"
+                    >
+                      <span className="font-semibold text-green-600 text-[0.65rem] sm:text-[0.7rem]">
                         {ev.datetime
                           ? new Date(ev.datetime).toLocaleTimeString("nl-NL", {
                               timeZone: "Europe/Amsterdam",
@@ -246,190 +244,171 @@ export default function Dashboard() {
                             })
                           : ev.time}
                       </span>
-
-                      <span className="title">{ev.title}</span>
-                    </EventItem>
+                      <span className="text-[0.6rem] sm:text-[0.75rem] leading-tight text-gray-800 break-all">
+                        {ev.title}
+                      </span>
+                    </div>
                   ))}
-                </EventsForDay>
+                </div>
               )}
-            </Day>
+            </div>
           );
         })}
-      </Calendar>
+      </div>
 
       {/* 📊 Sessions bar */}
-      <Sessions>
-        <h2>Sessions</h2>
-        <SessionBarWrapper>
-          <SessionBar>
-            {sessions.map((s, idx) => {
-              let start = s.start * 60;
-              let end = s.end * 60;
+      <div className="mb-4">
+        <h2 className="mb-2 text-base sm:text-lg text-slate-800">Sessions</h2>
+        <div className="w-full mx-auto relative h-12 bg-slate-100 rounded-lg">
+          {sessions.map((s, idx) => {
+            let start = s.start * 60;
+            let end = s.end * 60;
+            if (end <= start) end += 24 * 60;
 
-              // Als end < start → loopt over middernacht
-              if (end <= start) {
-                end += 24 * 60;
-              }
+            const left = (start / (24 * 60)) * 100;
+            const width = ((end - start) / (24 * 60)) * 100;
 
-              const left = (start / (24 * 60)) * 100;
-              const width = ((end - start) / (24 * 60)) * 100;
-
-              return (
-                <SessionBlock
-                  key={idx}
-                  $left={`${left}%`}
-                  $width={`${width}%`}
-                  $color={s.color}
-                >
-                  {s.name}
-                </SessionBlock>
-              );
-            })}
-
-            <CurrentTime style={{ left: `${currentPercent}%` }} />
-          </SessionBar>
-        </SessionBarWrapper>
-      </Sessions>
-
-      {/* 📈 Summary Stats */}
-      <Sections>
-        <TwoCol>
-          <Card>
-            <h3>Weekly Stats</h3>
-            <StatsGrid>
-              <StatItem>
-                <span className="icon">💰</span>
-                <span className="label">PnL</span>
-                <span className="value">
-                  {weeklyPNL !== null ? `${weeklyPNL.toFixed(0)}` : "--"}
-                </span>
-              </StatItem>
-              <StatItem>
-                <span className="icon">📊</span>
-                <span className="label">Trades</span>
-                <span className="value">{trades}</span>
-              </StatItem>
-              <StatItem>
-                <span className="icon">✅</span>
-                <span className="label">WR</span>
-                <span className="value">{winRate.toFixed(0)}%</span>
-              </StatItem>
-            </StatsGrid>
-            <P2Gsection>
-              <h3>P2G Ratio</h3>
+            return (
               <div
+                key={idx}
+                className="absolute top-2 h-[30px] sm:h-[34px] rounded-md flex items-center justify-center text-[0.65rem] sm:text-xs font-semibold text-gray-800"
                 style={{
-                  position: "relative",
-                  height: "40px",
-                  marginTop: "10px",
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  background: `${s.color}aa`,
                 }}
               >
-                {/* Gradient bar */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: 0,
-                    right: 0,
-                    height: "6px",
-                    borderRadius: "6px",
-                    background:
-                      "linear-gradient(90deg, #ef4444, #f59e0b, #22c55e)",
-                  }}
-                />
+                {s.name}
+              </div>
+            );
+          })}
+          <div
+            className="absolute top-0 bottom-0 w-[2px] bg-amber-500"
+            style={{ left: `${currentPercent}%` }}
+          />
+        </div>
+      </div>
 
-                {/* Marks */}
+      {/* 📈 Stats + Cards */}
+      <div className="grid gap-4">
+        {/* Weekly Stats + Balance */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Weekly Stats
+            </h3>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
+                <span>💰</span>
+                <span className="text-[0.65rem] sm:text-xs text-gray-500">
+                  PnL
+                </span>
+                <span className="font-semibold text-xs sm:text-sm">
+                  {weeklyPNL !== null ? weeklyPNL.toFixed(0) : "--"}
+                </span>
+              </div>
+              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
+                <span>📊</span>
+                <span className="text-[0.65rem] sm:text-xs text-gray-500">
+                  Trades
+                </span>
+                <span className="font-semibold text-xs sm:text-sm">
+                  {trades}
+                </span>
+              </div>
+              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
+                <span>✅</span>
+                <span className="text-[0.65rem] sm:text-xs text-gray-500">
+                  WR
+                </span>
+                <span className="font-semibold text-xs sm:text-sm">
+                  {winRate.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+
+            {/* P2G bar */}
+            <div className="mt-4">
+              <h3 className="mb-1 text-slate-800 font-semibold text-sm sm:text-base">
+                P2G Ratio
+              </h3>
+              <div className="relative h-10 mt-2">
+                <div className="absolute top-1/2 left-0 right-0 h-[6px] rounded bg-gradient-to-r from-red-500 via-amber-500 to-green-500" />
                 {[0.0, 0.5, 1.0].map((mark, i) => (
                   <div
                     key={i}
+                    className="absolute top-7 text-[0.65rem] sm:text-xs text-gray-700"
                     style={{
-                      position: "absolute",
-                      top: "28px",
-                      left: `${(mark / 1) * 100}%`,
+                      left: `${mark * 100}%`,
                       transform: "translateX(-50%)",
-                      fontSize: "0.8rem",
-                      color: "#374151",
                     }}
                   >
                     {mark.toFixed(1)}
                   </div>
                 ))}
-
-                {/* Indicator */}
                 <div
+                  className="absolute top-1/2 w-[2px] h-5 bg-gray-900"
                   style={{
-                    position: "absolute",
-                    top: "50%",
                     left: `${Math.min(Math.max((p2g / 1) * 100, 0), 100)}%`,
                     transform: "translate(-50%, -50%)",
-                    width: "2px",
-                    height: "18px",
-                    background: "#111827",
-                    boxShadow: "0 0 6px rgba(0, 0, 0, 0.08)",
                   }}
                 />
               </div>
-            </P2Gsection>
-          </Card>
-          <Card>
-            <h3>Total Balance</h3>
+            </div>
+          </div>
+
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Total Balance
+            </h3>
             <BalanceCard
               phantom={phantom}
               hyper={hyper}
-              lastUpdated={formatLocal(lastUpdated)}
+              lastUpdated={formatLocal(lastUpdated ?? undefined)}
             />
-          </Card>
-        </TwoCol>
+          </div>
+        </div>
 
-        {/* 🔥 Nieuwe kaarten */}
-        <TwoCol>
-          <Card>
-            <h3>Weekly Winners</h3>
-            <ResponsiveContainer width="100%" height={250}>
+        {/* Winners + Losers */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Weekly Winners
+            </h3>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart
                 data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <XAxis dataKey="trade" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip />
-                <Bar dataKey="value" fill="#00ca7dff" radius={[4, 4, 0, 0]} />
-
-                {/* gemiddelde lijn */}
+                <Bar dataKey="value" fill="#00ca7d" radius={[4, 4, 0, 0]} />
                 <ReferenceLine
                   y={avgWinner}
-                  stroke="#000000ff"
+                  stroke="#000"
                   strokeDasharray="3 3"
                   label={{
                     value: `Avg: $${avgWinner.toFixed(0)}`,
                     position: "top",
-                    fill: "#000000ff",
-                    fontWeight: "bold",
-                    fontSize: 13,
                   }}
                 />
-
-                {/* target lijn (dik & solid) */}
                 <ReferenceLine
                   y={2000}
                   stroke="#166534"
-                  strokeWidth={4}
+                  strokeWidth={3}
                   ifOverflow="extendDomain"
-                  label={{
-                    value: `Target $2000`,
-                    position: "insideTopRight",
-                    fill: "#166534",
-                    fontWeight: "bold",
-                    fontSize: 12,
-                  }}
+                  label={{ value: "Target $2000", position: "insideTopRight" }}
                 />
               </BarChart>
             </ResponsiveContainer>
-          </Card>
+          </div>
 
-          <Card>
-            <h3>Weekly Losers</h3>
-            <ResponsiveContainer width="100%" height={250}>
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Weekly Losers
+            </h3>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart
                 data={losers.map((val, i) => ({
                   trade: i + 1,
@@ -437,361 +416,79 @@ export default function Dashboard() {
                 }))}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <XAxis dataKey="trade" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip />
-                <Bar dataKey="value" fill="#d4154bff" radius={[4, 4, 0, 0]} />
-
-                {/* gemiddelde lijn */}
+                <Bar dataKey="value" fill="#d4154b" radius={[4, 4, 0, 0]} />
                 <ReferenceLine
                   y={avgLoser}
-                  stroke="#000000ff"
+                  stroke="#000"
                   strokeDasharray="3 3"
                   label={{
                     value: `Avg: $${avgLoser.toFixed(0)}`,
                     position: "top",
-                    fill: "#000000ff",
-                    fontWeight: "bold",
-                    fontSize: 12,
                   }}
                 />
-
-                {/* target lijn (dik & solid) */}
                 <ReferenceLine
                   y={2000}
-                  stroke="#690202ff"
-                  strokeWidth={4}
+                  stroke="#690202"
+                  strokeWidth={3}
                   ifOverflow="extendDomain"
-                  label={{
-                    value: `Target $2000`,
-                    position: "insideTopRight",
-                    fill: "#000000ff",
-                    fontWeight: "bold",
-                    fontSize: 12,
-                  }}
+                  label={{ value: "Target $2000", position: "insideTopRight" }}
                 />
               </BarChart>
             </ResponsiveContainer>
-          </Card>
-        </TwoCol>
+          </div>
+        </div>
 
-        {/* 📅 Weekly goals + Notes */}
-        <TwoCol>
-          <Card>
-            <h3>Weekly Profit Target {profitTargetPct}%</h3>
-            <ProgressTrack>
-              <ProgressFill
+        {/* Goals + Notes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Weekly Profit Target {profitTargetPct}%
+            </h3>
+            <div className="relative w-full h-[26px] sm:h-[30px] bg-gray-200 rounded-xl mt-2">
+              <div
+                className="h-full rounded-xl bg-gradient-to-r from-blue-900 to-green-400 transition-all"
                 style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
               />
-              <ProgressLabel
-                style={{ left: `${Math.min(Math.max(progress, 0), 100)}%` }}
+              <div
+                className="absolute top-[6px] sm:top-[7px] text-[0.65rem] sm:text-xs font-semibold text-gray-900"
+                style={{
+                  left: `${Math.min(Math.max(progress, 0), 100)}%`,
+                  transform: "translateX(-50%)",
+                }}
               >
                 {progress.toFixed(0)}%
-              </ProgressLabel>
-            </ProgressTrack>
+              </div>
+            </div>
 
-            <h3>Weekly Goals</h3>
-            <GoalsList>
-              <GoalItem>
-                <span className="icon">🎯</span>
-                <span>
-                  Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
-                </span>
-              </GoalItem>
-              <GoalItem>
-                <span className="icon">⛔</span>
-                <span>
-                  Aim for 15M/1H Highs/lows. Make sure RR is
-                  <strong>higher than 0.7 else use a Limit order!</strong>
-                </span>
-              </GoalItem>
-              <GoalItem>
-                <span className="icon">🎯</span>
-                <span>
-                  <strong>Wacht op goede USDT.D bias</strong> en kies coin die
-                  meest aligned.
-                </span>
-              </GoalItem>
-            </GoalsList>
-          </Card>
+            <h3 className="mt-3 mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Weekly Goals
+            </h3>
+            <ul className="flex flex-col gap-2">
+              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
+                🎯 Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
+              </li>
+              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
+                ⛔ Aim for 15M/1H Highs/lows. Make sure RR is{" "}
+                <strong>higher than 0.7 else use a Limit order!</strong>
+              </li>
+              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
+                🎯 <strong>Wacht op goede USDT.D bias</strong> en kies coin die
+                meest aligned.
+              </li>
+            </ul>
+          </div>
 
-          <Card>
-            <h3>Quick Notes</h3>
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
+            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+              Quick Notes
+            </h3>
             <NotesArea />
-          </Card>
-        </TwoCol>
-      </Sections>
-    </Wrapper>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
-/* ---------------- styled ---------------- */
-const Wrapper = styled.div`
-  padding: 2rem 0.5rem;
-  font-family: "Inter", sans-serif;
-  color: #374151; /* donkergrijs */
-  background: transparent;
-  max-width: 1150px;
-  flex: 1;
-  min-height: 0;
-  margin: auto;
-`;
-
-const Calendar = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1em;
-`;
-
-const Day = styled.div`
-  flex: 1;
-  text-align: center;
-  padding: 0.75rem;
-  border-radius: 10px;
-  border: 1px solid ${(p) => (p.$today ? "#93c5fd" : "#e5e7eb")};
-  background: ${(p) => (p.$today ? "#dbeafe" : "#ffffff")};
-  color: ${(p) => (p.$today ? "#1e3a8a" : "#6b7280")};
-  font-weight: ${(p) => (p.$today ? "600" : "400")};
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 100px;
-  max-height: 150px;
-  overflow-y: auto;
-
-  /* 👇 scrollbar verbergen */
-  -ms-overflow-style: none; /* IE/Edge */
-  scrollbar-width: none; /* Firefox */
-
-  &::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
-  }
-
-  box-shadow: ${(p) =>
-    p.$today ? "0 2px 6px rgba(59,130,246,0.2)" : "0 1px 3px rgba(0,0,0,0.05)"};
-
-  .day-label {
-    margin-bottom: 0.25rem;
-    font-size: 0.95rem;
-  }
-`;
-
-const EventsForDay = styled.div`
-  font-size: 0.75rem;
-  color: #374151;
-  text-align: left;
-  width: 100%;
-`;
-
-const EventItem = styled.div`
-  margin-top: 0.3rem;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: #f1f5f9;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-
-  .time {
-    font-weight: 600;
-    color: #16a34a;
-    font-size: 0.7rem;
-  }
-
-  .title {
-    font-size: 0.75rem;
-    line-height: 1.1rem;
-    color: #1f2937;
-  }
-`;
-
-const Sessions = styled.div`
-  margin-bottom: 1rem;
-
-  h2 {
-    margin-bottom: 0.5rem;
-    font-size: 1.2rem;
-    color: #1e293b;
-  }
-`;
-
-const SessionBar = styled.div`
-  position: relative;
-  height: 50px;
-  background: #f3f4f6;
-  border-radius: 8px;
-`;
-
-const SessionBlock = styled.div`
-  position: absolute;
-  top: 8px;
-  height: 34px;
-  border-radius: 6px;
-  background: ${(p) => p.$color}aa; /* pastel met transparantie */
-  left: ${(p) => p.$left};
-  width: ${(p) => p.$width};
-  text-align: center;
-  font-size: 0.8rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #1f2937;
-`;
-
-const CurrentTime = styled.div`
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #f59e0b; /* amber accent */
-`;
-
-const Sections = styled.div`
-  display: grid;
-  gap: 1.2rem;
-`;
-
-const Card = styled.div`
-  background: #ffffff;
-  padding: 1rem 1rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-  h3 {
-    margin-bottom: 0.5rem;
-    color: #1e293b;
-    font-size: 1.1rem;
-  }
-
-  a {
-    color: #3b82f6;
-    font-weight: 500;
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-`;
-
-const SectionTitle = styled.h2`
-  font-size: 1.3rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 0.5rem;
-`;
-
-const SessionBarWrapper = styled.div`
-  width: 100%;
-  margin: 0 auto; /* centreren */
-`;
-
-const StatsGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-`;
-
-const StatItem = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.3rem 0rem;
-  background: #f9fafb;
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  text-align: center;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f3f4f6;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  }
-
-  .icon {
-    font-size: 1.2rem;
-    margin-bottom: 0.4rem;
-  }
-
-  .label {
-    font-size: 0.8rem;
-    color: #6b7280;
-  }
-
-  .value {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #111827;
-  }
-`;
-
-const TwoCol = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-`;
-
-const ProgressTrack = styled.div`
-  position: relative;
-  width: 100%;
-  height: 30px;
-  background: #e5e7eb;
-  border-radius: 12px;
-  margin-top: 8px;
-`;
-
-const ProgressFill = styled.div`
-  height: 100%;
-  background: linear-gradient(90deg, #0a1cddff, #06eb5aff);
-  border-radius: 12px;
-  transition: width 0.4s ease;
-`;
-
-const ProgressLabel = styled.div`
-  position: absolute;
-  top: 7px;
-  padding-left: 30px;
-  transform: translateX(-50%);
-  color: #0c0c0cff;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 4px;
-  z-index: 99;
-`;
-
-const P2Gsection = styled.div`
-  margin-top: 1em;
-`;
-
-const GoalsList = styled.ul`
-  margin-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-`;
-
-const GoalItem = styled.li`
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  padding: 0.6rem 0.9rem;
-  border-radius: 10px;
-  font-size: 0.9rem;
-  color: #1f2937;
-  font-weight: 500;
-  transition: all 0.2s;
-
-  .icon {
-    font-size: 1.1rem;
-  }
-
-  &:hover {
-    background: #f3f4f6;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  }
-`;
