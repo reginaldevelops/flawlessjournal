@@ -368,7 +368,7 @@ const ContentSection = styled.section`
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 2rem;
-  padding: 1rem;
+  padding: 2rem;
   background: white;
   color: #222;
   overflow: auto;
@@ -377,7 +377,7 @@ const ContentSection = styled.section`
   width: 100%;
   border-radius: 10px;
 
-  height: 80vh; /* ⬅️ maximaal 80% van viewport */
+  height: 99vh; /* ⬅️ maximaal 80% van viewport */
   min-height: 0; /* voorkomt dat flexbox het blijft rekken */
 `;
 
