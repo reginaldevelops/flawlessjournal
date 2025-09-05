@@ -578,6 +578,17 @@ const Day = styled.div`
   flex-direction: column;
   align-items: center;
   min-height: 100px;
+  max-height: 150px;
+  overflow-y: auto;
+
+  /* 👇 scrollbar verbergen */
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
   box-shadow: ${(p) =>
     p.$today ? "0 2px 6px rgba(59,130,246,0.2)" : "0 1px 3px rgba(0,0,0,0.05)"};
 
@@ -690,7 +701,7 @@ const SectionTitle = styled.h2`
   font-size: 1.3rem;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 `;
 
 const SessionBarWrapper = styled.div`
@@ -742,7 +753,6 @@ const TwoCol = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
-  margin-bottom: 2rem;
 `;
 
 const ProgressTrack = styled.div`

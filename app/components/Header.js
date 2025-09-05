@@ -4,84 +4,110 @@ import Link from "next/link";
 import { useState } from "react";
 import { Menu, X, BarChart2, List, PenSquare, Book } from "lucide-react";
 
-export default function Header() {
+export default function LayoutHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="bg-[#0b0b0d] border-b border-[#222] relative w-full">
-      <div className="flex justify-between items-center px-8 py-4 relative w-full max-w-[1256px] mx-auto">
-        {/* Logo */}
-        <div className="text-white font-bold text-[1.2rem]">
-          <Link href="/" className="no-underline text-inherit">
-            FJ
-          </Link>
-        </div>
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex fixed top-0 left-0 h-screen w-16 bg-[#0b0b0d] border-r border-[#222] flex-col items-center py-6 space-y-8">
+        {/* Logo boven */}
+        <Link
+          href="/"
+          className="text-white font-bold text-xl hover:text-[#00c8ff]"
+        >
+          FJ
+        </Link>
 
-        {/* Desktop nav with separators */}
-        <nav className="hidden md:flex items-center text-gray-200 font-medium">
-          <Link href="/dashboard" className="hover:text-[#00c8ff]">
-            Dash
+        {/* Menu items als icons */}
+        <nav className="flex flex-col items-center gap-6 mt-10 text-gray-200">
+          <Link
+            href="/dashboard"
+            className="hover:text-[#00c8ff] flex flex-col items-center"
+          >
+            <BarChart2 size={24} />
           </Link>
-          <span className="px-3 text-gray-500">|</span>
-          <Link href="/trades" className="hover:text-[#00c8ff]">
-            Trades
+          <Link
+            href="/trades"
+            className="hover:text-[#00c8ff] flex flex-col items-center"
+          >
+            <List size={24} />
           </Link>
-          <span className="px-3 text-gray-500">|</span>
-          <Link href="/journal" className="hover:text-[#00c8ff]">
-            Journal
+          <Link
+            href="/journal"
+            className="hover:text-[#00c8ff] flex flex-col items-center"
+          >
+            <PenSquare size={24} />
           </Link>
-          <span className="px-3 text-gray-500">|</span>
-          <Link href="/notebook" className="hover:text-[#00c8ff]">
-            Notebook
+          <Link
+            href="/notebook"
+            className="hover:text-[#00c8ff] flex flex-col items-center"
+          >
+            <Book size={24} />
           </Link>
         </nav>
+      </aside>
 
-        {/* Mobile toggle */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="block md:hidden text-white"
-        >
-          {open ? <X size={24} /> : <Menu size={24} />}
-        </button>
+      {/* Mobile top header */}
+      <header className="md:hidden bg-[#0b0b0d] border-b border-[#222] w-full fixed top-0 left-0 z-50">
+        <div className="flex justify-between items-center px-6 py-4">
+          {/* Logo */}
+          <div className="text-white font-bold text-lg">
+            <Link href="/">FJ</Link>
+          </div>
 
-        {/* Mobile dropdown */}
+          {/* Toggle */}
+          <button
+            onClick={() => setOpen(!open)}
+            className="text-white focus:outline-none"
+          >
+            {open ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+
+        {/* Mobile dropdown (icon-only) */}
         {open && (
-          <div className="absolute top-full left-0 bg-[#111] border border-[#333] p-4 flex flex-row w-full divide-x divide-gray-700">
+          <div className="bg-[#111] border-t border-[#333] flex flex-row justify-around py-4">
             <Link
               href="/dashboard"
               onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
             >
-              <BarChart2 size={20} />
-              <span>Dash</span>
+              <BarChart2 size={22} />
+              <span className="text-xs">Dash</span>
             </Link>
             <Link
               href="/trades"
               onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
             >
-              <List size={20} />
-              <span>Trades</span>
+              <List size={22} />
+              <span className="text-xs">Trades</span>
             </Link>
             <Link
               href="/journal"
               onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
             >
-              <PenSquare size={20} />
-              <span>Journal</span>
+              <PenSquare size={22} />
+              <span className="text-xs">Journal</span>
             </Link>
             <Link
               href="/notebook"
               onClick={() => setOpen(false)}
-              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+              className="text-gray-200 hover:text-[#00c8ff] flex flex-col items-center gap-1"
             >
-              <Book size={20} />
-              <span>Notebook</span>
+              <Book size={22} />
+              <span className="text-xs">Notebook</span>
             </Link>
           </div>
         )}
-      </div>
-    </header>
+      </header>
+
+      {/* Content wrapper (zorg dat er ruimte is naast sidebar op desktop) */}
+      <main className="md:ml-16 pt-16 md:pt-0">
+        {/* hier komt je page content */}
+      </main>
+    </>
   );
 }

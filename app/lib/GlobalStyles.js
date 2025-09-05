@@ -11,13 +11,13 @@ export const GlobalStyles = createGlobalStyle`
     margin: 0;
     padding: 0;
     font-weight: 400; /* font komt via next/font */
-    font-size: 1.1em;
+    font-size: 1em;
   }
 
   /* Zorg dat form controls hetzelfde font pakken als body */
   input, textarea, select, button {
     font-family: inherit;
-    font-size: 1.1em;
+    font-size: 1em;
   }
 
   /* Headings: alleen structuur, geen kleur */
