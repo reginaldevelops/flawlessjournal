@@ -314,19 +314,17 @@ export default function Dashboard() {
                 <span className="icon">💰</span>
                 <span className="label">PnL</span>
                 <span className="value">
-                  {weeklyPNL !== null
-                    ? `${weeklyPNL.toFixed(0)} | ${((weeklyPNL / totalBalance) * 100).toFixed(1)}%`
-                    : "--"}
+                  {weeklyPNL !== null ? `${weeklyPNL.toFixed(0)}` : "--"}
                 </span>
               </StatItem>
               <StatItem>
                 <span className="icon">📊</span>
-                <span className="label">Trades Taken</span>
+                <span className="label">Trades</span>
                 <span className="value">{trades}</span>
               </StatItem>
               <StatItem>
                 <span className="icon">✅</span>
-                <span className="label">Win Rate</span>
+                <span className="label">WR</span>
                 <span className="value">{winRate.toFixed(0)}%</span>
               </StatItem>
             </StatsGrid>
@@ -405,8 +403,8 @@ export default function Dashboard() {
                 data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" />
-                <YAxis />
+                <XAxis dataKey="trade" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Bar dataKey="value" fill="#00ca7dff" radius={[4, 4, 0, 0]} />
 
@@ -452,8 +450,8 @@ export default function Dashboard() {
                 }))}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" />
-                <YAxis />
+                <XAxis dataKey="trade" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Bar dataKey="value" fill="#d4154bff" radius={[4, 4, 0, 0]} />
 
@@ -467,20 +465,20 @@ export default function Dashboard() {
                     position: "top",
                     fill: "#000000ff",
                     fontWeight: "bold",
-                    fontSize: 13,
+                    fontSize: 12,
                   }}
                 />
 
                 {/* target lijn (dik & solid) */}
                 <ReferenceLine
                   y={2000}
-                  stroke="#991b1b"
+                  stroke="#690202ff"
                   strokeWidth={4}
                   ifOverflow="extendDomain"
                   label={{
                     value: `Target $2000`,
                     position: "insideTopRight",
-                    fill: "#991b1b",
+                    fill: "#000000ff",
                     fontWeight: "bold",
                     fontSize: 12,
                   }}
@@ -541,11 +539,11 @@ export default function Dashboard() {
 }
 /* ---------------- styled ---------------- */
 const Wrapper = styled.div`
-  padding: 2rem;
+  padding: 2rem 0.5rem;
   font-family: "Inter", sans-serif;
   color: #374151; /* donkergrijs */
   background: transparent;
-  max-width: 1256px;
+  max-width: 1150px;
   flex: 1;
   min-height: 0;
   margin: auto;
@@ -667,7 +665,7 @@ const Sections = styled.div`
 
 const Card = styled.div`
   background: #ffffff;
-  padding: 1rem 2rem;
+  padding: 1rem 1rem;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 
@@ -702,8 +700,8 @@ const SessionBarWrapper = styled.div`
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem;
   margin-top: 0.75rem;
 `;
 
@@ -711,7 +709,7 @@ const StatItem = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.3rem 0.4rem;
+  padding: 0.3rem 0rem;
   background: #f9fafb;
   border-radius: 10px;
   border: 1px solid #e5e7eb;

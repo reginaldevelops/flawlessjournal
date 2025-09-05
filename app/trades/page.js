@@ -134,8 +134,3 @@ export default function TradeDataPage() {
     </div>
   );
 }
-
-// max-width: 1256px;
-// flex: 1;
-// min-height: 0;
-// margin: auto;
