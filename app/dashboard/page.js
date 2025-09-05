@@ -545,8 +545,9 @@ const Wrapper = styled.div`
   font-family: "Inter", sans-serif;
   color: #374151; /* donkergrijs */
   background: transparent;
-  min-height: 96vh;
   max-width: 1256px;
+  flex: 1;
+  min-height: 0;
   margin: auto;
 `;
 

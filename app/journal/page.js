@@ -372,21 +372,23 @@ export default function JournalPage() {
 
 /* ---------------- styled ---------------- */
 const PageWrapper = styled.div`
-  background: inherit;
   display: flex;
   flex-direction: column;
+  background: inherit;
+  min-height: 0;
+  flex: 1;
 `;
 
 /* Input section */
 const InputSection = styled.section`
   position: relative;
-  min-height: 30vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   background: url("/relaxingclouds.png") center/cover no-repeat;
+  min-height: 25vh;
 
   &::before {
     content: "";
@@ -451,14 +453,14 @@ const InputSection = styled.section`
 /* Content section */
 const ContentSection = styled.section`
   flex: 1;
+  min-height: 0; /* 👈 critical fix inside flex */
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 2rem;
   padding: 2.5rem;
   background: white;
   color: #222;
-  border-top: 1px solid #eee;
-  min-height: 66vh;
+  overflow: auto; /* optional: scroll if entries overflow */
 `;
 
 const CalendarPane = styled.div`

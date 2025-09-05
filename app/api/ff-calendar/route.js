@@ -81,11 +81,10 @@ export async function GET() {
     const patterns = [
       /cpi/i,
       /ppi/i,
-      /non[-\s]?farm/i,
-      /federal funds rate/i, // vervangt FOMC
+      /non[-\s]?farm employment/i,
+      /federal funds rate/i,
       /powell/i,
       /trump/i,
-      /unemployment claims/i,
     ];
 
     const filtered = events.filter(

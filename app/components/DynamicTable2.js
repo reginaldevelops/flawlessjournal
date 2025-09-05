@@ -16,7 +16,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     direction: "desc",
   });
   const router = useRouter();
-  const rowsPerPage = 20;
+  const rowsPerPage = 10;
 
   const fixedCols = [
     "Trade Number",
@@ -160,7 +160,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   };
 
   return (
-    <div className="p-8 m-4 rounded-2xl bg-inherit">
+    <div className="px-1 py-8 m-4 rounded-2xl bg-inherit">
       {/* Top controls */}
       <div className="flex justify-between items-center mb-4">
         <button

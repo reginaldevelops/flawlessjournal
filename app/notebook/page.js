@@ -359,11 +359,6 @@ export default function Notebook() {
                   />
                 </div>
 
-                <MetaInfo>
-                  <span>Created: {formatLocal(selectedPost.created_at)}</span>
-                  <span>Updated: {formatLocal(selectedPost.updated_at)}</span>
-                </MetaInfo>
-
                 <TagSelect
                   value={selectedPost.tag_id || ""}
                   onChange={(e) =>

@@ -104,7 +104,7 @@ export default function TradeDataPage() {
   }
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="px-2 py-8 space-y-8 max-w-6xl mx-auto flex-1 min-h-0 w-full">
       <header className="text-center">
         <h1 className="text-4xl font-bold tracking-tight text-gray-900">
           Tradelist
@@ -112,7 +112,7 @@ export default function TradeDataPage() {
       </header>
 
       {/* Grid met analytics cards */}
-      <div className="grid gap-6 md:grid-cols-2 auto-rows-[200px]">
+      <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[200px]">
         <StatCard>
           <CumulativePnLChart rows={rows} />
         </StatCard>
@@ -128,9 +128,14 @@ export default function TradeDataPage() {
       </div>
 
       {/* Tabel */}
-      <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+      <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
         <DynamicTable2 rows={rows} variables={variables} />
       </div>
     </div>
   );
 }
+
+// max-width: 1256px;
+// flex: 1;
+// min-height: 0;
+// margin: auto;

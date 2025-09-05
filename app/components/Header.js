@@ -2,131 +2,86 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import styled from "styled-components";
-import { Menu, X } from "lucide-react";
+import { Menu, X, BarChart2, List, PenSquare, Book } from "lucide-react";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
 
   return (
-    <Wrapper>
-      <TextWrapper>
-        <Logo>
-          <Link href="/">Flawless Journal</Link>
-        </Logo>
+    <header className="bg-[#0b0b0d] border-b border-[#222] relative w-full">
+      <div className="flex justify-between items-center px-8 py-4 relative w-full max-w-[1256px] mx-auto">
+        {/* Logo */}
+        <div className="text-white font-bold text-[1.2rem]">
+          <Link href="/" className="no-underline text-inherit">
+            FJ
+          </Link>
+        </div>
 
-        {/* desktop menu */}
-        <Nav>
-          <Link href="/dashboard">Dash</Link>
-          <Link href="/trades">Trades</Link>
-          <Link href="/journal">Journal</Link>
-          <Link href="/notebook">Notebook</Link>
-        </Nav>
+        {/* Desktop nav with separators */}
+        <nav className="hidden md:flex items-center text-gray-200 font-medium">
+          <Link href="/dashboard" className="hover:text-[#00c8ff]">
+            Dash
+          </Link>
+          <span className="px-3 text-gray-500">|</span>
+          <Link href="/trades" className="hover:text-[#00c8ff]">
+            Trades
+          </Link>
+          <span className="px-3 text-gray-500">|</span>
+          <Link href="/journal" className="hover:text-[#00c8ff]">
+            Journal
+          </Link>
+          <span className="px-3 text-gray-500">|</span>
+          <Link href="/notebook" className="hover:text-[#00c8ff]">
+            Notebook
+          </Link>
+        </nav>
 
-        {/* mobile toggle */}
-        <MobileToggle onClick={() => setOpen(!open)}>
+        {/* Mobile toggle */}
+        <button
+          onClick={() => setOpen(!open)}
+          className="block md:hidden text-white"
+        >
           {open ? <X size={24} /> : <Menu size={24} />}
-        </MobileToggle>
+        </button>
 
-        {/* mobile dropdown */}
+        {/* Mobile dropdown */}
         {open && (
-          <MobileMenu>
-            <Link href="/dashboard" onClick={() => setOpen(false)}>
-              Home
+          <div className="absolute top-full left-0 bg-[#111] border border-[#333] p-4 flex flex-row w-full divide-x divide-gray-700">
+            <Link
+              href="/dashboard"
+              onClick={() => setOpen(false)}
+              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+            >
+              <BarChart2 size={20} />
+              <span>Dash</span>
             </Link>
-            <Link href="/trades" onClick={() => setOpen(false)}>
-              Trades
+            <Link
+              href="/trades"
+              onClick={() => setOpen(false)}
+              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+            >
+              <List size={20} />
+              <span>Trades</span>
             </Link>
-            <Link href="/journal" onClick={() => setOpen(false)}>
-              Journal
+            <Link
+              href="/journal"
+              onClick={() => setOpen(false)}
+              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+            >
+              <PenSquare size={20} />
+              <span>Journal</span>
             </Link>
-            <Link href="/notebook" onClick={() => setOpen(false)}>
-              Notebook
+            <Link
+              href="/notebook"
+              onClick={() => setOpen(false)}
+              className="text-gray-200 hover:text-[#00c8ff] px-2 flex-1 flex flex-col items-center gap-1"
+            >
+              <Book size={20} />
+              <span>Notebook</span>
             </Link>
-          </MobileMenu>
+          </div>
         )}
-      </TextWrapper>
-    </Wrapper>
+      </div>
+    </header>
   );
 }
-
-/* ---------------- styled ---------------- */
-const Wrapper = styled.header`
-  background: #0b0b0d;
-  border-bottom: 1px solid #222;
-  position: relative;
-  width: 100%;
-`;
-
-const TextWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  position: relative;
-  width: 100%;
-  max-width: 1256px;
-  margin: auto;
-`;
-
-const Logo = styled.div`
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #fff;
-
-  a {
-    text-decoration: none;
-    color: inherit;
-  }
-`;
-
-const Nav = styled.nav`
-  display: flex;
-  gap: 1.5rem;
-
-  a {
-    color: #e5e7eb;
-    text-decoration: none;
-    font-weight: 500;
-    &:hover {
-      color: #00c8ff;
-    }
-  }
-
-  @media (max-width: 768px) {
-    display: none;
-  }
-`;
-
-const MobileToggle = styled.button`
-  display: none;
-  background: none;
-  border: none;
-  color: #fff;
-  cursor: pointer;
-
-  @media (max-width: 768px) {
-    display: block;
-  }
-`;
-
-const MobileMenu = styled.div`
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: #111;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-
-  a {
-    color: #e5e7eb;
-    text-decoration: none;
-    &:hover {
-      color: #00c8ff;
-    }
-  }
-`;

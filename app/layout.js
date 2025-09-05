@@ -24,7 +24,7 @@ export default function RootLayout({ children }) {
           <GlobalStyles />
           <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#e1c4f4] to-[#a8c5ff]">
             <Header />
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 flex flex-col">{children}</main>
             <Footer />
           </div>
         </StyledComponentsRegistry>
