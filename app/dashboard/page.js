@@ -37,7 +37,26 @@ function getWeekNumber(d = new Date()) {
 // ⏱ Formatter voor NL-tijd
 function formatLocal(dateString) {
   if (!dateString) return "";
-  return new Date(dateString).toLocaleString("nl-NL", {
+
+  const d = new Date(dateString);
+
+  // Safari fix: als d invalid is, probeer timestamp of parse handmatig
+  if (isNaN(d.getTime())) {
+    try {
+      // Als cachedAt al een timestamp was
+      return new Date(Number(dateString)).toLocaleString("nl-NL", {
+        timeZone: "Europe/Amsterdam",
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  return d.toLocaleString("nl-NL", {
     timeZone: "Europe/Amsterdam",
     hour: "2-digit",
     minute: "2-digit",
@@ -94,7 +113,11 @@ export default function Dashboard() {
         const resPhantom = await fetch("/api/portfolio", { cache: "no-store" });
         const dataPhantom = await resPhantom.json();
         setPhantom(dataPhantom?.totalUSD ?? 0);
-        setLastUpdated(dataPhantom?.cachedAt ?? new Date());
+        setLastUpdated(
+          dataPhantom?.cachedAt
+            ? new Date(dataPhantom.cachedAt).toISOString()
+            : new Date().toISOString()
+        );
 
         const resHyper = await fetch("/api/hyperliquid", { cache: "no-store" });
         const dataHyper = await resHyper.json();

@@ -340,15 +340,29 @@ export default function TradeViewPage() {
   return (
     <div className="flex flex-col max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between px-6 py-4 bg-transparent">
-        <h2 className="text-3xl font-semibold">
-          {trade.Coins || "Unknown Coin"}
-        </h2>
-        <div className="flex items-center gap-3 text-1xl">
+      <div className="flex justify-between items-center px-6 py-4 bg-transparent">
+        {/* Links: coin + pnl */}
+        <div className="flex items-center gap-3">
+          <h2 className="text-3xl font-semibold">
+            {trade.Coins || "Unknown Coin"}
+          </h2>
+          <div
+            className={`rounded-lg text-xl font-semibold shadow-inner px-3 py-1 ${
+              Number(trade["PNL"]) >= 0
+                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                : "bg-red-50 text-red-600 border border-red-200"
+            }`}
+          >
+            {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
+          </div>
+        </div>
+
+        {/* Rechts: datum + delete */}
+        <div className="flex items-center gap-3 text-lg">
           <span>{trade.Datum || "—"}</span>
           <button
             onClick={deleteTrade}
-            className="text-white bg-red-800 hover:bg-red-500 text-sl p-1"
+            className="text-white bg-red-800 hover:bg-red-500 text-sm px-2 py-1 rounded"
           >
             DEL
           </button>
@@ -358,18 +372,6 @@ export default function TradeViewPage() {
       <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-2 p-2">
         {/* Sidebar */}
         <div className="flex flex-col gap-2">
-          {/* Net PnL Badge */}
-          <div
-            className={`flex justify-between items-center px-4 py-3 rounded-lg text-2xl font-semibold shadow-inner ${
-              Number(trade["PNL"]) >= 0
-                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                : "bg-red-50 text-red-600 border border-red-200"
-            }`}
-          >
-            <span className="text-sm font-medium text-gray-500">Net PnL</span>
-            {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
-          </div>
-
           {/* Pre-Trade */}
           <div className="bg-white rounded-xl shadow px-3 py-3 flex flex-col gap-2">
             {variables
