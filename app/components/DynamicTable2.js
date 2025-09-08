@@ -34,10 +34,25 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     "Tags",
   ];
 
+  // 🔧 helper om cell values te lezen
+  function getCellValue(row, col) {
+    if (row[col] !== undefined) return row[col];
+    if (row.data && row.data[col] !== undefined) return row.data[col];
+    return null;
+  }
+
   useEffect(() => {
-    const cols = [...fixedCols, ...variables];
-    setAllCols(cols);
-    loadVisibleCols(cols);
+    const fixedLower = fixedCols.map((c) => c.toLowerCase());
+    const variableNames = variables
+      .map((v) => v?.name)
+      .filter(Boolean)
+      .filter((name) => !fixedLower.includes(name.toLowerCase()));
+    // ❌ filtert alles wat al in fixedCols zit eruit (case-insensitive)
+
+    const cols = [...fixedCols, ...variableNames];
+    const uniqueCols = [...new Set(cols)];
+    setAllCols(uniqueCols);
+    loadVisibleCols(uniqueCols);
   }, [variables]);
 
   useEffect(() => {
@@ -79,8 +94,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
 
   const sortedRows = [...rows].sort((a, b) => {
     if (!sortConfig.key) return 0;
-    const valA = a[sortConfig.key] ?? "";
-    const valB = b[sortConfig.key] ?? "";
+    const valA = getCellValue(a, sortConfig.key) ?? "";
+    const valB = getCellValue(b, sortConfig.key) ?? "";
     if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
     if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
     return 0;
@@ -200,8 +215,11 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
           <div className="bg-white rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto">
             <h3 className="font-semibold mb-4">Select columns</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-              {allCols.map((col) => (
-                <label key={col} className="flex items-center gap-2">
+              {allCols.filter(Boolean).map((col, idx) => (
+                <label
+                  key={`${col}-${idx}`}
+                  className="flex items-center gap-2"
+                >
                   <input
                     type="checkbox"
                     checked={visibleCols.includes(col)}
@@ -211,6 +229,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                 </label>
               ))}
             </div>
+
             <div className="flex justify-end gap-2">
               <button onClick={() => setVisibleCols(allCols)}>All</button>
               <button onClick={() => setVisibleCols([])}>None</button>
@@ -287,7 +306,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                   />
                 </td>
                 {visibleCols.map((col) => {
-                  const val = row[col];
+                  const val = getCellValue(row, col);
+
                   if (col === "PnL") {
                     return (
                       <td
@@ -300,6 +320,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       </td>
                     );
                   }
+
                   if (col === "Tags") {
                     return (
                       <td key={col} className="px-4 py-2 border-b">
@@ -316,6 +337,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       </td>
                     );
                   }
+
                   return (
                     <td
                       key={col}

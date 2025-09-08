@@ -15,13 +15,31 @@ export default function TradeDataPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: trades } = await supabase.from("trades").select("*");
-      const { data: tradeVars } = await supabase
-        .from("trade_variables")
+      // Trades ophalen
+      const { data: trades, error: tradesError } = await supabase
+        .from("trades")
         .select("*");
 
-      const vars = tradeVars?.map((v) => v.name) || [];
+      if (tradesError) {
+        console.error("❌ Error loading trades:", tradesError);
+        return;
+      }
 
+      // Variables ophalen (LET OP: juiste tabel gebruiken)
+      const { data: tradeVars, error: varsError } = await supabase
+        .from("variables")
+        .select("*")
+        .order("order", { ascending: true });
+
+      if (varsError) {
+        console.error("❌ Error loading variables:", varsError);
+        return;
+      }
+
+      // Bewaar de hele objecten
+      setVariables(tradeVars || []);
+
+      // Map de trades met dynamische variabelen
       const mapped = trades.map((d) => {
         const base = {
           id: d.id,
@@ -40,13 +58,15 @@ export default function TradeDataPage() {
           Result: d.data?.Result,
           Tags: d.data?.tags || [],
         };
-        vars.forEach((v) => {
-          base[v] = d.data?.[v] || "";
+
+        // Dynamische variabelen toevoegen
+        (tradeVars || []).forEach((v) => {
+          base[v.name] = d.data?.[v.name] || "";
         });
+
         return base;
       });
 
-      setVariables(vars);
       setRows(mapped);
       setLoading(false);
     };
@@ -90,7 +110,6 @@ export default function TradeDataPage() {
   const pnlValues = rows.map((r) => Number(r.PnL) || 0);
   const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
   const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
-
   const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
 
   function StatCard({ children }) {

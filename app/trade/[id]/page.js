@@ -221,10 +221,25 @@ export default function TradeViewPage() {
   const addVariable = async () => {
     const newKey = prompt("Name of new variable?");
     if (!newKey) return;
+
+    // Maak alles lowercase om case-insensitive duplicates te voorkomen
+    const forbidden = [
+      ...fixedOrder.map((c) => c.toLowerCase()),
+      ...variables.map((v) => v.name.toLowerCase()),
+    ];
+
+    if (forbidden.includes(newKey.toLowerCase())) {
+      alert("❌ Deze naam is al in gebruik of is een vaste kolomnaam.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("variables")
-      .insert([{ name: newKey, type: "custom", options: [], editable: true }])
+      .insert([
+        { name: newKey.trim(), type: "custom", options: [], editable: true },
+      ])
       .select();
+
     if (!error && data) {
       setVariables((prev) => [...prev, data[0]]);
     }
@@ -235,14 +250,29 @@ export default function TradeViewPage() {
       setMenuOpen(null);
       return;
     }
+
+    const forbidden = [
+      ...fixedOrder.map((c) => c.toLowerCase()),
+      ...variables.map((v) => v.name.toLowerCase()),
+    ].filter((n) => n !== variable.name.toLowerCase());
+    // 👆 huidige naam mag je wel overschrijven
+
+    if (forbidden.includes(newName.toLowerCase())) {
+      alert("❌ Deze naam is al in gebruik of is een vaste kolomnaam.");
+      setMenuOpen(null);
+      return;
+    }
+
     const { error } = await supabase
       .from("variables")
       .update({ name: newName })
       .eq("id", variable.id);
+
     if (!error) {
       setVariables((prev) =>
         prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
       );
+
       if (trade[variable.name] !== undefined) {
         const updated = { ...trade };
         updated[newName] = updated[variable.name];
