@@ -123,7 +123,7 @@ export default function TradeDataPage() {
   }
 
   return (
-    <div className="px-2 py-8 space-y-8 max-w-6xl mx-auto flex-1 min-h-0 w-full">
+    <div className="px-2 py-8 space-y-8 max-w-7xl mx-auto flex-1 min-h-0 w-full">
       {/* Grid met analytics cards */}
       <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[135px]">
         <StatCard>

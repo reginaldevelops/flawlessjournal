@@ -202,8 +202,8 @@ export default function JournalPage() {
   const blanks = Array(firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1).fill("");
 
   return (
-    <div className="flex flex-col flex-1 bg-white">
-      <section className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[300px,1fr] md:gap-8 md:p-8 bg-white text-gray-900 overflow-auto max-w-[1250px] mx-auto w-full rounded-lg min-h-0">
+    <div className="flex flex-col flex-1 bg-transparent">
+      <section className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[300px,1fr] md:gap-8 md:p-8 text-gray-900 overflow-auto max-w-7xl mx-auto w-full rounded-lg min-h-0">
         {/* 📅 Kalender */}
         <div>
           <div className="flex justify-between items-center mb-4">
@@ -220,7 +220,7 @@ export default function JournalPage() {
               <button className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200">
                 →
               </button>
-              <button className="bg-white border border-gray-300 text-blue-600 font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600">
+              <button className="bg-white border border-gray-300 text-black font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600">
                 Vandaag
               </button>
             </div>
@@ -262,21 +262,17 @@ export default function JournalPage() {
                   className={`min-h-[55px] border border-gray-200 rounded p-1 cursor-pointer flex flex-col justify-between transition
                     ${
                       isSelected
-                        ? "bg-blue-600 text-white hover:bg-blue-800"
+                        ? "bg-black text-white"
                         : count > 0
-                          ? "bg-sky-100 hover:bg-slate-50"
-                          : "bg-white hover:bg-slate-50"
+                          ? "bg-white hover:bg-[#ece9e6]"
+                          : "bg-white hover:bg-[#ece9e6]"
                     }`}
                 >
                   <span className="text-sm font-medium">{day}</span>
                   {count > 0 && (
                     <span
                       className={`text-[0.7rem] self-end rounded-full px-1
-                        ${
-                          isSelected
-                            ? "bg-white text-blue-600"
-                            : "bg-blue-600 text-white"
-                        }`}
+                        ${isSelected ? "text-white" : "bg-black text-white"}`}
                     >
                       {count}
                     </span>
@@ -309,11 +305,11 @@ export default function JournalPage() {
                 (e.preventDefault(), addEntryForSelected())
               }
               rows={3}
-              className="w-full p-3 border border-gray-300 rounded-lg text-sm bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+              className="w-full p-3 border h-[250px] border-gray-300 rounded-lg text-sm bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
             <button
               onClick={addEntryForSelected}
-              className="self-end bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-blue-800"
+              className="self-end bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-900"
             >
               Add
             </button>
@@ -328,14 +324,14 @@ export default function JournalPage() {
                 const isExpanded = expandedIds.includes(e.id);
 
                 const displayContent =
-                  !isExpanded && (e.content || "").length > 200
-                    ? (e.content || "").slice(0, 200) + "..."
+                  !isExpanded && (e.content || "").length > 1000
+                    ? (e.content || "").slice(0, 1000) + "..."
                     : e.content || "";
 
                 return (
                   <li
                     key={e.id}
-                    className="bg-slate-50 border border-gray-200 rounded p-3 flex flex-col gap-2"
+                    className="bg-slate-50 border border-gray-200 rounded p-3 flex flex-col gap-2 h-auto"
                   >
                     <div className="text-xs font-semibold text-gray-800">
                       {new Date(e.created_at).toLocaleTimeString("nl-NL", {
@@ -355,7 +351,7 @@ export default function JournalPage() {
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleSaveEdit(e.id)}
-                              className="text-blue-600 text-sm hover:underline"
+                              className="text-black text-sm hover:underline"
                             >
                               💾 Save
                             </button>
@@ -369,21 +365,19 @@ export default function JournalPage() {
                         </>
                       ) : (
                         <>
-                          <span className="whitespace-pre-wrap break-words text-sm">
-                            {displayContent}
-                          </span>
-                          <div className="flex gap-2 flex-wrap text-sm">
-                            {(e.content || "").length > 200 && (
+                          <span className="text-sm">{displayContent}</span>
+                          <div className="flex gap-4 flex-wrap text-sm">
+                            {(e.content || "").length > 1000 && (
                               <button
                                 onClick={() => toggleExpand(e.id)}
-                                className="text-blue-600 hover:underline"
+                                className="text-gray-400 hover:underline"
                               >
                                 {isExpanded ? "Show less" : "Show more"}
                               </button>
                             )}
                             <button
                               onClick={() => handleStartEdit(e)}
-                              className="text-blue-600 hover:underline"
+                              className="text-gray-400 hover:underline"
                             >
                               ✏️ Edit
                             </button>

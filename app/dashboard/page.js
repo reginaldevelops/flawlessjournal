@@ -198,7 +198,7 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="px-2 py-6 sm:py-8 font-inter text-gray-700 w-full max-w-[1150px] mx-auto rounded-lg">
+    <div className="px-2 py-6 sm:py-8 font-inter text-gray-700 w-full max-w-7xl mx-auto rounded-lg">
       <h2 className="text-lg sm:text-xl font-semibold text-slate-800 mb-3">
         WEEK {getWeekNumber(now)}
       </h2>

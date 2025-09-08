@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 
@@ -14,6 +14,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+function useOutsideClick(ref, onClickOutside) {
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        onClickOutside();
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [ref, onClickOutside]);
+}
 
 function SortableItem({
   v,
@@ -37,30 +49,30 @@ function SortableItem({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className="flex flex-col gap-1 bg-white rounded-xl shadow mb-2 text-sm p-2"
+      className="flex flex-col gap-2 bg-white rounded-lg text-sm p-1"
     >
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between text-xs">
         <div
           {...attributes}
           {...listeners}
-          className="cursor-grab px-1 text-lg select-none"
+          className="cursor-grab px-1 text-xs select-none"
         >
-          ⠿
+          ⠿ <span className="text-xs truncate">{v.name}</span>
         </div>
-        <span className="text-sm">{v.name}</span>
+
         {v.editable && (
           <div className="relative">
             <button
               onClick={() => setMenuOpen(menuOpen === v.id ? null : v.id)}
-              className="bg-none border-none text-lg cursor-pointer"
+              className="bg-none border-none text-sm cursor-pointer"
             >
               ⋮
             </button>
             {menuOpen === v.id && (
-              <div className="absolute top-6 right-0 bg-white border border-gray-200 rounded-md shadow-md flex flex-col z-10">
+              <div className="absolute top-5 right-0 bg-white border border-gray-200 rounded-md shadow-md flex flex-col z-10 text-xs">
                 <button
-                  className="px-2 py-1 text-sm hover:bg-gray-100 text-left"
+                  className="px-2 py-1 hover:bg-gray-100 text-left"
                   onClick={() => {
                     const newName = prompt("New name?", v.name);
                     if (newName) renameVariable(v, newName.trim());
@@ -69,7 +81,15 @@ function SortableItem({
                   ✏ Rename
                 </button>
                 <button
-                  className="px-2 py-1 text-sm hover:bg-gray-100 text-red-600 text-left"
+                  className="px-2 py-1 hover:bg-gray-100 text-left"
+                  onClick={() =>
+                    moveVariable(v, v.phase === "pre" ? "post" : "pre")
+                  }
+                >
+                  {v.phase === "pre" ? "➡ Change to post" : "⬅ Change to pre"}
+                </button>
+                <button
+                  className="px-2 py-1 hover:bg-gray-100 text-red-600 text-left"
                   onClick={() => deleteVariable(v)}
                 >
                   🗑 Delete
@@ -107,17 +127,27 @@ function SortableItem({
           saveTrade({ ...trade, [v.name]: inputValue });
         }}
         placeholder="Select or type..."
-        className="react-select"
+        className="react-select text-xs"
         classNamePrefix="react-select"
         styles={{
           control: (base) => ({
             ...base,
-            width: "100%",
-            fontSize: "0.85rem",
+            minHeight: "26px",
+            height: "33px",
+            fontSize: "0.75rem",
+          }),
+          valueContainer: (base) => ({
+            ...base,
+            padding: "5px 5px",
+          }),
+          input: (base) => ({
+            ...base,
+            margin: 0,
+            padding: 0,
           }),
           menu: (base) => ({
             ...base,
-            fontSize: "0.85rem",
+            fontSize: "0.75rem",
           }),
         }}
       />
@@ -143,19 +173,9 @@ export default function TradeViewPage() {
     "Target Win",
     "Target loss",
     "Reasons for entry",
-    "PNL",
   ];
 
   const layoutOverrides = {
-    "Trade number": "row",
-    Coins: "row",
-    Datum: "row",
-    Entreetijd: "row",
-    Confidence: "row",
-    "Target Win": "row",
-    "Target loss": "row",
-    Chart: "row",
-    "USDT.D chart": "row",
     "Reasons for entry": "column",
   };
 
@@ -218,28 +238,21 @@ export default function TradeViewPage() {
     window.location.href = "/";
   };
 
-  const addVariable = async () => {
+  const addVariable = async (phase) => {
     const newKey = prompt("Name of new variable?");
     if (!newKey) return;
-
-    // Maak alles lowercase om case-insensitive duplicates te voorkomen
-    const forbidden = [
-      ...fixedOrder.map((c) => c.toLowerCase()),
-      ...variables.map((v) => v.name.toLowerCase()),
-    ];
-
-    if (forbidden.includes(newKey.toLowerCase())) {
-      alert("❌ Deze naam is al in gebruik of is een vaste kolomnaam.");
-      return;
-    }
-
     const { data, error } = await supabase
       .from("variables")
       .insert([
-        { name: newKey.trim(), type: "custom", options: [], editable: true },
+        {
+          name: newKey.trim(),
+          type: "custom",
+          options: [],
+          editable: true,
+          phase,
+        },
       ])
       .select();
-
     if (!error && data) {
       setVariables((prev) => [...prev, data[0]]);
     }
@@ -250,19 +263,6 @@ export default function TradeViewPage() {
       setMenuOpen(null);
       return;
     }
-
-    const forbidden = [
-      ...fixedOrder.map((c) => c.toLowerCase()),
-      ...variables.map((v) => v.name.toLowerCase()),
-    ].filter((n) => n !== variable.name.toLowerCase());
-    // 👆 huidige naam mag je wel overschrijven
-
-    if (forbidden.includes(newName.toLowerCase())) {
-      alert("❌ Deze naam is al in gebruik of is een vaste kolomnaam.");
-      setMenuOpen(null);
-      return;
-    }
-
     const { error } = await supabase
       .from("variables")
       .update({ name: newName })
@@ -272,7 +272,6 @@ export default function TradeViewPage() {
       setVariables((prev) =>
         prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
       );
-
       if (trade[variable.name] !== undefined) {
         const updated = { ...trade };
         updated[newName] = updated[variable.name];
@@ -298,19 +297,36 @@ export default function TradeViewPage() {
     setMenuOpen(null);
   };
 
+  const moveVariable = async (variable, newPhase) => {
+    const { error } = await supabase
+      .from("variables")
+      .update({ phase: newPhase })
+      .eq("id", variable.id);
+    if (!error) {
+      setVariables((prev) =>
+        prev.map((x) => (x.id === variable.id ? { ...x, phase: newPhase } : x))
+      );
+    }
+    setMenuOpen(null);
+  };
+
   if (!trade) return <div className="p-4">Loading trade...</div>;
 
-  const handleDragEnd = async (event) => {
+  const handleDragEnd = async (event, phase) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const customVars = variables.filter((v) => v.type === "custom");
+    const customVars = variables.filter(
+      (v) => v.type === "custom" && v.phase === phase
+    );
     const oldIndex = customVars.findIndex((v) => v.id === active.id);
     const newIndex = customVars.findIndex((v) => v.id === over.id);
     const reordered = arrayMove(customVars, oldIndex, newIndex);
 
     setVariables((prev) => {
-      const others = prev.filter((v) => v.type !== "custom");
+      const others = prev.filter(
+        (v) => !(v.type === "custom" && v.phase === phase)
+      );
       return [...others, ...reordered];
     });
 
@@ -322,13 +338,13 @@ export default function TradeViewPage() {
   };
 
   return (
-    <div className="flex flex-col max-w-[1556px] mx-auto">
+    <div className="flex flex-col max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex justify-between px-6 py-4 bg-transparent">
         <h2 className="text-3xl font-semibold">
           {trade.Coins || "Unknown Coin"}
         </h2>
-        <div className="flex items-center gap-3 text-2xl">
+        <div className="flex items-center gap-3 text-1xl">
           <span>{trade.Datum || "—"}</span>
           <button
             onClick={deleteTrade}
@@ -339,10 +355,10 @@ export default function TradeViewPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[400px,1fr] gap-6 p-6">
+      <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-2 p-2">
         {/* Sidebar */}
-        <div className="flex flex-col gap-4">
-          {/* PnL Highlight */}
+        <div className="flex flex-col gap-2">
+          {/* Net PnL Badge */}
           <div
             className={`flex justify-between items-center px-4 py-3 rounded-lg text-2xl font-semibold shadow-inner ${
               Number(trade["PNL"]) >= 0
@@ -354,11 +370,8 @@ export default function TradeViewPage() {
             {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
           </div>
 
-          {/* Fixed vars */}
-          <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">
-              Details
-            </h2>
+          {/* Pre-Trade */}
+          <div className="bg-white rounded-xl shadow px-3 py-3 flex flex-col gap-2">
             {variables
               .filter((v) => v.type === "fixed")
               .sort(
@@ -366,60 +379,9 @@ export default function TradeViewPage() {
                   fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
               )
               .map((v) => {
-                if (v.name === "Trade number") {
-                  return (
-                    <div
-                      key={v.id}
-                      className="flex flex-row items-center gap-2"
-                    >
-                      <strong className="w-[120px] text-sm text-gray-600">
-                        {v.name}
-                      </strong>
-                      <span className="text-sm">
-                        {trade["Trade number"] || "—"}
-                      </span>
-                    </div>
-                  );
-                }
                 if (v.name === "PNL" || v.name === "Time exit") return null;
-
                 const value = trade[v.name] || "";
-                const layout = layoutOverrides[v.name] || "column";
-
-                if (["Coins", "Confidence"].includes(v.name)) {
-                  return (
-                    <div
-                      key={v.id}
-                      className={`flex ${
-                        layout === "row"
-                          ? "flex-row items-center gap-2"
-                          : "flex-col gap-1"
-                      }`}
-                    >
-                      <strong
-                        className={`text-sm text-gray-600 ${
-                          layout === "row" ? "w-[120px] flex-shrink-0" : "mb-1"
-                        }`}
-                      >
-                        {v.name}
-                      </strong>
-                      <CreatableSelect
-                        value={value ? { value, label: value } : null}
-                        options={(v.options || []).map((opt) => ({
-                          value: opt,
-                          label: opt,
-                        }))}
-                        onChange={(sel) =>
-                          saveTrade({
-                            ...trade,
-                            [v.name]: sel ? sel.value : "",
-                          })
-                        }
-                        placeholder="Select or type..."
-                      />
-                    </div>
-                  );
-                }
+                const layout = layoutOverrides[v.name] || "row";
 
                 if (v.name === "Datum") {
                   return (
@@ -427,7 +389,7 @@ export default function TradeViewPage() {
                       key={v.id}
                       className="flex flex-row items-center gap-2"
                     >
-                      <strong className="w-[120px] text-sm text-gray-600">
+                      <strong className="w-full text-xs text-gray-600">
                         {v.name}
                       </strong>
                       <input
@@ -436,7 +398,7 @@ export default function TradeViewPage() {
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
-                        className="border rounded px-2 py-1 text-sm flex-1"
+                        className="border rounded px-2 py-1 text-xs flex-1"
                       />
                     </div>
                   );
@@ -448,7 +410,7 @@ export default function TradeViewPage() {
                       key={v.id}
                       className="flex flex-row items-center gap-2"
                     >
-                      <strong className="w-[120px] text-sm text-gray-600">
+                      <strong className="w-full text-xs text-gray-600">
                         {v.name}
                       </strong>
                       <input
@@ -457,7 +419,7 @@ export default function TradeViewPage() {
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
-                        className="border rounded px-2 py-1 text-sm flex-1"
+                        className="border rounded px-2 py-1 text-xs  flex-1"
                       />
                     </div>
                   );
@@ -466,7 +428,7 @@ export default function TradeViewPage() {
                 if (v.name === "Reasons for entry") {
                   return (
                     <div key={v.id} className="flex flex-col gap-1">
-                      <strong className="text-sm text-gray-600">
+                      <strong className="text-xs text-gray-600">
                         {v.name}
                       </strong>
                       <textarea
@@ -475,7 +437,7 @@ export default function TradeViewPage() {
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
-                        className="border rounded px-2 py-1 text-sm resize-y"
+                        className="border rounded px-2 py-1 text-xs resize-y h-[100px]"
                       />
                     </div>
                   );
@@ -484,51 +446,45 @@ export default function TradeViewPage() {
                 return (
                   <div
                     key={v.id}
-                    className={`flex ${
-                      layout === "row"
-                        ? "flex-row items-center gap-2"
-                        : "flex-col gap-1"
-                    }`}
+                    className="grid grid-cols-[120px,1fr] items-center gap-2"
                   >
-                    <strong
-                      className={`text-sm text-gray-600 ${
-                        layout === "row" ? "w-[120px] flex-shrink-0" : "mb-1"
-                      }`}
-                    >
-                      {v.name}
-                    </strong>
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={(e) =>
-                        saveTrade({ ...trade, [v.name]: e.target.value })
-                      }
-                      className="border rounded px-2 py-1 text-sm flex-1"
-                    />
+                    <strong className="text-xs text-gray-600">{v.name}</strong>
+                    {v.name === "Reasons for entry" ? (
+                      <textarea
+                        rows={3}
+                        value={value}
+                        onChange={(e) =>
+                          saveTrade({ ...trade, [v.name]: e.target.value })
+                        }
+                        className="border rounded px-2 py-1 text-xs resize-y w-full"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={value}
+                        onChange={(e) =>
+                          saveTrade({ ...trade, [v.name]: e.target.value })
+                        }
+                        className="border rounded px-2 py-1 text-xs  w-full"
+                      />
+                    )}
                   </div>
                 );
               })}
-          </div>
 
-          <hr className="border-gray-200 my-2" />
-
-          {/* Custom vars drag-drop */}
-          <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">
-              Custom Variables
-            </h2>
+            {/* Custom Pre Variables */}
             <DndContext
               collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
+              onDragEnd={(e) => handleDragEnd(e, "pre")}
             >
               <SortableContext
                 items={variables
-                  .filter((v) => v.type === "custom")
+                  .filter((v) => v.type === "custom" && v.phase === "pre")
                   .map((v) => v.id)}
                 strategy={verticalListSortingStrategy}
               >
                 {variables
-                  .filter((v) => v.type === "custom")
+                  .filter((v) => v.type === "custom" && v.phase === "pre")
                   .map((v) => (
                     <SortableItem
                       key={v.id}
@@ -538,30 +494,25 @@ export default function TradeViewPage() {
                       setVariables={setVariables}
                       renameVariable={renameVariable}
                       deleteVariable={deleteVariable}
+                      moveVariable={moveVariable}
                       menuOpen={menuOpen}
                       setMenuOpen={setMenuOpen}
                     />
                   ))}
               </SortableContext>
             </DndContext>
+            <button
+              onClick={() => addVariable("pre")}
+              className="mt-2 text-xs text-sky-500 hover:underline"
+            >
+              + Add new pre variable
+            </button>
           </div>
 
-          <button
-            onClick={addVariable}
-            className="mt-2 text-sm text-sky-500 hover:underline"
-          >
-            + Add new category
-          </button>
-
-          <hr className="border-gray-200 my-2" />
-
-          {/* Exit & PnL */}
+          {/* Post-Trade */}
           <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">
-              Exit & Result
-            </h2>
             <div className="flex flex-row items-center gap-2">
-              <strong className="w-[120px] text-sm text-gray-600">
+              <strong className="w-[120px] text-xs text-gray-600">
                 Exit time
               </strong>
               <input
@@ -570,11 +521,11 @@ export default function TradeViewPage() {
                 onChange={(e) =>
                   saveTrade({ ...trade, ["Time exit"]: e.target.value })
                 }
-                className="border rounded px-2 py-1 text-sm flex-1"
+                className="border rounded px-2 py-1 text-xs flex-1"
               />
             </div>
-            <div className="flex flex-row items-center gap-2">
-              <strong className="w-[120px] text-sm text-gray-600">PNL</strong>
+            <div className="grid grid-cols-[120px,1fr] items-center gap-2">
+              <strong className="w-[120px] text-xs text-gray-600">PNL</strong>
               <input
                 type="number"
                 step="0.01"
@@ -582,9 +533,45 @@ export default function TradeViewPage() {
                 onChange={(e) =>
                   saveTrade({ ...trade, PNL: Number(e.target.value) })
                 }
-                className="border rounded px-2 py-1 text-sm flex-1"
+                className="border rounded px-2 py-1 text-xs w-full"
               />
             </div>
+
+            {/* Custom Post Variables */}
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleDragEnd(e, "post")}
+            >
+              <SortableContext
+                items={variables
+                  .filter((v) => v.type === "custom" && v.phase === "post")
+                  .map((v) => v.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {variables
+                  .filter((v) => v.type === "custom" && v.phase === "post")
+                  .map((v) => (
+                    <SortableItem
+                      key={v.id}
+                      v={v}
+                      trade={trade}
+                      saveTrade={saveTrade}
+                      setVariables={setVariables}
+                      renameVariable={renameVariable}
+                      deleteVariable={deleteVariable}
+                      moveVariable={moveVariable}
+                      menuOpen={menuOpen}
+                      setMenuOpen={setMenuOpen}
+                    />
+                  ))}
+              </SortableContext>
+            </DndContext>
+            <button
+              onClick={() => addVariable("post")}
+              className="mt-2 text-xs text-sky-500 hover:underline"
+            >
+              + Add new post variable
+            </button>
           </div>
         </div>
 
