@@ -12,6 +12,7 @@ import {
   PenSquare,
   Book,
   LogOut,
+  PieChart,
 } from "lucide-react";
 
 export default function LayoutHeader() {
@@ -24,6 +25,7 @@ export default function LayoutHeader() {
     { href: "/trades", icon: <List size={24} />, label: "Trades" },
     { href: "/journal", icon: <PenSquare size={24} />, label: "Journal" },
     { href: "/notebook", icon: <Book size={24} />, label: "Notebook" },
+    { href: "/analytics", icon: <PieChart size={24} />, label: "Analytics" },
   ];
 
   const handleLogout = async () => {

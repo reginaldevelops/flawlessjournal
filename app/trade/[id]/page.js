@@ -353,7 +353,8 @@ export default function TradeViewPage() {
                 : "bg-red-50 text-red-600 border border-red-200"
             }`}
           >
-            {Number(trade["PNL"]) >= 0 ? "+" : ""}${trade["PNL"] || 0}
+            {Number(trade["PNL"]) >= 0 ? "+" : ""}
+            {trade["PNL"] || 0}
           </div>
         </div>
 

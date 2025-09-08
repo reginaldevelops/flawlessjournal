@@ -35,7 +35,8 @@ export default function CumulativePnLChart({ rows = [] }) {
             netPnl < 0 ? "text-red-600" : "text-green-600"
           }`}
         >
-          {netPnl < 0 ? "-" : ""}${Math.abs(netPnl).toLocaleString()}
+          {netPnl < 0 ? "-" : ""}
+          {Math.abs(netPnl).toLocaleString()}
         </p>
       </div>
 
@@ -49,7 +50,7 @@ export default function CumulativePnLChart({ rows = [] }) {
             <XAxis fontSize={0} tickLine={false} axisLine={false} dy={6} />
             <YAxis fontSize={0} tickLine={false} axisLine={false} width={0} />
             <Tooltip
-              formatter={(value) => [`$${value.toLocaleString()}`, "PnL"]}
+              formatter={(value) => [`${value.toLocaleString()}`, "PnL"]}
               contentStyle={{
                 background: "white",
                 border: "1px solid #e5e7eb",

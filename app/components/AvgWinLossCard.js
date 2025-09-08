@@ -20,7 +20,7 @@ export default function AvgWinLossCard({ rows = [] }) {
       <p className="text-2xl font-bold text-gray-900">{ratio.toFixed(2)}</p>
 
       <div className="mt-3 flex items-center gap-2 text-sm font-medium">
-        <span className="text-green-600">${avgWin.toFixed(0)}</span>
+        <span className="text-green-600">{avgWin.toFixed(0)}</span>
         <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
           <div
             className="h-3 bg-green-500 inline-block"
@@ -33,7 +33,7 @@ export default function AvgWinLossCard({ rows = [] }) {
             }}
           />
         </div>
-        <span className="text-red-600">-${avgLoss.toFixed(0)}</span>
+        <span className="text-red-600">{avgLoss.toFixed(0)}</span>
       </div>
     </div>
   );

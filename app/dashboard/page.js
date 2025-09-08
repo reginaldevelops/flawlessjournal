@@ -413,16 +413,9 @@ export default function Dashboard() {
                   stroke="#000"
                   strokeDasharray="3 3"
                   label={{
-                    value: `Avg: $${avgWinner.toFixed(0)}`,
+                    value: `Avg: ${avgWinner.toFixed(0)}`,
                     position: "top",
                   }}
-                />
-                <ReferenceLine
-                  y={2000}
-                  stroke="#166534"
-                  strokeWidth={3}
-                  ifOverflow="extendDomain"
-                  label={{ value: "Target $2000", position: "insideTopRight" }}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -449,16 +442,9 @@ export default function Dashboard() {
                   stroke="#000"
                   strokeDasharray="3 3"
                   label={{
-                    value: `Avg: $${avgLoser.toFixed(0)}`,
+                    value: `Avg: ${avgLoser.toFixed(0)}`,
                     position: "top",
                   }}
-                />
-                <ReferenceLine
-                  y={2000}
-                  stroke="#690202"
-                  strokeWidth={3}
-                  ifOverflow="extendDomain"
-                  label={{ value: "Target $2000", position: "insideTopRight" }}
                 />
               </BarChart>
             </ResponsiveContainer>

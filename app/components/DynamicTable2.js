@@ -47,7 +47,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .map((v) => v?.name)
       .filter(Boolean)
       .filter((name) => !fixedLower.includes(name.toLowerCase()));
-    // ❌ filtert alles wat al in fixedCols zit eruit (case-insensitive)
+    // filtert alles wat al in fixedCols zit eruit (case-insensitive)
 
     const cols = [...fixedCols, ...variableNames];
     const uniqueCols = [...new Set(cols)];
@@ -316,7 +316,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                           Number(val) >= 0 ? "text-green-600" : "text-red-600"
                         }`}
                       >
-                        {val ? `$${val}` : "—"}
+                        {val ? `${val}` : "—"}
                       </td>
                     );
                   }
