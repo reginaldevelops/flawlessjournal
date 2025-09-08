@@ -14,7 +14,7 @@ export default function NotesArea() {
       const { data, error } = await supabase
         .from("notes")
         .select("content")
-        .eq("id", 1)
+        .eq("type", "note")
         .single();
 
       if (!error && data) setNote(data.content || "");
@@ -31,7 +31,8 @@ export default function NotesArea() {
 
       const { error } = await supabase
         .from("notes")
-        .upsert({ id: 1, content: note });
+        .update({ content: note })
+        .eq("type", "note");
 
       if (error) console.error("Save note error:", error);
       setLoading(false);
@@ -42,6 +43,9 @@ export default function NotesArea() {
 
   return (
     <div>
+      <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
+        Quick Notes
+      </h3>
       <StyledTextArea value={note} onChange={(e) => setNote(e.target.value)} />
       {loading && <small>Opslaan...</small>}
     </div>

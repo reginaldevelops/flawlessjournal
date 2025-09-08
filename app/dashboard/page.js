@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from "recharts";
 import BalanceCard from "../components/BalanceCard";
+import GoalsArea from "../components/GoalsArea";
 
 // 📊 Percent van dag
 const getPercentOfDay = (date) => {
@@ -259,7 +260,7 @@ export default function Dashboard() {
       {/* 📊 Sessions bar */}
       <div className="mb-4">
         <h2 className="mb-2 text-base sm:text-lg text-slate-800">Sessions</h2>
-        <div className="w-full mx-auto relative h-12 bg-slate-100 rounded-lg">
+        <div className="w-full mx-auto relative h-12 bg-white rounded-lg">
           {sessions.map((s, idx) => {
             let start = s.start * 60;
             let end = s.end * 60;
@@ -462,29 +463,10 @@ export default function Dashboard() {
                 {progress.toFixed(0)}%
               </div>
             </div>
-
-            <h3 className="mt-3 mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Weekly Goals
-            </h3>
-            <ul className="flex flex-col gap-2">
-              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
-                🎯 Risk <strong>1200$ / 2400$</strong> on B- and B+ setups
-              </li>
-              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
-                ⛔ Aim for 15M/1H Highs/lows. Make sure RR is{" "}
-                <strong>higher than 0.7 else use a Limit order!</strong>
-              </li>
-              <li className="flex items-center gap-2 bg-slate-50 border border-gray-200 p-2 sm:p-3 rounded-lg text-[0.75rem] sm:text-sm text-gray-800 font-medium">
-                🎯 <strong>Wacht op goede USDT.D bias</strong> en kies coin die
-                meest aligned.
-              </li>
-            </ul>
+            <GoalsArea />
           </div>
 
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Quick Notes
-            </h3>
             <NotesArea />
           </div>
         </div>

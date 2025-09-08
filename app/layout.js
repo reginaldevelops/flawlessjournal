@@ -31,7 +31,7 @@ export default function RootLayout({ children }) {
         <StyledComponentsRegistry>
           <GlobalStyles />
           <AuthWrapper>
-            <div className="min-h-screen flex flex-col md:flex-row bg-gradient-to-br from-[#e1c4f4] to-[#a8c5ff]">
+            <div className="min-h-screen flex flex-col md:flex-row bg-gradient-to-br from-[#ece9e6] to-[#ffffff]">
               {!hideLayout && <Header />}
               <main className="flex-1 flex flex-col min-h-screen">
                 {children}
