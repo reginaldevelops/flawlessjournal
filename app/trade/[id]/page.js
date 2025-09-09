@@ -384,8 +384,95 @@ export default function TradeViewPage() {
               .map((v) => {
                 if (v.name === "PNL" || v.name === "Time exit") return null;
                 const value = trade[v.name] || "";
-                const layout = layoutOverrides[v.name] || "row";
 
+                // ✅ Trade number read-only
+                if (v.name === "Trade number") {
+                  return (
+                    <div
+                      key={v.id}
+                      className="grid grid-cols-[120px,1fr] items-center gap-2"
+                    >
+                      <strong className="text-xs text-gray-600">
+                        {v.name}
+                      </strong>
+                      <input
+                        type="text"
+                        value={value}
+                        readOnly
+                        className="border rounded px-2 py-1 text-xs bg-gray-100 w-full"
+                      />
+                    </div>
+                  );
+                }
+
+                // ✅ Coins & Confidence dropdown
+                if (v.name === "Coins" || v.name === "Confidence") {
+                  return (
+                    <div
+                      key={v.id}
+                      className="grid grid-cols-[120px,1fr] items-center gap-2"
+                    >
+                      <strong className="text-xs text-gray-600">
+                        {v.name}
+                      </strong>
+                      <CreatableSelect
+                        isClearable
+                        value={value ? { value, label: value } : null}
+                        options={v.options.map((opt) => ({
+                          value: opt,
+                          label: opt,
+                        }))}
+                        onChange={(sel) =>
+                          saveTrade({
+                            ...trade,
+                            [v.name]: sel ? sel.value : null,
+                          })
+                        }
+                        onCreateOption={async (inputValue) => {
+                          const newOptions = [...v.options, inputValue];
+                          await supabase
+                            .from("variables")
+                            .update({ options: newOptions })
+                            .eq("id", v.id);
+
+                          setVariables((prev) =>
+                            prev.map((x) =>
+                              x.id === v.id ? { ...x, options: newOptions } : x
+                            )
+                          );
+
+                          saveTrade({ ...trade, [v.name]: inputValue });
+                        }}
+                        placeholder="Select or type..."
+                        className="react-select text-xs"
+                        classNamePrefix="react-select"
+                        styles={{
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "26px",
+                            height: "33px",
+                            fontSize: "0.75rem",
+                          }),
+                          valueContainer: (base) => ({
+                            ...base,
+                            padding: "5px 5px",
+                          }),
+                          input: (base) => ({
+                            ...base,
+                            margin: 0,
+                            padding: 0,
+                          }),
+                          menu: (base) => ({
+                            ...base,
+                            fontSize: "0.75rem",
+                          }),
+                        }}
+                      />
+                    </div>
+                  );
+                }
+
+                // ✅ Datum
                 if (v.name === "Datum") {
                   return (
                     <div
@@ -407,6 +494,7 @@ export default function TradeViewPage() {
                   );
                 }
 
+                // ✅ Entreetijd
                 if (v.name === "Entreetijd") {
                   return (
                     <div
@@ -422,12 +510,13 @@ export default function TradeViewPage() {
                         onChange={(e) =>
                           saveTrade({ ...trade, [v.name]: e.target.value })
                         }
-                        className="border rounded px-2 py-1 text-xs  flex-1"
+                        className="border rounded px-2 py-1 text-xs flex-1"
                       />
                     </div>
                   );
                 }
 
+                // ✅ Reasons for entry
                 if (v.name === "Reasons for entry") {
                   return (
                     <div key={v.id} className="flex flex-col gap-1">
@@ -446,31 +535,21 @@ export default function TradeViewPage() {
                   );
                 }
 
+                // ✅ Default fallback
                 return (
                   <div
                     key={v.id}
                     className="grid grid-cols-[120px,1fr] items-center gap-2"
                   >
                     <strong className="text-xs text-gray-600">{v.name}</strong>
-                    {v.name === "Reasons for entry" ? (
-                      <textarea
-                        rows={3}
-                        value={value}
-                        onChange={(e) =>
-                          saveTrade({ ...trade, [v.name]: e.target.value })
-                        }
-                        className="border rounded px-2 py-1 text-xs resize-y w-full"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={value}
-                        onChange={(e) =>
-                          saveTrade({ ...trade, [v.name]: e.target.value })
-                        }
-                        className="border rounded px-2 py-1 text-xs  w-full"
-                      />
-                    )}
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={(e) =>
+                        saveTrade({ ...trade, [v.name]: e.target.value })
+                      }
+                      className="border rounded px-2 py-1 text-xs w-full"
+                    />
                   </div>
                 );
               })}
