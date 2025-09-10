@@ -5,10 +5,40 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
+import { Parser } from "expr-eval";
 
 /* ---------- VariableItem ---------- */
 function VariableItem({ v, trade, saveTrade, setVariables }) {
   const value = trade[v.name] || "";
+  const [manualOverride, setManualOverride] = useState(false);
+
+  useEffect(() => {
+    if (v.varType === "calculated" && !manualOverride && v.formula) {
+      try {
+        const parser = new Parser();
+        const expr = parser.parse(v.formula);
+
+        const values = Object.fromEntries(
+          Object.entries(trade).map(([k, val]) => [
+            k.replace(/\s+/g, "").toLowerCase(),
+            parseFloat(val),
+          ])
+        );
+
+        const calc = expr.evaluate(values);
+
+        if (!isNaN(calc) && calc.toFixed(2) !== (value?.toString() || "")) {
+          saveTrade({ ...trade, [v.name]: calc.toFixed(2) });
+        }
+      } catch (err) {
+        console.warn(`⚠️ Invalid formula for ${v.name}:`, err.message);
+        if (value !== "N/A") {
+          saveTrade({ ...trade, [v.name]: "N/A" });
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade, v.formula, v.varType, manualOverride]);
 
   // Dropdown
   if (!v.varType || v.varType === "dropdown") {
@@ -100,6 +130,36 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
+  // calculated
+
+  if (v.varType === "calculated") {
+    const handleChange = (e) => {
+      setManualOverride(true);
+      saveTrade({ ...trade, [v.name]: e.target.value });
+    };
+
+    return (
+      <div className="bg-white rounded-lg text-sm p-1">
+        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+          <span className="text-xs text-gray-600">{v.name}</span>
+          <input
+            type="number"
+            value={value}
+            onChange={handleChange}
+            className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
+          />
+          {manualOverride && (
+            <button
+              onClick={() => setManualOverride(false)}
+              className="text-[10px] text-blue-600 underline ml-1"
+            >
+              reset
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
   // Text
   if (v.varType === "text") {
     return (

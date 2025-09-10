@@ -11,6 +11,7 @@ import {
   endOfMonth,
   format,
 } from "date-fns";
+import DeepDiveTab from "../components/DeepDiveTab";
 
 /* ---------------- OverviewTab component ---------------- */
 function OverviewTab({ startDate, endDate, selectedVariable, selectedValues }) {
@@ -399,7 +400,14 @@ export default function AnalyticsPage() {
         />
       )}
       {activeTab === "deepdive" && (
-        <div className="text-gray-600">🔎 Deep Dive (coming soon)</div>
+        <div className="text-gray-600">
+          <DeepDiveTab
+            startDate={startDate}
+            endDate={endDate}
+            selectedVariable={selectedVariable}
+            selectedValues={selectedValues}
+          />
+        </div>
       )}
     </div>
   );

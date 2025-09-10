@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DndContext, closestCenter, DragOverlay } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -12,9 +12,66 @@ import { CSS } from "@dnd-kit/utilities";
 import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "../lib/supabaseClient";
 import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
+import { Parser } from "expr-eval";
+
+// 🔄 Recalc helper
+async function recalcAllTrades(variable) {
+  if (variable.varType !== "calculated" || !variable.formula) return;
+
+  const parser = new Parser();
+  let expr;
+  try {
+    expr = parser.parse(variable.formula);
+  } catch (err) {
+    console.warn("⚠️ Invalid formula for", variable.name, err.message);
+    return;
+  }
+
+  const { data: trades, error } = await supabase
+    .from("trades")
+    .select("id, data");
+  if (error) {
+    console.error("❌ Fetch trades error:", error);
+    return;
+  }
+
+  for (const trade of trades) {
+    const values = Object.fromEntries(
+      Object.entries(trade.data).map(([k, val]) => [
+        k.replace(/\s+/g, "").toLowerCase(),
+        parseFloat(val),
+      ])
+    );
+
+    const hasAllInputs = expr
+      .variables()
+      .every((key) => values[key] !== undefined && !isNaN(values[key]));
+
+    if (!hasAllInputs) continue;
+
+    try {
+      const calc = expr.evaluate(values);
+      if (!isNaN(calc)) {
+        trade.data[variable.name] = calc.toFixed(2);
+        await supabase
+          .from("trades")
+          .update({ data: trade.data })
+          .eq("id", trade.id);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Could not calc for trade ${trade.id}:`, err.message);
+    }
+  }
+}
 
 /* ---------- Sortable Item ---------- */
-function SortableItemModal({ v, onRename, onDelete, onToggleVisible }) {
+function SortableItemModal({
+  v,
+  onRename,
+  onDelete,
+  onToggleVisible,
+  onEditFormula,
+}) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
       id: v.id,
@@ -44,7 +101,6 @@ function SortableItemModal({ v, onRename, onDelete, onToggleVisible }) {
 
       {/* Actions */}
       <div className="flex gap-2 text-gray-500">
-        {/* Show/Hide toggle */}
         <button
           onClick={() => onToggleVisible(v)}
           className="hover:text-gray-700"
@@ -52,12 +108,19 @@ function SortableItemModal({ v, onRename, onDelete, onToggleVisible }) {
           {v.visible ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
 
-        {/* Rename + Delete only for custom */}
         {v.type === "custom" && (
           <>
             <button onClick={() => onRename(v)} className="hover:text-blue-600">
               <Pencil size={16} />
             </button>
+            {v.varType === "calculated" && (
+              <button
+                onClick={() => onEditFormula(v)}
+                className="hover:text-purple-600"
+              >
+                ƒx
+              </button>
+            )}
             <button onClick={() => onDelete(v)} className="hover:text-red-600">
               <Trash2 size={16} />
             </button>
@@ -74,6 +137,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newVarName, setNewVarName] = useState("");
   const [newVarType, setNewVarType] = useState("text");
+  const [newVarFormula, setNewVarFormula] = useState("");
 
   const handleRename = async (variable) => {
     const newName = prompt("New name?", variable.name);
@@ -87,9 +151,64 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     );
   };
 
+  const handleEditFormula = async (variable) => {
+    const newFormula = prompt("New formula?", variable.formula || "");
+    if (!newFormula || newFormula === variable.formula) return;
+
+    // ✅ validate before saving
+    try {
+      const parser = new Parser();
+      parser.parse(newFormula);
+    } catch (err) {
+      alert(`❌ Invalid formula: ${err.message}`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("variables")
+      .update({ formula: newFormula })
+      .eq("id", variable.id);
+
+    if (error) {
+      console.error("❌ Error updating formula:", error);
+      return;
+    }
+
+    setVariables((prev) =>
+      prev.map((x) =>
+        x.id === variable.id ? { ...x, formula: newFormula } : x
+      )
+    );
+
+    await recalcAllTrades({ ...variable, formula: newFormula });
+  };
+
   const handleDelete = async (variable) => {
-    if (!confirm(`Delete variable "${variable.name}"?`)) return;
-    await supabase.from("variables").delete().eq("id", variable.id);
+    if (
+      !confirm(
+        `Delete variable "${variable.name}"? This will also remove it from all trades.`
+      )
+    )
+      return;
+
+    const { error: varError } = await supabase
+      .from("variables")
+      .delete()
+      .eq("id", variable.id);
+    if (varError) {
+      console.error("❌ Error deleting variable definition:", varError);
+      return;
+    }
+
+    const { error: tradeError } = await supabase.rpc("remove_variable_key", {
+      key_name: variable.name,
+    });
+
+    if (tradeError) {
+      console.error("❌ Error removing key from trades:", tradeError);
+      return;
+    }
+
     setVariables((prev) => prev.filter((x) => x.id !== variable.id));
   };
 
@@ -105,32 +224,22 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     );
   };
 
-  const handleDragStart = (event) => {
-    setActiveId(event.active.id);
-  };
+  const handleDragStart = (event) => setActiveId(event.active.id);
 
   const handleDragEnd = async (event) => {
     setActiveId(null);
-
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const activeVar = variables.find((v) => v.id === active.id);
     const overVar = variables.find((v) => v.id === over.id);
-
     if (!activeVar) return;
 
     let targetPhase = activeVar.phase;
-    if (overVar && overVar.phase !== activeVar.phase) {
+    if (overVar && overVar.phase !== activeVar.phase)
       targetPhase = overVar.phase;
-    }
-
-    if (!overVar && event.over?.id === "post-dropzone") {
-      targetPhase = "post";
-    }
-    if (!overVar && event.over?.id === "pre-dropzone") {
-      targetPhase = "pre";
-    }
+    if (!overVar && event.over?.id === "post-dropzone") targetPhase = "post";
+    if (!overVar && event.over?.id === "pre-dropzone") targetPhase = "pre";
 
     const varsInTarget = variables.filter((v) => v.phase === targetPhase);
     const oldIndex = variables
@@ -160,7 +269,6 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
       .from("variables")
       .update({ phase: targetPhase })
       .eq("id", activeVar.id);
-
     await Promise.all(
       reordered.map((v, index) =>
         supabase.from("variables").update({ order: index }).eq("id", v.id)
@@ -178,10 +286,11 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           name: newVarName.trim(),
           type: "custom",
           varType: newVarType,
+          formula: newVarType === "calculated" ? newVarFormula.trim() : null,
           options: [],
           editable: true,
           phase: "pre",
-          order: 0, // ensure it shows at the top
+          order: 0,
         },
       ])
       .select();
@@ -192,10 +301,14 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     }
 
     if (data) {
-      setVariables((prev) => [data[0], ...prev]); // add at top
+      const variable = data[0];
+      setVariables((prev) => [variable, ...prev]);
       setNewVarName("");
       setNewVarType("text");
+      setNewVarFormula("");
       setShowAddForm(false);
+
+      await recalcAllTrades(variable);
     }
   };
 
@@ -215,6 +328,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
               key={v.id}
               v={v}
               onRename={handleRename}
+              onEditFormula={handleEditFormula}
               onDelete={handleDelete}
               onToggleVisible={handleToggleVisible}
             />
@@ -240,39 +354,55 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
             + Add new variable
           </button>
         ) : (
-          <div className="mb-4 flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Variable name"
-              value={newVarName}
-              onChange={(e) => setNewVarName(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-sm flex-1"
-            />
-            <select
-              value={newVarType}
-              onChange={(e) => setNewVarType(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-sm"
-            >
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="dropdown">Dropdown</option>
-              <option value="time">Time</option>
-              <option value="date">Date</option>
-              <option value="textarea">Textarea</option>
-              <option value="chart">Chart</option>
-            </select>
-            <button
-              onClick={handleAdd}
-              className="px-3 py-1 bg-emerald-500 text-white rounded text-sm hover:bg-emerald-600"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="px-3 py-1 bg-gray-200 rounded text-sm hover:bg-gray-300"
-            >
-              Cancel
-            </button>
+          <div className="mb-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Variable name"
+                value={newVarName}
+                onChange={(e) => setNewVarName(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm flex-1"
+              />
+              <select
+                value={newVarType}
+                onChange={(e) => setNewVarType(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm"
+              >
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="dropdown">Dropdown</option>
+                <option value="time">Time</option>
+                <option value="date">Date</option>
+                <option value="textarea">Textarea</option>
+                <option value="chart">Chart</option>
+                <option value="calculated">Calculated</option>
+              </select>
+            </div>
+
+            {newVarType === "calculated" && (
+              <input
+                type="text"
+                placeholder="Formula"
+                value={newVarFormula}
+                onChange={(e) => setNewVarFormula(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm"
+              />
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleAdd}
+                className="px-3 py-1 bg-emerald-500 text-white rounded text-sm hover:bg-emerald-600"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="px-3 py-1 bg-gray-200 rounded text-sm hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
@@ -289,6 +419,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                 key={activeId}
                 v={variables.find((x) => x.id === activeId)}
                 onRename={handleRename}
+                onEditFormula={handleEditFormula}
                 onDelete={handleDelete}
                 onToggleVisible={handleToggleVisible}
               />
