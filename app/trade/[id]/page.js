@@ -322,7 +322,7 @@ export default function TradeViewPage() {
           {/* Pre-Trade */}
           <div className="bg-white rounded-xl shadow px-3 py-3 flex flex-col gap-2">
             {variables
-              .filter((v) => v.phase === "pre")
+              .filter((v) => v.phase === "pre" && v.visible)
               .map((v) => (
                 <VariableItem
                   key={v.id}
@@ -337,7 +337,7 @@ export default function TradeViewPage() {
           {/* Post-Trade */}
           <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
             {variables
-              .filter((v) => v.phase === "post")
+              .filter((v) => v.phase === "post" && v.visible)
               .map((v) => (
                 <VariableItem
                   key={v.id}
@@ -354,7 +354,7 @@ export default function TradeViewPage() {
         <div className="flex flex-col gap-4">
           {variables.filter((v) => v.varType === "chart").length > 0 ? (
             variables
-              .filter((v) => v.varType === "chart")
+              .filter((v) => v.varType === "chart" && v.visible)
               .map((v) => (
                 <div key={v.id} className="bg-white rounded-xl shadow p-4">
                   <h3 className="font-semibold mb-2">{v.name}</h3>

@@ -11,9 +11,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "../lib/supabaseClient";
+import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 
 /* ---------- Sortable Item ---------- */
-function SortableItemModal({ v, onRename, onDelete }) {
+function SortableItemModal({ v, onRename, onDelete, onToggleVisible }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
       id: v.id,
@@ -30,37 +31,38 @@ function SortableItemModal({ v, onRename, onDelete }) {
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes} // keep attributes on the container
+      {...attributes}
       className="flex items-center justify-between p-2 border rounded bg-white mb-1"
     >
-      {/* ✅ Drag handle only */}
-      <span
-        {...listeners} // only listeners here
-        className="cursor-grab text-gray-400 mr-2"
-      >
+      {/* Drag handle */}
+      <span {...listeners} className="cursor-grab text-gray-400 mr-2">
         ⠿
       </span>
 
+      {/* Variable name */}
       <span className="flex-1">{v.name}</span>
 
-      <div className="flex gap-2 text-xs">
+      {/* Actions */}
+      <div className="flex gap-2 text-gray-500">
+        {/* Show/Hide toggle */}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRename(v);
-          }}
+          onClick={() => onToggleVisible(v)}
+          className="hover:text-gray-700"
         >
-          ✏ Rename
+          {v.visible ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(v);
-          }}
-          className="text-red-500"
-        >
-          🗑 Delete
-        </button>
+
+        {/* Rename + Delete only for custom */}
+        {v.type === "custom" && (
+          <>
+            <button onClick={() => onRename(v)} className="hover:text-blue-600">
+              <Pencil size={16} />
+            </button>
+            <button onClick={() => onDelete(v)} className="hover:text-red-600">
+              <Trash2 size={16} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -89,6 +91,18 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     if (!confirm(`Delete variable "${variable.name}"?`)) return;
     await supabase.from("variables").delete().eq("id", variable.id);
     setVariables((prev) => prev.filter((x) => x.id !== variable.id));
+  };
+
+  const handleToggleVisible = async (variable) => {
+    const newValue = !variable.visible;
+    await supabase
+      .from("variables")
+      .update({ visible: newValue })
+      .eq("id", variable.id);
+
+    setVariables((prev) =>
+      prev.map((x) => (x.id === variable.id ? { ...x, visible: newValue } : x))
+    );
   };
 
   const handleDragStart = (event) => {
@@ -202,6 +216,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
               v={v}
               onRename={handleRename}
               onDelete={handleDelete}
+              onToggleVisible={handleToggleVisible}
             />
           ))}
         </SortableContext>
@@ -271,9 +286,11 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           <DragOverlay dropAnimation={{ duration: 200, easing: "ease-out" }}>
             {activeId ? (
               <SortableItemModal
-                v={variables.find((v) => v.id === activeId)}
-                onRename={() => {}}
-                onDelete={() => {}}
+                key={v.id}
+                v={v}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                onToggleVisible={handleToggleVisible}
               />
             ) : null}
           </DragOverlay>
