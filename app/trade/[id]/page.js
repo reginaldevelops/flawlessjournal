@@ -12,6 +12,20 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   const value = trade[v.name] || "";
   const [manualOverride, setManualOverride] = useState(false);
 
+  // 🔢 Numeric input helpers
+  const handleNumericChange = (e) => {
+    const val = e.target.value;
+    saveTrade({ ...trade, [v.name]: val }); // keep raw string while typing
+  };
+
+  const handleNumericBlur = (e) => {
+    const val = e.target.value;
+    saveTrade({
+      ...trade,
+      [v.name]: val === "" ? "" : Number(val), // only coerce on blur
+    });
+  };
+
   useEffect(() => {
     if (v.varType === "calculated" && !manualOverride && v.formula) {
       try {
@@ -145,9 +159,14 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           <input
             type="number"
             value={value}
-            onChange={handleChange}
+            onChange={(e) => {
+              setManualOverride(true);
+              handleNumericChange(e);
+            }}
+            onBlur={handleNumericBlur}
             className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
           />
+
           {manualOverride && (
             <button
               onClick={() => setManualOverride(false)}
@@ -186,9 +205,8 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           <input
             type="number"
             value={value}
-            onChange={(e) =>
-              saveTrade({ ...trade, [v.name]: Number(e.target.value) })
-            }
+            onChange={handleNumericChange}
+            onBlur={handleNumericBlur}
             className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
           />
         </div>
