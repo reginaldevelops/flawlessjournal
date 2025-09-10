@@ -286,8 +286,8 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           <DragOverlay dropAnimation={{ duration: 200, easing: "ease-out" }}>
             {activeId ? (
               <SortableItemModal
-                key={v.id}
-                v={v}
+                key={activeId}
+                v={variables.find((x) => x.id === activeId)}
                 onRename={handleRename}
                 onDelete={handleDelete}
                 onToggleVisible={handleToggleVisible}
