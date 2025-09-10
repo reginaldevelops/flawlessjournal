@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
+import ManageVariablesModal from "../../components/ManageVariablesModal";
 
 /* 🟢 DnD-kit imports */
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -27,20 +28,11 @@ function useOutsideClick(ref, onClickOutside) {
   }, [ref, onClickOutside]);
 }
 
-function SortableItem({
-  v,
-  trade,
-  saveTrade,
-  setVariables,
-  renameVariable,
-  deleteVariable,
-  menuOpen,
-  setMenuOpen,
-}) {
+function SortableItem({ v, trade, saveTrade, setVariables }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: v.id });
 
-  const value = trade[v.name] || null;
+  const value = trade[v.name] || "";
 
   return (
     <div
@@ -49,108 +41,136 @@ function SortableItem({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className="flex flex-col gap-2 bg-white rounded-lg text-sm p-1"
+      className="bg-white rounded-lg text-sm p-1"
     >
-      {/* Header */}
-      <div className="flex justify-between text-xs">
+      <div className="grid grid-cols-[20px,1fr] items-center gap-2">
+        {/* Drag handle */}
         <div
           {...attributes}
           {...listeners}
-          className="cursor-grab px-1 text-xs select-none"
+          className="cursor-grab select-none text-xs text-gray-400"
         >
-          ⠿ <span className="text-xs truncate">{v.name}</span>
+          ⠿
         </div>
 
-        {v.editable && (
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(menuOpen === v.id ? null : v.id)}
-              className="bg-none border-none text-sm cursor-pointer"
-            >
-              ⋮
-            </button>
-            {menuOpen === v.id && (
-              <div className="absolute top-5 right-0 bg-white border border-gray-200 rounded-md shadow-md flex flex-col z-10 text-xs">
-                <button
-                  className="px-2 py-1 hover:bg-gray-100 text-left"
-                  onClick={() => {
-                    const newName = prompt("New name?", v.name);
-                    if (newName) renameVariable(v, newName.trim());
-                  }}
-                >
-                  ✏ Rename
-                </button>
-                <button
-                  className="px-2 py-1 hover:bg-gray-100 text-left"
-                  onClick={() =>
-                    moveVariable(v, v.phase === "pre" ? "post" : "pre")
-                  }
-                >
-                  {v.phase === "pre" ? "➡ Change to post" : "⬅ Change to pre"}
-                </button>
-                <button
-                  className="px-2 py-1 hover:bg-gray-100 text-red-600 text-left"
-                  onClick={() => deleteVariable(v)}
-                >
-                  🗑 Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Field (label + input/select) */}
+        <div className="flex flex-col gap-1">
+          {(!v.varType || v.varType === "dropdown") && (
+            <>
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <CreatableSelect
+                isClearable
+                value={value ? { value, label: value } : null}
+                options={v.options.map((opt) => ({ value: opt, label: opt }))}
+                onChange={(sel) =>
+                  saveTrade({ ...trade, [v.name]: sel ? sel.value : null })
+                }
+                onCreateOption={async (inputValue) => {
+                  const newOptions = [...v.options, inputValue];
+                  await supabase
+                    .from("variables")
+                    .update({ options: newOptions })
+                    .eq("id", v.id);
+                  setVariables((prev) =>
+                    prev.map((x) =>
+                      x.id === v.id ? { ...x, options: newOptions } : x
+                    )
+                  );
+                  saveTrade({ ...trade, [v.name]: inputValue });
+                }}
+                placeholder="Select or type..."
+                className="react-select text-xs"
+                classNamePrefix="react-select"
+              />
+            </>
+          )}
+
+          {v.varType === "text" && (
+            <div className="grid grid-cols-[120px,1fr] items-center gap-2">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <input
+                type="text"
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: e.target.value })
+                }
+                className="border rounded px-2 py-1 text-xs w-full"
+              />
+            </div>
+          )}
+
+          {v.varType === "number" && (
+            <div className="grid grid-cols-[120px,1fr] items-center gap-2">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <input
+                type="number"
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: Number(e.target.value) })
+                }
+                className="border rounded px-2 py-1 text-xs w-full"
+              />
+            </div>
+          )}
+
+          {v.varType === "time" && (
+            <div className="grid grid-cols-[120px,1fr] items-center gap-2">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <input
+                type="time"
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: e.target.value })
+                }
+                className="border rounded px-2 py-1 text-xs w-full"
+              />
+            </div>
+          )}
+
+          {v.varType === "date" && (
+            <div className="grid grid-cols-[90px,1fr] items-center gap-2">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <input
+                type="date"
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: e.target.value })
+                }
+                className="border rounded px-2 py-1 text-xs w-full max-w-[140px]"
+              />
+            </div>
+          )}
+
+          {v.varType === "textarea" && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <textarea
+                rows={3}
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: e.target.value })
+                }
+                className="border rounded px-2 py-1 text-xs resize-y w-full h-[100px]"
+              />
+            </div>
+          )}
+
+          {v.varType === "chart" && (
+            <div className="grid grid-cols-[90px,1fr] items-center gap-2">
+              <span className="text-xs text-gray-600">{v.name}</span>
+              <input
+                type="text"
+                value={value}
+                onChange={(e) =>
+                  saveTrade({ ...trade, [v.name]: e.target.value })
+                }
+                placeholder="Paste chart link..."
+                className="border rounded px-2 py-1 text-xs w-full"
+              />
+            </div>
+          )}
+        </div>
       </div>
-
-      <CreatableSelect
-        isClearable
-        value={value ? { value, label: value } : null}
-        options={v.options.map((opt) => ({
-          value: opt,
-          label: opt,
-        }))}
-        onChange={(sel) =>
-          saveTrade({
-            ...trade,
-            [v.name]: sel ? sel.value : null,
-          })
-        }
-        onCreateOption={async (inputValue) => {
-          const newOptions = [...v.options, inputValue];
-          await supabase
-            .from("variables")
-            .update({ options: newOptions })
-            .eq("id", v.id);
-
-          setVariables((prev) =>
-            prev.map((x) => (x.id === v.id ? { ...x, options: newOptions } : x))
-          );
-
-          saveTrade({ ...trade, [v.name]: inputValue });
-        }}
-        placeholder="Select or type..."
-        className="react-select text-xs"
-        classNamePrefix="react-select"
-        styles={{
-          control: (base) => ({
-            ...base,
-            minHeight: "26px",
-            height: "33px",
-            fontSize: "0.75rem",
-          }),
-          valueContainer: (base) => ({
-            ...base,
-            padding: "5px 5px",
-          }),
-          input: (base) => ({
-            ...base,
-            margin: 0,
-            padding: 0,
-          }),
-          menu: (base) => ({
-            ...base,
-            fontSize: "0.75rem",
-          }),
-        }}
-      />
     </div>
   );
 }
@@ -161,6 +181,7 @@ export default function TradeViewPage() {
   const [variables, setVariables] = useState([]);
   const [menuOpen, setMenuOpen] = useState(null);
   const [showUsdtChart, setShowUsdtChart] = useState(true);
+  const [showManageModal, setShowManageModal] = useState(false);
 
   const fixedOrder = [
     "Trade number",
@@ -241,12 +262,19 @@ export default function TradeViewPage() {
   const addVariable = async (phase) => {
     const newKey = prompt("Name of new variable?");
     if (!newKey) return;
+    const varType = prompt(
+      "Type? (dropdown, text, number, time, chart)",
+      "text"
+    );
+    if (!varType) return;
+
     const { data, error } = await supabase
       .from("variables")
       .insert([
         {
           name: newKey.trim(),
           type: "custom",
+          varType: varType.trim(),
           options: [],
           editable: true,
           phase,
@@ -316,20 +344,18 @@ export default function TradeViewPage() {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const customVars = variables.filter(
-      (v) => v.type === "custom" && v.phase === phase
-    );
-    const oldIndex = customVars.findIndex((v) => v.id === active.id);
-    const newIndex = customVars.findIndex((v) => v.id === over.id);
-    const reordered = arrayMove(customVars, oldIndex, newIndex);
+    const varsInPhase = variables.filter((v) => v.phase === phase);
+    const oldIndex = varsInPhase.findIndex((v) => v.id === active.id);
+    const newIndex = varsInPhase.findIndex((v) => v.id === over.id);
+
+    const reordered = arrayMove(varsInPhase, oldIndex, newIndex);
 
     setVariables((prev) => {
-      const others = prev.filter(
-        (v) => !(v.type === "custom" && v.phase === phase)
-      );
+      const others = prev.filter((v) => v.phase !== phase);
       return [...others, ...reordered];
     });
 
+    // ✅ Save new order to Supabase
     await Promise.all(
       reordered.map((v, index) =>
         supabase.from("variables").update({ order: index }).eq("id", v.id)
@@ -373,200 +399,29 @@ export default function TradeViewPage() {
       <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-2 p-2">
         {/* Sidebar */}
         <div className="flex flex-col gap-2">
+          {/* Variable management trigger */}
+          <div className="mb-2">
+            <button
+              onClick={() => setShowManageModal(true)}
+              className="px-3 py-1 bg-sky-100 hover:bg-sky-200 text-sky-600 rounded text-sm font-medium"
+            >
+              Variable Management
+            </button>
+          </div>
           {/* Pre-Trade */}
           <div className="bg-white rounded-xl shadow px-3 py-3 flex flex-col gap-2">
-            {variables
-              .filter((v) => v.type === "fixed")
-              .sort(
-                (a, b) =>
-                  fixedOrder.indexOf(a.name) - fixedOrder.indexOf(b.name)
-              )
-              .map((v) => {
-                if (v.name === "PNL" || v.name === "Time exit") return null;
-                const value = trade[v.name] || "";
-
-                // ✅ Trade number read-only
-                if (v.name === "Trade number") {
-                  return (
-                    <div
-                      key={v.id}
-                      className="grid grid-cols-[120px,1fr] items-center gap-2"
-                    >
-                      <strong className="text-xs text-gray-600">
-                        {v.name}
-                      </strong>
-                      <input
-                        type="text"
-                        value={value}
-                        readOnly
-                        className="border rounded px-2 py-1 text-xs bg-gray-100 w-full"
-                      />
-                    </div>
-                  );
-                }
-
-                // ✅ Coins & Confidence dropdown
-                if (v.name === "Coins" || v.name === "Confidence") {
-                  return (
-                    <div
-                      key={v.id}
-                      className="grid grid-cols-[120px,1fr] items-center gap-2"
-                    >
-                      <strong className="text-xs text-gray-600">
-                        {v.name}
-                      </strong>
-                      <CreatableSelect
-                        isClearable
-                        value={value ? { value, label: value } : null}
-                        options={v.options.map((opt) => ({
-                          value: opt,
-                          label: opt,
-                        }))}
-                        onChange={(sel) =>
-                          saveTrade({
-                            ...trade,
-                            [v.name]: sel ? sel.value : null,
-                          })
-                        }
-                        onCreateOption={async (inputValue) => {
-                          const newOptions = [...v.options, inputValue];
-                          await supabase
-                            .from("variables")
-                            .update({ options: newOptions })
-                            .eq("id", v.id);
-
-                          setVariables((prev) =>
-                            prev.map((x) =>
-                              x.id === v.id ? { ...x, options: newOptions } : x
-                            )
-                          );
-
-                          saveTrade({ ...trade, [v.name]: inputValue });
-                        }}
-                        placeholder="Select or type..."
-                        className="react-select text-xs"
-                        classNamePrefix="react-select"
-                        styles={{
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "26px",
-                            height: "33px",
-                            fontSize: "0.75rem",
-                          }),
-                          valueContainer: (base) => ({
-                            ...base,
-                            padding: "5px 5px",
-                          }),
-                          input: (base) => ({
-                            ...base,
-                            margin: 0,
-                            padding: 0,
-                          }),
-                          menu: (base) => ({
-                            ...base,
-                            fontSize: "0.75rem",
-                          }),
-                        }}
-                      />
-                    </div>
-                  );
-                }
-
-                // ✅ Datum
-                if (v.name === "Datum") {
-                  return (
-                    <div
-                      key={v.id}
-                      className="flex flex-row items-center gap-2"
-                    >
-                      <strong className="w-full text-xs text-gray-600">
-                        {v.name}
-                      </strong>
-                      <input
-                        type="date"
-                        value={value}
-                        onChange={(e) =>
-                          saveTrade({ ...trade, [v.name]: e.target.value })
-                        }
-                        className="border rounded px-2 py-1 text-xs flex-1"
-                      />
-                    </div>
-                  );
-                }
-
-                // ✅ Entreetijd
-                if (v.name === "Entreetijd") {
-                  return (
-                    <div
-                      key={v.id}
-                      className="flex flex-row items-center gap-2"
-                    >
-                      <strong className="w-full text-xs text-gray-600">
-                        {v.name}
-                      </strong>
-                      <input
-                        type="time"
-                        value={value}
-                        onChange={(e) =>
-                          saveTrade({ ...trade, [v.name]: e.target.value })
-                        }
-                        className="border rounded px-2 py-1 text-xs flex-1"
-                      />
-                    </div>
-                  );
-                }
-
-                // ✅ Reasons for entry
-                if (v.name === "Reasons for entry") {
-                  return (
-                    <div key={v.id} className="flex flex-col gap-1">
-                      <strong className="text-xs text-gray-600">
-                        {v.name}
-                      </strong>
-                      <textarea
-                        rows={3}
-                        value={value}
-                        onChange={(e) =>
-                          saveTrade({ ...trade, [v.name]: e.target.value })
-                        }
-                        className="border rounded px-2 py-1 text-xs resize-y h-[100px]"
-                      />
-                    </div>
-                  );
-                }
-
-                // ✅ Default fallback
-                return (
-                  <div
-                    key={v.id}
-                    className="grid grid-cols-[120px,1fr] items-center gap-2"
-                  >
-                    <strong className="text-xs text-gray-600">{v.name}</strong>
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={(e) =>
-                        saveTrade({ ...trade, [v.name]: e.target.value })
-                      }
-                      className="border rounded px-2 py-1 text-xs w-full"
-                    />
-                  </div>
-                );
-              })}
-
-            {/* Custom Pre Variables */}
             <DndContext
               collisionDetection={closestCenter}
               onDragEnd={(e) => handleDragEnd(e, "pre")}
             >
               <SortableContext
                 items={variables
-                  .filter((v) => v.type === "custom" && v.phase === "pre")
+                  .filter((v) => v.phase === "pre")
                   .map((v) => v.id)}
                 strategy={verticalListSortingStrategy}
               >
                 {variables
-                  .filter((v) => v.type === "custom" && v.phase === "pre")
+                  .filter((v) => v.phase === "pre")
                   .map((v) => (
                     <SortableItem
                       key={v.id}
@@ -583,6 +438,7 @@ export default function TradeViewPage() {
                   ))}
               </SortableContext>
             </DndContext>
+
             <button
               onClick={() => addVariable("pre")}
               className="mt-2 text-xs text-sky-500 hover:underline"
@@ -593,45 +449,18 @@ export default function TradeViewPage() {
 
           {/* Post-Trade */}
           <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
-            <div className="flex flex-row items-center gap-2">
-              <strong className="w-[120px] text-xs text-gray-600">
-                Exit time
-              </strong>
-              <input
-                type="time"
-                value={trade["Time exit"] || ""}
-                onChange={(e) =>
-                  saveTrade({ ...trade, ["Time exit"]: e.target.value })
-                }
-                className="border rounded px-2 py-1 text-xs flex-1"
-              />
-            </div>
-            <div className="grid grid-cols-[120px,1fr] items-center gap-2">
-              <strong className="w-[120px] text-xs text-gray-600">PNL</strong>
-              <input
-                type="number"
-                step="0.01"
-                value={trade["PNL"] || ""}
-                onChange={(e) =>
-                  saveTrade({ ...trade, PNL: Number(e.target.value) })
-                }
-                className="border rounded px-2 py-1 text-xs w-full"
-              />
-            </div>
-
-            {/* Custom Post Variables */}
             <DndContext
               collisionDetection={closestCenter}
               onDragEnd={(e) => handleDragEnd(e, "post")}
             >
               <SortableContext
                 items={variables
-                  .filter((v) => v.type === "custom" && v.phase === "post")
+                  .filter((v) => v.phase === "post")
                   .map((v) => v.id)}
                 strategy={verticalListSortingStrategy}
               >
                 {variables
-                  .filter((v) => v.type === "custom" && v.phase === "post")
+                  .filter((v) => v.phase === "post")
                   .map((v) => (
                     <SortableItem
                       key={v.id}
@@ -648,6 +477,7 @@ export default function TradeViewPage() {
                   ))}
               </SortableContext>
             </DndContext>
+
             <button
               onClick={() => addVariable("post")}
               className="mt-2 text-xs text-sky-500 hover:underline"
@@ -657,55 +487,43 @@ export default function TradeViewPage() {
           </div>
         </div>
 
-        {/* Main content */}
         <div className="flex flex-col gap-4">
-          <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="font-semibold mb-2">Coin Chart</h3>
-            {trade.Chart ? (
-              <a href={trade.Chart} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={trade.Chart}
-                  alt="Coin Chart"
-                  className="max-w-full max-h-[800px] object-contain rounded"
-                />
-              </a>
-            ) : (
-              <div className="text-sm text-gray-400 text-center py-8">
-                Geen chart toegevoegd
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="font-semibold mb-2 flex items-center">
-              USDT.D Chart
-              <button
-                onClick={() => setShowUsdtChart(!showUsdtChart)}
-                className="ml-2 text-xs px-2 py-1 border rounded bg-gray-50 hover:bg-gray-100"
-              >
-                {showUsdtChart ? "Hide" : "Show"}
-              </button>
-            </h3>
-            {showUsdtChart &&
-              (trade["USDT.D chart"] ? (
-                <a
-                  href={trade["USDT.D chart"]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <img
-                    src={trade["USDT.D chart"]}
-                    alt="USDT.D Chart"
-                    className="max-w-full max-h-[800px] object-contain rounded"
-                  />
-                </a>
-              ) : (
-                <div className="text-sm text-gray-400 text-center py-8">
-                  Geen USDT.D chart toegevoegd
+          {/* Dynamic chart variables */}
+          {variables.filter((v) => v.varType === "chart").length > 0 ? (
+            variables
+              .filter((v) => v.varType === "chart")
+              .map((v) => (
+                <div key={v.id} className="bg-white rounded-xl shadow p-4">
+                  <h3 className="font-semibold mb-2">{v.name}</h3>
+                  {trade[v.name] ? (
+                    <a
+                      href={trade[v.name]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <img
+                        src={trade[v.name]}
+                        alt={v.name}
+                        className="max-w-full max-h-[800px] object-contain rounded"
+                      />
+                    </a>
+                  ) : (
+                    <div className="text-sm text-gray-400 text-center py-8">
+                      No chart added
+                    </div>
+                  )}
                 </div>
-              ))}
-          </div>
+              ))
+          ) : (
+            <div className="bg-white rounded-xl shadow p-4">
+              <h3 className="font-semibold mb-2">Charts</h3>
+              <div className="text-sm text-gray-400 text-center py-8">
+                Add a chart
+              </div>
+            </div>
+          )}
 
+          {/* Keep Trade evaluation section as is */}
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="font-semibold mb-2">Trade evaluation</h3>
             <textarea
@@ -716,6 +534,14 @@ export default function TradeViewPage() {
           </div>
         </div>
       </div>
+      {showManageModal && (
+        <ManageVariablesModal
+          context="trade"
+          variables={variables}
+          setVariables={setVariables}
+          onClose={() => setShowManageModal(false)}
+        />
+      )}
     </div>
   );
 }
