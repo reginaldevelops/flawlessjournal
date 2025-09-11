@@ -2,6 +2,34 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { XCircle, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+
+function getTradeStatus(row, variables) {
+  const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
+  const postVars = variables.filter((v) => v.phase === "post" && v.visible);
+
+  const isFilled = (v) => {
+    const val = row[v.name];
+    return val !== null && val !== undefined && val !== "";
+  };
+
+  const allPreFilled = preVars.every(isFilled);
+  const allPostFilled = postVars.every(isFilled);
+  const pnlFilled = isFilled({ name: "PNL" });
+
+  if (!allPreFilled) return { icon: XCircle, color: "text-red-600" };
+  if (allPreFilled && !allPostFilled && !pnlFilled)
+    return { icon: Clock, color: "text-gray-600" };
+  if (pnlFilled && !allPostFilled)
+    return {
+      icon: AlertTriangle,
+      color: "text-orange-500",
+    };
+  if (allPreFilled && allPostFilled)
+    return { icon: CheckCircle, color: "text-emerald-600" };
+
+  return { icon: Clock, color: "text-gray-600" };
+}
 
 export default function DynamicTable2({ rows: initialRows, variables }) {
   const [rows, setRows] = useState(initialRows || []);
@@ -271,6 +299,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                   }
                 />
               </th>
+              <th className="px-4 py-2 border-b font-semibold">Status</th>
+
               {visibleCols.map((col) => (
                 <th
                   key={col}
@@ -305,6 +335,20 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     }}
                   />
                 </td>
+                <td className="px-4 py-2 border-b">
+                  {(() => {
+                    const status = getTradeStatus(row, variables);
+                    return (
+                      <span
+                        className={`flex items-center gap-1 text-xs font-medium ${status.color}`}
+                      >
+                        <status.icon size={14} />
+                        {status.label}
+                      </span>
+                    );
+                  })()}
+                </td>
+
                 {visibleCols.map((col) => {
                   const val = getCellValue(row, col);
 

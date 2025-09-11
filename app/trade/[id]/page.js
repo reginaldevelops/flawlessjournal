@@ -6,6 +6,47 @@ import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import { Parser } from "expr-eval";
+import { XCircle, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+
+function getTradeStatus(trade, variables) {
+  const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
+  const postVars = variables.filter((v) => v.phase === "post" && v.visible);
+
+  const isFilled = (v) => {
+    const val = trade[v.name];
+    return val !== null && val !== undefined && val !== "";
+  };
+
+  const allPreFilled = preVars.every(isFilled);
+  const allPostFilled = postVars.every(isFilled);
+  const pnlFilled = isFilled({ name: "PNL" });
+
+  if (!allPreFilled)
+    return {
+      icon: XCircle,
+      color: "bg-red-100 text-red-600 border border-red-300",
+    };
+  if (allPreFilled && !allPostFilled && !pnlFilled)
+    return {
+      icon: Clock,
+      color: "bg-gray-100 text-gray-600 border border-gray-300",
+    };
+  if (pnlFilled && !allPostFilled)
+    return {
+      icon: AlertTriangle,
+      color: "bg-orange-100 text-orange-600 border border-orange-300",
+    };
+  if (allPreFilled && allPostFilled)
+    return {
+      icon: CheckCircle,
+      color: "bg-emerald-100 text-emerald-700 border border-emerald-300",
+    };
+
+  return {
+    icon: Clock,
+    color: "bg-gray-100 text-gray-600 border border-gray-300",
+  };
+}
 
 /* ---------- VariableItem ---------- */
 function VariableItem({ v, trade, saveTrade, setVariables }) {
@@ -354,6 +395,8 @@ export default function TradeViewPage() {
 
   if (!trade) return <div className="p-4">Loading trade...</div>;
 
+  const status = getTradeStatus(trade, variables);
+
   return (
     <div className="flex flex-col max-w-7xl mx-auto">
       {/* Header */}
@@ -362,6 +405,7 @@ export default function TradeViewPage() {
           <h2 className="text-3xl font-semibold">
             {trade.Coins || "Unknown Coin"}
           </h2>
+
           <div
             className={`rounded-lg text-xl font-semibold shadow-inner px-3 py-1 ${
               Number(trade["PNL"]) >= 0
@@ -375,6 +419,13 @@ export default function TradeViewPage() {
         </div>
 
         <div className="flex items-center gap-3 text-lg">
+          <span
+            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium ${status.color}`}
+          >
+            <status.icon size={16} />
+            {status.label}
+          </span>
+
           <span>{trade.Datum || "—"}</span>
           <button
             onClick={deleteTrade}
