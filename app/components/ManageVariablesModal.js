@@ -53,31 +53,17 @@ async function recalcAllTrades(variable) {
     try {
       const calc = expr.evaluate(values);
 
+      // ✅ alleen de waarde in trades updaten, niet de varType in variables
       if (typeof calc === "number" && !isNaN(calc)) {
         trade.data[variable.name] = parseFloat(calc.toFixed(2));
-
-        await supabase
-          .from("trades")
-          .update({ data: trade.data })
-          .eq("id", trade.id);
-
-        await supabase
-          .from("variables")
-          .update({ varType: "number" })
-          .eq("id", variable.id);
-      } else if (typeof calc === "string") {
-        trade.data[variable.name] = calc;
-
-        await supabase
-          .from("trades")
-          .update({ data: trade.data })
-          .eq("id", trade.id);
-
-        await supabase
-          .from("variables")
-          .update({ varType: "text" })
-          .eq("id", variable.id);
+      } else {
+        trade.data[variable.name] = calc?.toString?.() ?? "N/A";
       }
+
+      await supabase
+        .from("trades")
+        .update({ data: trade.data })
+        .eq("id", trade.id);
     } catch (err) {
       console.warn(`⚠️ Could not calc for trade ${trade.id}:`, err.message);
     }
@@ -109,7 +95,7 @@ function SortableItemModal({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="flex items-center justify-between p-2 border rounded bg-white mb-1"
+      className="flex flex-col-2 items-center justify-between p-2 border rounded bg-white mb-1"
     >
       {/* Drag handle */}
       <span {...listeners} className="cursor-grab text-gray-400 mr-2">
@@ -117,7 +103,7 @@ function SortableItemModal({
       </span>
 
       {/* Variable name */}
-      <span className="flex-1">{v.name}</span>
+      <span className="flex-1 text-xs">{v.name}</span>
 
       {/* Actions */}
       <div className="flex gap-2 text-gray-500">
@@ -525,12 +511,12 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                 placeholder="Variable name"
                 value={newVarName}
                 onChange={(e) => setNewVarName(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm flex-1"
+                className="border border-gray-300 rounded px-2 py-1 text-xs flex-1"
               />
               <select
                 value={newVarType}
                 onChange={(e) => setNewVarType(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm"
+                className="border border-gray-300 rounded px-2 py-1 text-xs"
               >
                 <option value="text">Text</option>
                 <option value="number">Number</option>
@@ -655,8 +641,11 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          {renderSection("pre", "Pre-Trade", "pre-dropzone")}
-          {renderSection("post", "Post-Trade", "post-dropzone")}
+          <div className="grid grid-cols-2 gap-4 items-start">
+            {renderSection("pre", "Pre-Trade", "pre-dropzone")}
+            {renderSection("post", "Post-Trade", "post-dropzone")}
+          </div>
+
           <DragOverlay dropAnimation={{ duration: 200, easing: "ease-out" }}>
             {activeId ? (
               <SortableItemModal

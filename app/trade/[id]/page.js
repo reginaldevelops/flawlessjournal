@@ -6,7 +6,13 @@ import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import { Parser } from "expr-eval";
-import { XCircle, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  XCircle,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Sigma,
+} from "lucide-react";
 
 function getTradeStatus(trade, variables) {
   const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
@@ -196,7 +202,10 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
         <div className="grid grid-cols-[70px,1fr] items-center gap-2">
-          <span className="text-xs text-gray-600">{v.name}</span>
+          <span className="text-xs text-gray-600">
+            {v.name}
+            <Sigma size={12} className="text-gray-500" />
+          </span>
           <input
             type="number"
             value={value}
@@ -439,12 +448,18 @@ export default function TradeViewPage() {
       <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-2 p-2">
         {/* Sidebar */}
         <div className="flex flex-col gap-2">
-          <div className="mb-2 w-full flex justify-end">
+          <div className="mb-2 w-full flex justify-between bg-white rounded-xl p-2">
+            <button
+              onClick={() => (window.location.href = "/trades")}
+              className="px-2 text-gray-500 text-sm font-medium"
+            >
+              BACK
+            </button>
             <button
               onClick={() => setShowManageModal(true)}
-              className="px-4 py-0 text-gray-500 text-sm font-medium text-right"
+              className="px-4 py-0 text-gray-500 text-sm font-medium"
             >
-              Variable Management
+              SETTINGS
             </button>
           </div>
 
@@ -476,6 +491,15 @@ export default function TradeViewPage() {
                   setVariables={setVariables}
                 />
               ))}
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-4">
+            <h3 className="font-semibold mb-2">Trade evaluation</h3>
+            <textarea
+              value={trade["Notes"] || ""}
+              onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
+              className="w-full min-h-[150px] border rounded px-2 py-1 text-sm"
+            />
           </div>
         </div>
 
@@ -514,15 +538,6 @@ export default function TradeViewPage() {
               </div>
             </div>
           )}
-
-          <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="font-semibold mb-2">Trade evaluation</h3>
-            <textarea
-              value={trade["Notes"] || ""}
-              onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
-              className="w-full min-h-[150px] border rounded px-2 py-1 text-sm"
-            />
-          </div>
         </div>
       </div>
 
