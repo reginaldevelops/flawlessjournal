@@ -4,12 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { eachDayOfInterval, format } from "date-fns";
 
-export default function CalendarView({
-  startDate,
-  endDate,
-  selectedVariable,
-  selectedValues,
-}) {
+export default function CalendarView({ startDate, endDate }) {
   const [dailyStats, setDailyStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [dayMetrics, setDayMetrics] = useState(null);
@@ -21,9 +16,6 @@ export default function CalendarView({
       let query = supabase.from("trades").select("data");
       if (startDate) query = query.gte("data->>Datum", startDate);
       if (endDate) query = query.lte("data->>Datum", endDate);
-      if (selectedVariable !== "all" && selectedValues.length > 0) {
-        query = query.in(`data->>${selectedVariable}`, selectedValues);
-      }
 
       const { data, error } = await query;
       if (error) {
@@ -99,7 +91,7 @@ export default function CalendarView({
     }
 
     fetchData();
-  }, [startDate, endDate, selectedVariable, selectedValues]);
+  }, [startDate, endDate]);
 
   if (loading) return <div>Loading calendar...</div>;
 

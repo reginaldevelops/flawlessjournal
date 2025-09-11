@@ -279,7 +279,6 @@ export default function AnalyticsPage() {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "charts", label: "Charts & Analysis" },
     { id: "calendar", label: "Calendar View" },
     { id: "deepdive", label: "Deep Dive" },
   ];
@@ -329,37 +328,6 @@ export default function AnalyticsPage() {
                 </option>
               ))}
         </select>
-
-        {/* Variable selector */}
-        <select
-          value={selectedVariable}
-          onChange={(e) => {
-            setSelectedVariable(e.target.value);
-            setSelectedValues([]);
-          }}
-          className="border rounded-md px-2 py-1 text-sm"
-        >
-          <option value="all">All</option>
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-
-        {/* Multi-select for values */}
-        {selectedVariable !== "all" && (
-          <div className="w-64">
-            <Select
-              isMulti
-              options={variableValues.map((v) => ({ value: v, label: v }))}
-              value={selectedValues.map((v) => ({ value: v, label: v }))}
-              onChange={(vals) => setSelectedValues(vals.map((v) => v.value))}
-              placeholder="Select values..."
-              className="text-sm"
-            />
-          </div>
-        )}
       </div>
 
       {/* Tabs */}
@@ -381,32 +349,17 @@ export default function AnalyticsPage() {
 
       {/* Tab content */}
       {activeTab === "overview" && (
-        <OverviewTab
-          startDate={startDate}
-          endDate={endDate}
-          selectedVariable={selectedVariable}
-          selectedValues={selectedValues}
-        />
+        <OverviewTab startDate={startDate} endDate={endDate} />
       )}
       {activeTab === "charts" && (
         <div className="text-gray-600">📊 Charts (coming soon)</div>
       )}
       {activeTab === "calendar" && (
-        <CalendarView
-          startDate={startDate}
-          endDate={endDate}
-          selectedVariable={selectedVariable}
-          selectedValues={selectedValues}
-        />
+        <CalendarView startDate={startDate} endDate={endDate} />
       )}
       {activeTab === "deepdive" && (
         <div className="text-gray-600">
-          <DeepDiveTab
-            startDate={startDate}
-            endDate={endDate}
-            selectedVariable={selectedVariable}
-            selectedValues={selectedValues}
-          />
+          <DeepDiveTab startDate={startDate} endDate={endDate} />
         </div>
       )}
     </div>
