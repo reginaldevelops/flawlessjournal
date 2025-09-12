@@ -80,16 +80,23 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
         const expr = parser.parse(v.formula);
 
         const values = Object.fromEntries(
-          Object.entries(trade).map(([k, val]) => [
-            k.replace(/\s+/g, "").toLowerCase(),
-            parseFloat(val),
-          ])
+          Object.entries(trade).map(([k, val]) => {
+            const key = k.replace(/\s+/g, "").toLowerCase();
+            const num = parseFloat(val);
+            return [key, !isNaN(num) ? num : val]; // ✅ behoud strings ipv altijd parseFloat
+          })
         );
 
         const calc = expr.evaluate(values);
 
-        if (!isNaN(calc) && calc.toFixed(2) !== (value?.toString() || "")) {
-          saveTrade({ ...trade, [v.name]: calc.toFixed(2) });
+        if (typeof calc === "number" && !isNaN(calc)) {
+          if (calc.toFixed(2) !== (value?.toString() || "")) {
+            saveTrade({ ...trade, [v.name]: calc.toFixed(2) });
+          }
+        } else if (typeof calc === "string") {
+          if (calc !== value) {
+            saveTrade({ ...trade, [v.name]: calc });
+          }
         }
       } catch (err) {
         console.warn(`⚠️ Invalid formula for ${v.name}:`, err.message);

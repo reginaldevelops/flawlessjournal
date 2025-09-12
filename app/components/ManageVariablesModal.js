@@ -13,6 +13,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "../lib/supabaseClient";
 import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import { Parser } from "expr-eval";
+import ConditionalBuilder from "./ConditionalBuilder";
 
 // 🔄 Recalc helper
 async function recalcAllTrades(variable) {
@@ -53,9 +54,12 @@ async function recalcAllTrades(variable) {
     try {
       const calc = expr.evaluate(values);
 
-      // ✅ alleen de waarde in trades updaten, niet de varType in variables
       if (typeof calc === "number" && !isNaN(calc)) {
         trade.data[variable.name] = parseFloat(calc.toFixed(2));
+      } else if (typeof calc === "string") {
+        trade.data[variable.name] = calc; // ✅ string resultaat opslaan
+      } else if (typeof calc === "boolean") {
+        trade.data[variable.name] = calc ? "TRUE" : "FALSE"; // ✅ boolean als tekst
       } else {
         trade.data[variable.name] = calc?.toString?.() ?? "N/A";
       }
@@ -137,156 +141,6 @@ function SortableItemModal({
   );
 }
 
-function FormulaInput({ value, onChange, variables }) {
-  const addToken = (token) => onChange(value + token);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full border rounded px-2 py-1 text-sm"
-      />
-
-      {/* Buttons for variables */}
-      <div className="flex flex-wrap gap-1 mt-1">
-        {variables
-          .filter((v) => ["number", "calculated"].includes(v.varType))
-          .map((varItem) => {
-            const token = varItem.name.replace(/\s+/g, "").toLowerCase();
-            return (
-              <button
-                key={varItem.id}
-                type="button"
-                onClick={() => addToken(token)}
-                className="px-2 py-0.5 text-xs bg-gray-100 rounded hover:bg-gray-200"
-              >
-                {token}
-              </button>
-            );
-          })}
-
-        {/* Operators */}
-        {["+", "-", "*", "/", ">", "<", ">=", "<=", "=="].map((op) => (
-          <button
-            key={op}
-            type="button"
-            onClick={() => addToken(op)}
-            className="px-2 py-0.5 text-xs bg-gray-100 rounded hover:bg-gray-200"
-          >
-            {op}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ConditionalBuilder({ variables = [], onChange }) {
-  const [blocks, setBlocks] = useState([
-    { type: "if", condition: "", formula: "" }, // start with one IF
-  ]);
-  const [elseFormula, setElseFormula] = useState("");
-  const [showElse, setShowElse] = useState(false);
-
-  // helper: wrap tekst in quotes tenzij het een getal of lege string is
-  const wrapValue = (val) => {
-    if (val === "") return "0";
-    if (!isNaN(parseFloat(val))) return val; // laat nummers zoals ze zijn
-    return JSON.stringify(val); // converteer naar "string"
-  };
-
-  // Build ternary string
-  useEffect(() => {
-    if (blocks.length > 0) {
-      let formula = "";
-      blocks.forEach((b) => {
-        if (b.condition && b.formula) {
-          formula += `if(${b.condition}, ${wrapValue(b.formula)}, `;
-        }
-      });
-      formula += showElse ? wrapValue(elseFormula || "0") : "0";
-      formula += ")".repeat(blocks.length);
-      onChange(formula);
-    }
-  }, [blocks, elseFormula, showElse, onChange]);
-
-  const addIf = () => {
-    setBlocks((prev) => [...prev, { type: "if", condition: "", formula: "" }]);
-  };
-
-  return (
-    <div className="border p-2 rounded flex flex-col gap-3 bg-gray-50">
-      <p className="text-xs text-gray-600 font-medium">
-        Conditional Formula Builder
-      </p>
-
-      {blocks.map((block, idx) => (
-        <div
-          key={idx}
-          className="border rounded p-2 flex flex-col gap-2 bg-white"
-        >
-          <div>
-            <label className="text-xs text-gray-500">IF</label>
-            <FormulaInput
-              value={block.condition}
-              onChange={(val) => {
-                const copy = [...blocks];
-                copy[idx].condition = val;
-                setBlocks(copy);
-              }}
-              variables={variables}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">THEN</label>
-            <FormulaInput
-              value={block.formula}
-              onChange={(val) => {
-                const copy = [...blocks];
-                copy[idx].formula = val;
-                setBlocks(copy);
-              }}
-              variables={variables}
-            />
-          </div>
-        </div>
-      ))}
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={addIf}
-          className="px-2 py-1 text-xs bg-sky-100 text-sky-600 rounded hover:bg-sky-200"
-        >
-          + IF
-        </button>
-        {!showElse && (
-          <button
-            type="button"
-            onClick={() => setShowElse(true)}
-            className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-          >
-            + ELSE
-          </button>
-        )}
-      </div>
-
-      {showElse && (
-        <div>
-          <label className="text-xs text-gray-500">ELSE</label>
-          <FormulaInput
-            value={elseFormula}
-            onChange={setElseFormula}
-            variables={variables}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ---------- Modal ---------- */
 function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const [activeId, setActiveId] = useState(null);
@@ -295,6 +149,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const [newVarType, setNewVarType] = useState("text");
   const [newVarFormula, setNewVarFormula] = useState("");
   const [showConditional, setShowConditional] = useState(false);
+  const [inConditionalFocus, setInConditionalFocus] = useState(false);
 
   const handleRename = async (variable) => {
     const newName = prompt("New name?", variable.name);
@@ -538,65 +393,62 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
 
             {newVarType === "calculated" && (
               <div className="flex flex-col gap-3">
-                {/* Available variables */}
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">
-                    Numeric variables:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {variables
-                      .filter((v) =>
-                        ["number", "calculated"].includes(v.varType)
-                      )
-                      .map((varItem) => {
-                        const token = varItem.name
-                          .replace(/\s+/g, "")
-                          .toLowerCase();
-                        return (
-                          <button
-                            key={varItem.id}
-                            type="button"
-                            onClick={() =>
-                              setNewVarFormula((prev) => prev + token)
-                            }
-                            className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-                          >
-                            {token}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-
-                {/* Operators */}
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Operators:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {["+", "-", "*", "/", ">", "<", ">=", "<=", "=="].map(
-                      (op) => (
-                        <button
-                          key={op}
-                          type="button"
-                          onClick={() => setNewVarFormula((prev) => prev + op)}
-                          className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-                        >
-                          {op}
-                        </button>
-                      )
+                {/* Default formula input */}
+                {!showConditional && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Build formula:</p>
+                    {!inConditionalFocus && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {variables
+                          .filter((v) =>
+                            ["number", "calculated"].includes(v.varType)
+                          )
+                          .map((varItem) => {
+                            const token = varItem.name
+                              .replace(/\s+/g, "")
+                              .toLowerCase();
+                            return (
+                              <button
+                                key={varItem.id}
+                                type="button"
+                                onClick={() =>
+                                  setNewVarFormula(
+                                    (prev) => (prev || "") + token
+                                  )
+                                }
+                                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                              >
+                                {token}
+                              </button>
+                            );
+                          })}
+                        {["+", "-", "*", "/", ">", "<", ">=", "<=", "=="].map(
+                          (op) => (
+                            <button
+                              key={op}
+                              type="button"
+                              onClick={() =>
+                                setNewVarFormula((prev) => (prev || "") + op)
+                              }
+                              className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                            >
+                              {op}
+                            </button>
+                          )
+                        )}
+                      </div>
                     )}
+                    <input
+                      type="text"
+                      placeholder="Formula"
+                      value={newVarFormula}
+                      onChange={(e) => setNewVarFormula(e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1 text-sm w-full"
+                    />
                   </div>
-                </div>
+                )}
 
-                {/* Formula input */}
-                <input
-                  type="text"
-                  placeholder="Formula"
-                  value={newVarFormula}
-                  onChange={(e) => setNewVarFormula(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm"
-                />
-
-                {/* Toggle Conditional Logic */}
+                {/* Conditional logic toggle */}
                 {!showConditional ? (
                   <button
                     type="button"
@@ -613,10 +465,14 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                     <ConditionalBuilder
                       variables={variables}
                       onChange={(condFormula) => setNewVarFormula(condFormula)}
+                      setInFocus={setInConditionalFocus}
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConditional(false)}
+                      onClick={() => {
+                        setShowConditional(false);
+                        setInConditionalFocus(false); // reset
+                      }}
                       className="mt-2 px-2 py-1 text-xs bg-red-100 rounded hover:bg-red-200 w-fit"
                     >
                       ✕ Remove conditional
