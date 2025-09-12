@@ -190,16 +190,23 @@ function ConditionalBuilder({ variables = [], onChange }) {
   const [elseFormula, setElseFormula] = useState("");
   const [showElse, setShowElse] = useState(false);
 
+  // helper: wrap tekst in quotes tenzij het een getal of lege string is
+  const wrapValue = (val) => {
+    if (val === "") return "0";
+    if (!isNaN(parseFloat(val))) return val; // laat nummers zoals ze zijn
+    return JSON.stringify(val); // converteer naar "string"
+  };
+
   // Build ternary string
   useEffect(() => {
     if (blocks.length > 0) {
       let formula = "";
       blocks.forEach((b) => {
         if (b.condition && b.formula) {
-          formula += `if(${b.condition}, ${b.formula}, `;
+          formula += `if(${b.condition}, ${wrapValue(b.formula)}, `;
         }
       });
-      formula += showElse ? elseFormula || "0" : "0";
+      formula += showElse ? wrapValue(elseFormula || "0") : "0";
       formula += ")".repeat(blocks.length);
       onChange(formula);
     }

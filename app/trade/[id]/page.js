@@ -105,7 +105,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   if (!v.varType || v.varType === "dropdown") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] gap-2">
+        <div className="grid grid-cols-[72px,1fr] gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <CreatableSelect
             isClearable
@@ -192,30 +192,69 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   }
 
   // calculated
-
   if (v.varType === "calculated") {
-    const handleChange = (e) => {
-      setManualOverride(true);
-      saveTrade({ ...trade, [v.name]: e.target.value });
-    };
+    const isNumber = typeof value === "number" || !isNaN(Number(value));
+
+    // haal string-opties uit de formule
+    let stringOptions = [];
+    if (v.formula) {
+      const matches = v.formula.match(/"([^"]+)"/g); // alle "..." stukjes
+      if (matches) {
+        stringOptions = [...new Set(matches.map((m) => m.replace(/"/g, "")))];
+      }
+    }
 
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
-          <span className="text-xs text-gray-600">
-            {v.name}
-            <Sigma size={12} className="text-gray-500" />
-          </span>
-          <input
-            type="number"
-            value={value}
-            onChange={(e) => {
-              setManualOverride(true);
-              handleNumericChange(e);
-            }}
-            onBlur={handleNumericBlur}
-            className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
-          />
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
+          <div className="text-xs text-gray-600 flex items-center gap-1">
+            <div>
+              <Sigma size={12} className="text-gray-500" />
+            </div>
+            <div>{v.name}</div>
+          </div>
+
+          {isNumber ? (
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => {
+                setManualOverride(true);
+                handleNumericChange(e);
+              }}
+              onBlur={handleNumericBlur}
+              className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
+            />
+          ) : stringOptions.length > 0 ? (
+            <select
+              value={value}
+              onChange={(e) => {
+                setManualOverride(true);
+                saveTrade({ ...trade, [v.name]: e.target.value });
+              }}
+              className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
+            >
+              {stringOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+              {/* custom optie */}
+              {!stringOptions.includes(value) && value && (
+                <option value={value}>{value}</option>
+              )}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => {
+                setManualOverride(true);
+                saveTrade({ ...trade, [v.name]: e.target.value });
+              }}
+              className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
+            />
+          )}
 
           {manualOverride && (
             <button
@@ -229,11 +268,12 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
       </div>
     );
   }
+
   // Text
   if (v.varType === "text") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <input
             type="text"
@@ -250,7 +290,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   if (v.varType === "number") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <input
             type="number"
@@ -268,7 +308,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   if (v.varType === "time") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <input
             type="time"
@@ -285,7 +325,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   if (v.varType === "date") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <input
             type="date"
@@ -319,7 +359,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   if (v.varType === "chart") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[70px,1fr] items-center gap-2">
+        <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <span className="text-xs text-gray-600">{v.name}</span>
           <input
             type="text"
