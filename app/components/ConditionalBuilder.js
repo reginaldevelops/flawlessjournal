@@ -87,7 +87,7 @@ function ConditionalBlock({ block, onChange, setActiveField, path }) {
               onClick={removeElse}
               className="mt-1 text-xs text-red-600 underline"
             >
-              ✕ Remove ELSE IF
+              ✕ Remove OR IF
             </button>
           </div>
         )
@@ -99,7 +99,7 @@ function ConditionalBlock({ block, onChange, setActiveField, path }) {
             onClick={() => updateField("else", "")}
             className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
           >
-            + ELSE
+            + OR ELSE
           </button>
 
           <button
@@ -109,7 +109,7 @@ function ConditionalBlock({ block, onChange, setActiveField, path }) {
             }
             className="px-2 py-1 text-xs bg-sky-100 text-sky-600 rounded hover:bg-sky-200"
           >
-            + ELSE IF
+            + OR IF
           </button>
         </div>
       )}

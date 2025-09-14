@@ -58,6 +58,7 @@ function getTradeStatus(trade, variables) {
 function VariableItem({ v, trade, saveTrade, setVariables }) {
   const value = trade[v.name] || "";
   const [manualOverride, setManualOverride] = useState(false);
+  const [calcLoading, setCalcLoading] = useState(false);
 
   // 🔢 Numeric input helpers
   const handleNumericChange = (e) => {
@@ -75,6 +76,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
 
   useEffect(() => {
     if (v.varType === "calculated" && !manualOverride && v.formula) {
+      setCalcLoading(true); // start berekening
       try {
         const parser = new Parser();
         const expr = parser.parse(v.formula);
@@ -83,29 +85,55 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           Object.entries(trade).map(([k, val]) => {
             const key = k.replace(/\s+/g, "").toLowerCase();
             const num = parseFloat(val);
-            return [key, !isNaN(num) ? num : val]; // ✅ behoud strings ipv altijd parseFloat
+            return [key, !isNaN(num) ? num : val];
           })
         );
 
-        const calc = expr.evaluate(values);
+        const hasAllInputs = expr
+          .variables()
+          .every((key) => values[key] !== undefined && values[key] !== "");
+
+        if (!hasAllInputs) {
+          console.log("⏸️ Nog niet alle inputs beschikbaar voor", v.name);
+          setCalcLoading(false);
+          return;
+        }
+
+        let calc = expr.evaluate(values);
+
+        // Probeer string alsnog als formule
+        if (typeof calc === "string") {
+          try {
+            const innerExpr = parser.parse(calc);
+            const innerVars = innerExpr.variables();
+            const hasAllInner = innerVars.every(
+              (key) => values[key] !== undefined && values[key] !== ""
+            );
+            if (hasAllInner) calc = innerExpr.evaluate(values);
+          } catch {
+            // blijft gewoon string
+          }
+        }
 
         if (typeof calc === "number" && !isNaN(calc)) {
           if (calc.toFixed(2) !== (value?.toString() || "")) {
             saveTrade({ ...trade, [v.name]: calc.toFixed(2) });
           }
         } else if (typeof calc === "string") {
-          if (calc !== value) {
-            saveTrade({ ...trade, [v.name]: calc });
-          }
+          if (calc !== value) saveTrade({ ...trade, [v.name]: calc });
+        } else if (typeof calc === "boolean") {
+          const boolStr = calc ? "TRUE" : "FALSE";
+          if (boolStr !== value) saveTrade({ ...trade, [v.name]: boolStr });
         }
       } catch (err) {
         console.warn(`⚠️ Invalid formula for ${v.name}:`, err.message);
         if (value !== "N/A") {
           saveTrade({ ...trade, [v.name]: "N/A" });
         }
+      } finally {
+        setCalcLoading(false); // klaar
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade, v.formula, v.varType, manualOverride]);
 
   // Dropdown
@@ -215,13 +243,39 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
       <div className="bg-white rounded-lg text-sm p-1">
         <div className="grid grid-cols-[76px,1fr] items-center gap-2">
           <div className="text-xs text-gray-600 flex items-center gap-1">
-            <div>
-              <Sigma size={12} className="text-gray-500" />
-            </div>
+            <Sigma size={12} className="text-gray-500" />
             <div>{v.name}</div>
           </div>
 
-          {isNumber ? (
+          {calcLoading ? (
+            <div className="flex items-center justify-center h-[calc(100vh-4rem)] md:h-screen md:ml-16 pt-16 md:pt-0">
+              <div className="flex flex-col items-center">
+                <svg
+                  className="animate-spin h-12 w-12 text-black"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+                <p className="mt-4 text-lg font-semibold text-black">
+                  Loading trades...
+                </p>
+              </div>
+            </div>
+          ) : isNumber ? (
             <input
               type="number"
               value={value}
@@ -552,39 +606,63 @@ export default function TradeViewPage() {
 
         {/* Charts + Notes */}
         <div className="flex flex-col gap-4">
-          {variables.filter((v) => v.varType === "chart").length > 0 ? (
-            variables
-              .filter((v) => v.varType === "chart" && v.visible)
-              .map((v) => (
-                <div key={v.id} className="bg-white rounded-xl shadow p-4">
-                  <h3 className="font-semibold mb-2">{v.name}</h3>
-                  {trade[v.name] ? (
-                    <a
-                      href={trade[v.name]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <img
-                        src={trade[v.name]}
-                        alt={v.name}
-                        className="max-w-full max-h-[800px] object-contain rounded"
-                      />
-                    </a>
-                  ) : (
-                    <div className="text-sm text-gray-400 text-center py-8">
-                      No chart added
-                    </div>
-                  )}
-                </div>
-              ))
-          ) : (
-            <div className="bg-white rounded-xl shadow p-4">
-              <h3 className="font-semibold mb-2">Charts</h3>
-              <div className="text-sm text-gray-400 text-center py-8">
-                Add a chart
+          {/* Pre-trade charts */}
+          {variables
+            .filter(
+              (v) => v.varType === "chart" && v.visible && v.phase === "pre"
+            )
+            .sort((a, b) => a.order - b.order)
+            .map((v) => (
+              <div key={v.id} className="bg-white rounded-xl shadow p-4">
+                <h3 className="font-semibold mb-2">{v.name}</h3>
+                {trade[v.name] ? (
+                  <a
+                    href={trade[v.name]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src={trade[v.name]}
+                      alt={v.name}
+                      className="max-w-full max-h-[800px] object-contain rounded"
+                    />
+                  </a>
+                ) : (
+                  <div className="text-sm text-gray-400 text-center py-8">
+                    No chart added
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+
+          {/* Post-trade charts */}
+          {variables
+            .filter(
+              (v) => v.varType === "chart" && v.visible && v.phase === "post"
+            )
+            .sort((a, b) => a.order - b.order)
+            .map((v) => (
+              <div key={v.id} className="bg-white rounded-xl shadow p-4">
+                <h3 className="font-semibold mb-2">{v.name}</h3>
+                {trade[v.name] ? (
+                  <a
+                    href={trade[v.name]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src={trade[v.name]}
+                      alt={v.name}
+                      className="max-w-full max-h-[800px] object-contain rounded"
+                    />
+                  </a>
+                ) : (
+                  <div className="text-sm text-gray-400 text-center py-8">
+                    No chart added
+                  </div>
+                )}
+              </div>
+            ))}
         </div>
       </div>
 

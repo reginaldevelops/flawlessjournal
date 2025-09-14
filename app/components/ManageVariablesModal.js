@@ -15,7 +15,7 @@ import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import { Parser } from "expr-eval";
 import ConditionalBuilder from "./ConditionalBuilder";
 
-// 🔄 Recalc helper
+// 🔄 Recalc helper (met auto-formule evaluatie)
 async function recalcAllTrades(variable) {
   if (variable.varType !== "calculated" || !variable.formula) return;
 
@@ -36,6 +36,8 @@ async function recalcAllTrades(variable) {
     return;
   }
 
+  const updatedTrades = [];
+
   for (const trade of trades) {
     const values = Object.fromEntries(
       Object.entries(trade.data).map(([k, val]) => {
@@ -52,24 +54,48 @@ async function recalcAllTrades(variable) {
     if (!hasAllInputs) continue;
 
     try {
-      const calc = expr.evaluate(values);
+      let calc = expr.evaluate(values);
+
+      // 👉 extra check voor inner formulas
+      if (typeof calc === "string") {
+        try {
+          const innerExpr = parser.parse(calc);
+          const innerVars = innerExpr.variables();
+          const hasAllInner = innerVars.every(
+            (key) => values[key] !== undefined
+          );
+          if (hasAllInner) calc = innerExpr.evaluate(values);
+        } catch {
+          // blijft gewoon string
+        }
+      }
 
       if (typeof calc === "number" && !isNaN(calc)) {
         trade.data[variable.name] = parseFloat(calc.toFixed(2));
       } else if (typeof calc === "string") {
-        trade.data[variable.name] = calc; // ✅ string resultaat opslaan
+        trade.data[variable.name] = calc;
       } else if (typeof calc === "boolean") {
-        trade.data[variable.name] = calc ? "TRUE" : "FALSE"; // ✅ boolean als tekst
+        trade.data[variable.name] = calc ? "TRUE" : "FALSE";
       } else {
         trade.data[variable.name] = calc?.toString?.() ?? "N/A";
       }
 
-      await supabase
-        .from("trades")
-        .update({ data: trade.data })
-        .eq("id", trade.id);
+      updatedTrades.push({ id: trade.id, data: trade.data });
     } catch (err) {
       console.warn(`⚠️ Could not calc for trade ${trade.id}:`, err.message);
+    }
+  }
+
+  // 🔄 batch update in één keer
+  if (updatedTrades.length > 0) {
+    const { error: updateError } = await supabase
+      .from("trades")
+      .upsert(updatedTrades, { onConflict: "id" });
+
+    if (updateError) {
+      console.error("❌ Batch update error:", updateError);
+    } else {
+      console.log(`✅ ${updatedTrades.length} trades updated`);
     }
   }
 }
@@ -151,27 +177,68 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const [showConditional, setShowConditional] = useState(false);
   const [inConditionalFocus, setInConditionalFocus] = useState(false);
 
+  // 🔄 loading states
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingFormula, setIsUpdatingFormula] = useState(false);
+
   const handleRename = async (variable) => {
     const newName = prompt("New name?", variable.name);
     if (!newName || newName === variable.name) return;
-    await supabase
-      .from("variables")
-      .update({ name: newName })
-      .eq("id", variable.id);
-    setVariables((prev) =>
-      prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
-    );
+
+    setIsRenaming(true);
+    try {
+      const { error: varError } = await supabase
+        .from("variables")
+        .update({ name: newName })
+        .eq("id", variable.id);
+      if (varError) throw varError;
+
+      const { data: trades, error: tradeError } = await supabase
+        .from("trades")
+        .select("id, data");
+      if (tradeError) throw tradeError;
+
+      const updatedTrades = trades
+        .map((trade) => {
+          if (trade.data.hasOwnProperty(variable.name)) {
+            const newData = { ...trade.data };
+            newData[newName] = newData[variable.name];
+            delete newData[variable.name];
+            return { id: trade.id, data: newData };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      if (updatedTrades.length > 0) {
+        const { error: updateError } = await supabase
+          .from("trades")
+          .upsert(updatedTrades, { onConflict: "id" });
+        if (updateError) throw updateError;
+      }
+
+      setVariables((prev) =>
+        prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
+      );
+    } catch (err) {
+      console.error("❌ Rename error:", err);
+      alert("Rename failed: " + err.message);
+    } finally {
+      setIsRenaming(false);
+    }
   };
 
   const handleEditFormula = async (variable) => {
     const newFormula = prompt("New formula?", variable.formula || "");
     if (!newFormula || newFormula === variable.formula) return;
 
-    // ✅ validate before saving
+    setIsUpdatingFormula(true);
     try {
       const parser = new Parser();
       parser.parse(newFormula);
     } catch (err) {
+      setIsUpdatingFormula(false);
       alert(`❌ Invalid formula: ${err.message}`);
       return;
     }
@@ -183,16 +250,16 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
 
     if (error) {
       console.error("❌ Error updating formula:", error);
-      return;
+      alert("Formula update failed: " + error.message);
+    } else {
+      setVariables((prev) =>
+        prev.map((x) =>
+          x.id === variable.id ? { ...x, formula: newFormula } : x
+        )
+      );
+      await recalcAllTrades({ ...variable, formula: newFormula });
     }
-
-    setVariables((prev) =>
-      prev.map((x) =>
-        x.id === variable.id ? { ...x, formula: newFormula } : x
-      )
-    );
-
-    await recalcAllTrades({ ...variable, formula: newFormula });
+    setIsUpdatingFormula(false);
   };
 
   const handleDelete = async (variable) => {
@@ -203,25 +270,26 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     )
       return;
 
-    const { error: varError } = await supabase
-      .from("variables")
-      .delete()
-      .eq("id", variable.id);
-    if (varError) {
-      console.error("❌ Error deleting variable definition:", varError);
-      return;
+    setIsDeleting(true);
+    try {
+      const { error: varError } = await supabase
+        .from("variables")
+        .delete()
+        .eq("id", variable.id);
+      if (varError) throw varError;
+
+      const { error: tradeError } = await supabase.rpc("remove_variable_key", {
+        key_name: variable.name,
+      });
+      if (tradeError) throw tradeError;
+
+      setVariables((prev) => prev.filter((x) => x.id !== variable.id));
+    } catch (err) {
+      console.error("❌ Error deleting variable:", err);
+      alert("Delete failed: " + err.message);
+    } finally {
+      setIsDeleting(false);
     }
-
-    const { error: tradeError } = await supabase.rpc("remove_variable_key", {
-      key_name: variable.name,
-    });
-
-    if (tradeError) {
-      console.error("❌ Error removing key from trades:", tradeError);
-      return;
-    }
-
-    setVariables((prev) => prev.filter((x) => x.id !== variable.id));
   };
 
   const handleToggleVisible = async (variable) => {
@@ -353,10 +421,42 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     );
   };
 
+  const currentAction =
+    (isRenaming && "Renaming…") ||
+    (isDeleting && "Deleting…") ||
+    (isUpdatingFormula && "Updating formula…");
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-lg shadow-lg w-[500px] max-h-[80vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Manage Variables</h2>
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          Manage Variables
+          {currentAction && (
+            <span className="flex items-center gap-1 text-sm text-gray-500">
+              <svg
+                className="animate-spin h-4 w-4 text-gray-500"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                />
+              </svg>
+              {currentAction}
+            </span>
+          )}
+        </h2>
 
         {!showAddForm ? (
           <button
@@ -393,7 +493,6 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
 
             {newVarType === "calculated" && (
               <div className="flex flex-col gap-3">
-                {/* Default formula input */}
                 {!showConditional && (
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Build formula:</p>
@@ -448,7 +547,6 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                   </div>
                 )}
 
-                {/* Conditional logic toggle */}
                 {!showConditional ? (
                   <button
                     type="button"
@@ -471,7 +569,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                       type="button"
                       onClick={() => {
                         setShowConditional(false);
-                        setInConditionalFocus(false); // reset
+                        setInConditionalFocus(false);
                       }}
                       className="mt-2 px-2 py-1 text-xs bg-red-100 rounded hover:bg-red-200 w-fit"
                     >
