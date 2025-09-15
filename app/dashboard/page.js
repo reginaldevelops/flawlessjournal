@@ -132,16 +132,29 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadWeeklyStats() {
       const now = new Date();
+
+      // maandag als start
       const monday = new Date(now);
       monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
       monday.setHours(0, 0, 0, 0);
 
+      // zondag als eind
       const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 7);
+      sunday.setDate(monday.getDate() + 6);
       sunday.setHours(23, 59, 59, 999);
 
-      const mondayISO = monday.toISOString().split("T")[0];
-      const sundayISO = sunday.toISOString().split("T")[0];
+      function toLocalISO(date) {
+        const tzDate = new Date(
+          date.getTime() - date.getTimezoneOffset() * 60000
+        );
+        return tzDate.toISOString().split("T")[0];
+      }
+
+      const mondayISO = toLocalISO(monday);
+      const sundayISO = toLocalISO(sunday);
+
+      // ✅ Debug check
+      console.log("Deze week loopt van:", mondayISO, "t/m", sundayISO);
 
       const { data, error } = await supabase
         .from("trades")
