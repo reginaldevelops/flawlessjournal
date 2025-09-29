@@ -146,9 +146,35 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             isClearable
             value={value ? { value, label: value } : null}
             options={v.options.map((opt) => ({ value: opt, label: opt }))}
-            onChange={(sel) =>
-              saveTrade({ ...trade, [v.name]: sel ? sel.value : null })
-            }
+            onChange={async (sel) => {
+              const newVal = sel ? sel.value : null;
+
+              // ✅ save trade value
+              saveTrade({ ...trade, [v.name]: newVal });
+
+              // ✅ if it's a new option, add to variables.options + supabase
+              if (newVal && !v.options.includes(newVal)) {
+                const updatedOptions = [...v.options, newVal];
+
+                // update local state
+                setVariables((prev) =>
+                  prev.map((varObj) =>
+                    varObj.id === v.id
+                      ? { ...varObj, options: updatedOptions }
+                      : varObj
+                  )
+                );
+
+                // update database
+                const { error } = await supabase
+                  .from("variables")
+                  .update({ options: updatedOptions })
+                  .eq("id", v.id);
+
+                if (error)
+                  console.error("❌ Error updating variable options:", error);
+              }
+            }}
             styles={{
               control: (base, state) => ({
                 ...base,
@@ -159,14 +185,11 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
                 fontFamily: "inherit",
                 color: "inherit",
                 padding: "0 2px",
-                border: "1px solid transparent", // ✅ default transparent
-                boxShadow: "none", // ✅ remove blue glow
-                ...(state.isFocused && { border: "1px solid #6b7280" }), // focus: gray-500
-                ":hover": {
-                  border: "1px solid #9ca3af", // hover: gray-400
-                },
+                border: "1px solid transparent",
+                boxShadow: "none",
+                ...(state.isFocused && { border: "1px solid #6b7280" }),
+                ":hover": { border: "1px solid #9ca3af" },
               }),
-
               valueContainer: (base) => ({
                 ...base,
                 height: "25px",
@@ -178,13 +201,13 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
               singleValue: (base) => ({
                 ...base,
                 color: "inherit",
-                fontSize: "12px", // ✅ keep consistent
+                fontSize: "12px",
                 fontFamily: "inherit",
               }),
               placeholder: (base) => ({
                 ...base,
-                color: "inherit", // ✅ placeholder text
-                opacity: 0.6, // match normal input placeholder look
+                color: "inherit",
+                opacity: 0.6,
                 fontFamily: "inherit",
               }),
               input: (base) => ({
@@ -195,12 +218,10 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
               menu: (base) => ({
                 ...base,
                 marginTop: 2,
-                border: "1px solid transparent", // ✅ start transparent
-                boxShadow: "none", // ✅ remove drop shadow
+                border: "1px solid transparent",
+                boxShadow: "none",
                 borderRadius: "4px",
-                ":hover": {
-                  border: "1px solid #9ca3af", // hover: gray-400
-                },
+                ":hover": { border: "1px solid #9ca3af" },
               }),
               option: (base, state) => ({
                 ...base,
@@ -208,9 +229,9 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
                 fontFamily: "inherit",
                 color: state.isSelected ? "white" : "inherit",
                 backgroundColor: state.isSelected
-                  ? "#6b7280" // gray-500
+                  ? "#6b7280"
                   : state.isFocused
-                    ? "#f3f4f6" // gray-100
+                    ? "#f3f4f6"
                     : "white",
                 cursor: "pointer",
               }),
