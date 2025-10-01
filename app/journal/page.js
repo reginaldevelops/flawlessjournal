@@ -207,7 +207,10 @@ export default function JournalPage() {
         {/* 📅 Kalender */}
         <div>
           <div className="flex justify-between items-center mb-4">
-            <button className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200"
+            >
               ←
             </button>
             <h3 className="font-semibold text-gray-800 px-3">
@@ -217,10 +220,21 @@ export default function JournalPage() {
               {viewYear}
             </h3>
             <div className="flex items-center gap-1">
-              <button className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200">
+              <button
+                onClick={() => changeMonth(1)}
+                className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200"
+              >
                 →
               </button>
-              <button className="bg-white border border-gray-300 text-black font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600">
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  setViewMonth(today.getMonth());
+                  setViewYear(today.getFullYear());
+                  setSelectedDate(today.toLocaleDateString("en-CA"));
+                }}
+                className="bg-white border border-gray-300 text-black font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600"
+              >
                 Vandaag
               </button>
             </div>
@@ -260,19 +274,19 @@ export default function JournalPage() {
                     loadEntries(dateStr);
                   }}
                   className={`min-h-[55px] border border-gray-200 rounded p-1 cursor-pointer flex flex-col justify-between transition
-                    ${
-                      isSelected
-                        ? "bg-black text-white"
-                        : count > 0
-                          ? "bg-white hover:bg-[#ece9e6]"
-                          : "bg-white hover:bg-[#ece9e6]"
-                    }`}
+            ${
+              isSelected
+                ? "bg-black text-white"
+                : count > 0
+                  ? "bg-white hover:bg-[#ece9e6]"
+                  : "bg-white hover:bg-[#ece9e6]"
+            }`}
                 >
                   <span className="text-sm font-medium">{day}</span>
                   {count > 0 && (
                     <span
                       className={`text-[0.7rem] self-end rounded-full px-1
-                        ${isSelected ? "text-white" : "bg-black text-white"}`}
+                ${isSelected ? "text-white" : "bg-black text-white"}`}
                     >
                       {count}
                     </span>
