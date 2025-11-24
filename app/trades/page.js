@@ -43,7 +43,6 @@ export default function TradeDataPage() {
       const mapped = trades.map((d) => {
         const base = {
           id: d.id,
-          "Trade Number": d.trade_number,
           Coins: d.data?.Coins,
           Datum: d.data?.Datum,
           Entreetijd: d.data?.Entreetijd,
@@ -55,8 +54,6 @@ export default function TradeDataPage() {
           "Target loss": d.data?.["Target loss"],
           "Reasons for entry": d.data?.["Reasons for entry"],
           PnL: d.data?.PNL,
-          Result: d.data?.Result,
-          Tags: d.data?.tags || [],
         };
 
         // Dynamische variabelen toevoegen
@@ -107,10 +104,10 @@ export default function TradeDataPage() {
   }
 
   // ✅ Profit factor berekenen
-  const pnlValues = rows.map((r) => Number(r.PnL) || 0);
-  const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
-  const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
-  const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
+  // const pnlValues = rows.map((r) => Number(r.PnL) || 0);
+  // const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
+  // const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
+  // const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
 
   // function StatCard({ children }) {
   //   return (
@@ -124,6 +121,7 @@ export default function TradeDataPage() {
 
   return (
     <div className="px-2 py-8 space-y-8 max-w-7xl mx-auto flex-1 min-h-0 w-full">
+      <h1>Trades</h1>
       {/* Grid met analytics cards
       <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[135px]">
         <StatCard>
