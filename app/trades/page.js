@@ -112,19 +112,19 @@ export default function TradeDataPage() {
   const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
   const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
 
-  function StatCard({ children }) {
-    return (
-      <div className="rounded-xl bg-white px-10 py-1 shadow-sm ring-1 ring-gray-200 flex flex-col h-full">
-        <div className="flex-1 flex items-center justify-center h-full w-full">
-          {children}
-        </div>
-      </div>
-    );
-  }
+  // function StatCard({ children }) {
+  //   return (
+  //     <div className="rounded-xl bg-white px-10 py-1 shadow-sm ring-1 ring-gray-200 flex flex-col h-full">
+  //       <div className="flex-1 flex items-center justify-center h-full w-full">
+  //         {children}
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="px-2 py-8 space-y-8 max-w-7xl mx-auto flex-1 min-h-0 w-full">
-      {/* Grid met analytics cards */}
+      {/* Grid met analytics cards
       <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[135px]">
         <StatCard>
           <CumulativePnLChart rows={rows} />
@@ -138,7 +138,7 @@ export default function TradeDataPage() {
         <StatCard>
           <AvgWinLossCard rows={rows} />
         </StatCard>
-      </div>
+      </div> */}
 
       {/* Tabel */}
       <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200">

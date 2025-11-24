@@ -54,6 +54,31 @@ function getTradeStatus(trade, variables) {
   };
 }
 
+async function removeDropdownOption(variable, optionToRemove, setVariables) {
+  if (!optionToRemove) return;
+
+  const updatedOptions = (variable.options || []).filter(
+    (opt) => opt !== optionToRemove
+  );
+
+  // 1) local state updaten
+  setVariables((prev) =>
+    prev.map((v) =>
+      v.id === variable.id ? { ...v, options: updatedOptions } : v
+    )
+  );
+
+  // 2) Supabase updaten
+  const { error } = await supabase
+    .from("variables")
+    .update({ options: updatedOptions })
+    .eq("id", variable.id);
+
+  if (error) {
+    console.error("❌ Error removing dropdown option:", error);
+  }
+}
+
 /* ---------- VariableItem ---------- */
 function VariableItem({ v, trade, saveTrade, setVariables }) {
   const value = trade[v.name] || "";
@@ -138,25 +163,43 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
 
   // Dropdown
   if (!v.varType || v.varType === "dropdown") {
+    const handleDeleteCurrentOption = async () => {
+      if (!value) return;
+
+      const confirmed = window.confirm(
+        `Wil je de optie "${value}" uit de lijst verwijderen?`
+      );
+      if (!confirmed) return;
+
+      // Optionele extra stap: huidige waarde in deze trade ook leegmaken
+      // saveTrade({ ...trade, [v.name]: "" });
+
+      await removeDropdownOption(v, value, setVariables);
+    };
+
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[72px,1fr] gap-2">
+        <div className="grid grid-cols-[72px,1fr,18px] gap-2 items-center">
           <span className="text-xs text-gray-600">{v.name}</span>
+
           <CreatableSelect
             isClearable
             value={value ? { value, label: value } : null}
-            options={v.options.map((opt) => ({ value: opt, label: opt }))}
+            options={(v.options || []).map((opt) => ({
+              value: opt,
+              label: opt,
+            }))}
             onChange={async (sel) => {
               const newVal = sel ? sel.value : null;
 
-              // ✅ save trade value
+              // ✅ trade value opslaan
               saveTrade({ ...trade, [v.name]: newVal });
 
-              // ✅ if it's a new option, add to variables.options + supabase
+              // ✅ nieuwe optie toevoegen aan variable + Supabase
               if (newVal && !v.options.includes(newVal)) {
                 const updatedOptions = [...v.options, newVal];
 
-                // update local state
+                // local state
                 setVariables((prev) =>
                   prev.map((varObj) =>
                     varObj.id === v.id
@@ -165,7 +208,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
                   )
                 );
 
-                // update database
+                // db
                 const { error } = await supabase
                   .from("variables")
                   .update({ options: updatedOptions })
@@ -242,6 +285,18 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             }}
             classNamePrefix="react-select"
           />
+
+          {/* kleine delete-knop voor de huidige geselecteerde value */}
+          {value && (
+            <button
+              type="button"
+              onClick={handleDeleteCurrentOption}
+              className="text-red-500 text-[10px] leading-none"
+              title="Verwijder deze optie uit de dropdown-lijst"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
     );
