@@ -55,7 +55,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     "Confidence",
     "Reasons for entry",
     "PnL",
-    "Result",
   ];
 
   // 🔧 helper om cell values te lezen
