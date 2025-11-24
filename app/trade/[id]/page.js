@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Sigma,
+  Trash2,
 } from "lucide-react";
 
 function getTradeStatus(trade, variables) {
@@ -78,6 +79,33 @@ async function removeDropdownOption(variable, optionToRemove, setVariables) {
     console.error("❌ Error removing dropdown option:", error);
   }
 }
+
+const DeleteableOption = (props) => {
+  const { data, selectProps } = props;
+
+  return (
+    <div
+      {...props.innerProps}
+      className="flex items-start justify-between gap-2 px-2 py-1 text-xs cursor-pointer hover:bg-gray-100"
+    >
+      {/* label mag nu meerdere regels pakken */}
+      <span className="flex-1 break-words pr-2">{data.label}</span>
+
+      <button
+        type="button"
+        className="p-0.5 mt-[2px] text-red-500 hover:text-red-700 flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation(); // voorkomt selecteren van de optie
+          if (selectProps.onDeleteOption) {
+            selectProps.onDeleteOption(data.value);
+          }
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+};
 
 /* ---------- VariableItem ---------- */
 function VariableItem({ v, trade, saveTrade, setVariables }) {
@@ -159,27 +187,49 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
         setCalcLoading(false); // klaar
       }
     }
-  }, [trade, v.formula, v.varType, manualOverride]);
+  }, [trade, v.formula, v.varType, manualOverride, value, saveTrade, v.name]);
 
-  // Dropdown
+  // 🗑 Opties uit dropdown verwijderen
+  const handleDeleteOption = async (optionToRemove) => {
+    if (!optionToRemove) return;
+
+    const confirmed = window.confirm(
+      `Wil je de optie "${optionToRemove}" uit de lijst verwijderen?`
+    );
+    if (!confirmed) return;
+
+    const updatedOptions = (v.options || []).filter(
+      (opt) => opt !== optionToRemove
+    );
+
+    // local state updaten
+    setVariables((prev) =>
+      prev.map((varObj) =>
+        varObj.id === v.id ? { ...varObj, options: updatedOptions } : varObj
+      )
+    );
+
+    // DB updaten
+    const { error } = await supabase
+      .from("variables")
+      .update({ options: updatedOptions })
+      .eq("id", v.id);
+
+    if (error) {
+      console.error("❌ Error removing option:", error);
+    }
+
+    // als huidige trade deze value had → leegmaken
+    if (trade[v.name] === optionToRemove) {
+      saveTrade({ ...trade, [v.name]: "" });
+    }
+  };
+
+  // 🔻 Dropdown
   if (!v.varType || v.varType === "dropdown") {
-    const handleDeleteCurrentOption = async () => {
-      if (!value) return;
-
-      const confirmed = window.confirm(
-        `Wil je de optie "${value}" uit de lijst verwijderen?`
-      );
-      if (!confirmed) return;
-
-      // Optionele extra stap: huidige waarde in deze trade ook leegmaken
-      // saveTrade({ ...trade, [v.name]: "" });
-
-      await removeDropdownOption(v, value, setVariables);
-    };
-
     return (
       <div className="bg-white rounded-lg text-sm p-1">
-        <div className="grid grid-cols-[72px,1fr,18px] gap-2 items-center">
+        <div className="grid grid-cols-[72px,1fr] gap-2 items-center">
           <span className="text-xs text-gray-600">{v.name}</span>
 
           <CreatableSelect
@@ -189,17 +239,18 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
               value: opt,
               label: opt,
             }))}
+            components={{ Option: DeleteableOption }}
+            onDeleteOption={handleDeleteOption}
             onChange={async (sel) => {
               const newVal = sel ? sel.value : null;
 
-              // ✅ trade value opslaan
+              // trade value opslaan
               saveTrade({ ...trade, [v.name]: newVal });
 
-              // ✅ nieuwe optie toevoegen aan variable + Supabase
+              // nieuwe optie toevoegen als hij nog niet bestaat
               if (newVal && !v.options.includes(newVal)) {
-                const updatedOptions = [...v.options, newVal];
+                const updatedOptions = [...(v.options || []), newVal];
 
-                // local state
                 setVariables((prev) =>
                   prev.map((varObj) =>
                     varObj.id === v.id
@@ -208,7 +259,6 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
                   )
                 );
 
-                // db
                 const { error } = await supabase
                   .from("variables")
                   .update({ options: updatedOptions })
@@ -261,22 +311,18 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
               menu: (base) => ({
                 ...base,
                 marginTop: 2,
-                border: "1px solid transparent",
-                boxShadow: "none",
                 borderRadius: "4px",
-                ":hover": { border: "1px solid #9ca3af" },
               }),
               option: (base, state) => ({
                 ...base,
                 fontSize: "12px",
                 fontFamily: "inherit",
-                color: state.isSelected ? "white" : "inherit",
                 backgroundColor: state.isSelected
                   ? "#6b7280"
                   : state.isFocused
                     ? "#f3f4f6"
                     : "white",
-                cursor: "pointer",
+                color: state.isSelected ? "white" : "inherit",
               }),
               indicatorsContainer: (base) => ({
                 ...base,
@@ -285,18 +331,6 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             }}
             classNamePrefix="react-select"
           />
-
-          {/* kleine delete-knop voor de huidige geselecteerde value */}
-          {value && (
-            <button
-              type="button"
-              onClick={handleDeleteCurrentOption}
-              className="text-red-500 text-[10px] leading-none"
-              title="Verwijder deze optie uit de dropdown-lijst"
-            >
-              ✕
-            </button>
-          )}
         </div>
       </div>
     );
@@ -373,7 +407,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             >
               {stringOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt}
+                  <>{opt}</>
                 </option>
               ))}
               {/* custom optie */}

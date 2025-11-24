@@ -166,19 +166,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
 
     const newTrade = {
       data: {
-        Coins: "",
         Datum: date,
         Entreetijd: time,
-        "Time exit": "",
-        Chart: "",
-        "USDT.D chart": "",
-        Confidence: "",
-        "Target Win": "",
-        "Target loss": "",
-        "Reasons for entry": "",
-        PNL: "",
-        Result: "",
-        tags: [],
       },
     };
 
