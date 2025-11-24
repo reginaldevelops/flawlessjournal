@@ -50,8 +50,6 @@ export default function TradeDataPage() {
           Chart: d.data?.Chart,
           "USDT.D chart": d.data?.["USDT.D chart"],
           Confidence: d.data?.Confidence,
-          "Target Win": d.data?.["Target Win"],
-          "Target loss": d.data?.["Target loss"],
           "Reasons for entry": d.data?.["Reasons for entry"],
           PnL: d.data?.PNL,
         };

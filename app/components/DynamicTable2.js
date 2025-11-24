@@ -47,19 +47,15 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   const rowsPerPage = 10;
 
   const fixedCols = [
-    "Trade Number",
     "Coins",
     "Datum",
     "Entreetijd",
     "Chart",
     "USDT.D chart",
     "Confidence",
-    "Target Win",
-    "Target loss",
     "Reasons for entry",
     "PnL",
     "Result",
-    "Tags",
   ];
 
   // 🔧 helper om cell values te lezen
