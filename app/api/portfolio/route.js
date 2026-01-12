@@ -37,11 +37,11 @@ export async function GET() {
       }
     );
 
-    let eurcBalance = 0;
+    let usdcBalance = 0;
     tokenAccounts.value.forEach((t) => {
       const info = t.account.data.parsed.info;
       if (info.mint === USDC_MINT) {
-        eurcBalance = Number(info.tokenAmount.uiAmount);
+        usdcBalance = Number(info.tokenAmount.uiAmount);
       }
     });
 
@@ -60,13 +60,13 @@ export async function GET() {
 
     // ✅ USD waardes
     const solValue = solBalance * solPrice;
-    const eurcValue = eurcBalance * eurcPrice;
-    const totalUSD = solValue + eurcValue;
+    const usdcValue = usdcBalance;
+    const totalUSD = solValue + usdcValue;
 
     const result = {
       wallet: WALLET,
       sol: { balance: solBalance, price: solPrice, usdValue: solValue },
-      eurc: { balance: eurcBalance, price: eurcPrice, usdValue: eurcValue },
+      usdc: { balance: usdcBalance, price: eurcPrice, usdValue: usdcValue },
       totalUSD,
       cachedAt: new Date().toISOString(),
     };
