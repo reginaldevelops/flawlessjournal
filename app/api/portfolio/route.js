@@ -6,7 +6,7 @@ import { Connection, clusterApiUrl, PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 const WALLET = "Hp9JwYEY4iN3Hx58mDXqpvYdnRodrTuWxDba1Po6GGd4";
-const EURC_MINT = "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // 🔧 cache vars (blijven in memory zolang server runt)
 let lastData = null;
@@ -40,7 +40,7 @@ export async function GET() {
     let eurcBalance = 0;
     tokenAccounts.value.forEach((t) => {
       const info = t.account.data.parsed.info;
-      if (info.mint === EURC_MINT) {
+      if (info.mint === USDC_MINT) {
         eurcBalance = Number(info.tokenAmount.uiAmount);
       }
     });
