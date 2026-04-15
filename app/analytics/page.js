@@ -200,9 +200,11 @@ function OverviewTab({ startDate, endDate, selectedVariable, selectedValues }) {
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("overview");
 
+  const now = new Date();
+
   const [rangeType, setRangeType] = useState("month");
-  const [selectedYear, setSelectedYear] = useState(2025);
-  const [selectedValue, setSelectedValue] = useState(8);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedValue, setSelectedValue] = useState(now.getMonth());
 
   const [availableVariables, setAvailableVariables] = useState([]);
   const [variableValues, setVariableValues] = useState([]);

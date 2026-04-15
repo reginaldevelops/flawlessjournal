@@ -44,7 +44,7 @@ export default function NotesArea() {
   return (
     <div>
       <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-        Quick Notes
+        Notities
       </h3>
       <StyledTextArea value={note} onChange={(e) => setNote(e.target.value)} />
       {loading && <small>Opslaan...</small>}

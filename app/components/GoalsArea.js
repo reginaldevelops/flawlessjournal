@@ -50,7 +50,7 @@ export default function GoalsArea() {
   return (
     <div>
       <h3 className="mt-3 mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-        Weekly Goals
+        Doelen
       </h3>
       <ul className="flex flex-col gap-2 mb-3">
         {goals.map((g) => (

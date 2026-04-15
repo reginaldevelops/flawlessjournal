@@ -34,6 +34,10 @@ function getWeekNumber(d = new Date()) {
   return Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
 }
 
+function getMonthLabel(d = new Date()) {
+  return d.toLocaleString("nl-NL", { month: "long" });
+}
+
 // ⏱ Formatter voor NL-tijd
 function formatLocal(dateString) {
   if (!dateString) return "";
@@ -130,18 +134,16 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    async function loadWeeklyStats() {
+    async function loadMonthlyStats() {
       const now = new Date();
 
-      // maandag als start
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      monday.setHours(0, 0, 0, 0);
+      // 🔹 eerste dag van de maand
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      firstDay.setHours(0, 0, 0, 0);
 
-      // zondag als eind
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      sunday.setHours(23, 59, 59, 999);
+      // 🔹 laatste dag van de maand
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      lastDay.setHours(23, 59, 59, 999);
 
       function toLocalISO(date) {
         const tzDate = new Date(
@@ -150,20 +152,19 @@ export default function Dashboard() {
         return tzDate.toISOString().split("T")[0];
       }
 
-      const mondayISO = toLocalISO(monday);
-      const sundayISO = toLocalISO(sunday);
+      const startISO = toLocalISO(firstDay);
+      const endISO = toLocalISO(lastDay);
 
-      // ✅ Debug check
-      console.log("Deze week loopt van:", mondayISO, "t/m", sundayISO);
+      console.log("Deze maand loopt van:", startISO, "t/m", endISO);
 
       const { data, error } = await supabase
         .from("trades")
         .select("data")
-        .gte("data->>Datum", mondayISO)
-        .lte("data->>Datum", sundayISO);
+        .gte("data->>Datum", startISO)
+        .lte("data->>Datum", endISO);
 
       if (error) {
-        console.error("Weekly stats error:", error);
+        console.error("Monthly stats error:", error);
         return;
       }
 
@@ -172,6 +173,7 @@ export default function Dashboard() {
       let wins = 0;
       let winsArr = [];
       let lossArr = [];
+      let chartRows = [];
 
       data.forEach((row) => {
         const pnlRaw = row.data?.PNL;
@@ -201,7 +203,7 @@ export default function Dashboard() {
           : 0;
       const p2gRatio = avgLoser > 0 ? avgWinner / avgLoser : 0;
 
-      setWeeklyPNL(totalPNL);
+      setWeeklyPNL(totalPNL); // eventueel hernoemen naar setMonthlyPNL
       setTrades(totalTrades);
       setWinRate(winRate);
       setAvgWinner(avgWinner);
@@ -211,13 +213,12 @@ export default function Dashboard() {
       setLosers(lossArr);
     }
 
-    loadWeeklyStats();
+    loadMonthlyStats();
   }, []);
 
   const currentPercent = getPercentOfDay(now);
   const totalBalance = phantom + hyper;
-  const profitTargetPct = 2;
-  const targetUSD = (profitTargetPct / 100) * totalBalance;
+  const targetUSD = 10000;
   const progress = totalBalance > 0 ? (weeklyPNL / targetUSD) * 100 : 0;
 
   useEffect(() => {
@@ -236,7 +237,7 @@ export default function Dashboard() {
   return (
     <div className="px-2 py-6 sm:py-8 font-inter text-gray-700 w-full max-w-7xl mx-auto rounded-lg">
       <h2 className="text-lg sm:text-xl font-semibold text-slate-800 mb-3">
-        WEEK {getWeekNumber(now)}
+        Maand {getMonthLabel(now)}
       </h2>
 
       {/* 📅 Calendar */}
@@ -295,7 +296,7 @@ export default function Dashboard() {
 
       {/* 📊 Sessions bar */}
       <div className="mb-4">
-        <h2 className="mb-2 text-base sm:text-lg text-slate-800">Sessions</h2>
+        <h2 className="mb-2 text-base sm:text-lg text-slate-800">Sessies</h2>
         <div className="w-full mx-auto relative h-12 bg-white rounded-lg">
           {sessions.map((s, idx) => {
             let start = s.start * 60;
@@ -332,7 +333,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
             <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Weekly Stats
+              Statistieken
             </h3>
             <div className="grid grid-cols-3 gap-2 mt-2">
               <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
@@ -396,7 +397,7 @@ export default function Dashboard() {
 
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
             <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Total Balance
+              Balans
             </h3>
             <BalanceCard
               phantom={phantom}
@@ -410,7 +411,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
             <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Weekly Winners
+              Winsten
             </h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart
@@ -436,7 +437,7 @@ export default function Dashboard() {
 
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
             <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Weekly Losers
+              Verliezen
             </h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart
@@ -468,7 +469,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
             <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Weekly Profit Target {profitTargetPct}%
+              Target (10.000$)
             </h3>
             <div className="relative w-full h-[26px] sm:h-[30px] bg-gray-200 rounded-xl mt-2">
               <div

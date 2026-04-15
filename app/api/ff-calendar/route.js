@@ -8,8 +8,14 @@ export async function GET() {
       cache: "no-store",
     });
 
+    console.log("STATUS:", res.status);
+    console.log("OK:", res.ok);
+
     const html = await res.text();
     const $ = cheerio.load(html);
+
+    console.log("HTML preview:", html.slice(0, 500));
+    console.log("ROWS FOUND:", $("tr.calendar__row").length);
 
     const events = [];
     let currentDate = "";

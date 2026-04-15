@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { Connection, clusterApiUrl, PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-const WALLET = "Hp9JwYEY4iN3Hx58mDXqpvYdnRodrTuWxDba1Po6GGd4";
+const WALLET = "5DdCjo3doetP3txpkQkXB5ymQp89SMEsHrPt4ZWqcoH1";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // 🔧 cache vars (blijven in memory zolang server runt)
