@@ -3,10 +3,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import DynamicTable2 from "../components/DynamicTable2";
-import CumulativePnLChart from "../components/CumulativePnLChart";
-import ProfitFactorCard from "../components/ProfitFactorCard";
-import WinRateCard from "../components/WinRateCard";
-import AvgWinLossCard from "../components/AvgWinLossCard";
 
 export default function TradeDataPage() {
   const [rows, setRows] = useState([]);
@@ -25,7 +21,7 @@ export default function TradeDataPage() {
         return;
       }
 
-      // Variables ophalen (LET OP: juiste tabel gebruiken)
+      // Variables ophalen uit de variables tabel
       const { data: tradeVars, error: varsError } = await supabase
         .from("variables")
         .select("*")
@@ -36,28 +32,19 @@ export default function TradeDataPage() {
         return;
       }
 
-      // Bewaar de hele objecten
       setVariables(tradeVars || []);
 
-      // Map de trades met dynamische variabelen
+      // Volledig dynamisch mappen op basis van wat er in d.data zit
       const mapped = trades.map((d) => {
         const base = {
           id: d.id,
-          Coins: d.data?.Coins,
-          Datum: d.data?.Datum,
-          Entreetijd: d.data?.Entreetijd,
-          "Time exit": d.data?.["Time exit"],
-          Chart: d.data?.Chart,
-          "USDT.D chart": d.data?.["USDT.D chart"],
-          Confidence: d.data?.Confidence,
-          "Reasons for entry": d.data?.["Reasons for entry"],
-          PnL: d.data?.PNL,
+          ...d.data, // Pakt automatisch alle sleutels die in de JSON van de trade staan
         };
 
-        // Dynamische variabelen toevoegen
-        (tradeVars || []).forEach((v) => {
-          base[v.name] = d.data?.[v.name] || "";
-        });
+        // Zorg ervoor dat PnL altijd goed gekoppeld is als PNL in data staat
+        if (base.PNL !== undefined && base.PnL === undefined) {
+          base.PnL = base.PNL;
+        }
 
         return base;
       });
@@ -101,40 +88,9 @@ export default function TradeDataPage() {
     );
   }
 
-  // ✅ Profit factor berekenen
-  // const pnlValues = rows.map((r) => Number(r.PnL) || 0);
-  // const totalWins = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
-  // const totalLosses = pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0);
-  // const profitFactor = totalLosses < 0 ? totalWins / Math.abs(totalLosses) : 0;
-
-  // function StatCard({ children }) {
-  //   return (
-  //     <div className="rounded-xl bg-white px-10 py-1 shadow-sm ring-1 ring-gray-200 flex flex-col h-full">
-  //       <div className="flex-1 flex items-center justify-center h-full w-full">
-  //         {children}
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   return (
     <div className="px-2 py-8 space-y-8 max-w-7xl mx-auto flex-1 min-h-0 w-full">
       <h1>Trades</h1>
-      {/* Grid met analytics cards
-      <div className="grid gap-x-10 gap-y-5 grid-cols-2 auto-rows-[135px]">
-        <StatCard>
-          <CumulativePnLChart rows={rows} />
-        </StatCard>
-        <StatCard>
-          <ProfitFactorCard value={profitFactor} />
-        </StatCard>
-        <StatCard>
-          <WinRateCard rows={rows} />
-        </StatCard>
-        <StatCard>
-          <AvgWinLossCard rows={rows} />
-        </StatCard>
-      </div> */}
 
       {/* Tabel */}
       <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200">

@@ -176,7 +176,7 @@ export default function Dashboard() {
       let chartRows = [];
 
       data.forEach((row) => {
-        const pnlRaw = row.data?.PNL;
+        const pnlRaw = row.data?.PnL;
         if (pnlRaw && pnlRaw !== "-") {
           const pnl = parseFloat(pnlRaw);
           if (!isNaN(pnl)) {

@@ -15,43 +15,82 @@ import {
   Trash2,
 } from "lucide-react";
 
+// Helper om flexibel en case-insensitive de PnL waarde uit de trade te halen
+function getPnlValue(trade, variables) {
+  if (!trade) return 0;
+
+  // Zoek eerst of er een variabele is gedefinieerd als PnL / system
+  const pnlVar = variables.find(
+    (v) => v.type === "system" || v.name.toLowerCase() === "pnl"
+  );
+  const pnlKeyName = pnlVar ? pnlVar.name : null;
+
+  // Check mogelijke sleutels in trade data of direct op trade object
+  if (
+    pnlKeyName &&
+    trade[pnlKeyName] !== undefined &&
+    trade[pnlKeyName] !== ""
+  ) {
+    return trade[pnlKeyName];
+  }
+  if (trade["PNL"] !== undefined && trade["PNL"] !== "") return trade["PNL"];
+  if (trade["Pnl"] !== undefined && trade["Pnl"] !== "") return trade["Pnl"];
+  if (trade["pnl"] !== undefined && trade["pnl"] !== "") return trade["pnl"];
+
+  // Zoek in alle sleutels case-insensitive
+  const foundKey = Object.keys(trade).find((k) => k.toLowerCase() === "pnl");
+  if (foundKey && trade[foundKey] !== undefined && trade[foundKey] !== "") {
+    return trade[foundKey];
+  }
+
+  return 0;
+}
+
 function getTradeStatus(trade, variables) {
   const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
   const postVars = variables.filter((v) => v.phase === "post" && v.visible);
 
-  const isFilled = (v) => {
-    const val = trade[v.name];
+  const isFilled = (vName) => {
+    const val = trade[vName];
     return val !== null && val !== undefined && val !== "";
   };
 
-  const allPreFilled = preVars.every(isFilled);
-  const allPostFilled = postVars.every(isFilled);
-  const pnlFilled = isFilled({ name: "PNL" });
+  const allPreFilled = preVars.every((v) => isFilled(v.name));
+  const allPostFilled = postVars.every((v) => isFilled(v.name));
+
+  const pnlVal = getPnlValue(trade, variables);
+  const pnlFilled =
+    pnlVal !== 0 && pnlVal !== "" && pnlVal !== null && pnlVal !== undefined;
 
   if (!allPreFilled)
     return {
       icon: XCircle,
       color: "bg-red-100 text-red-600 border border-red-300",
+      label: "Pre-trade incomplete",
     };
   if (allPreFilled && !allPostFilled && !pnlFilled)
     return {
       icon: Clock,
       color: "bg-gray-100 text-gray-600 border border-gray-300",
+      label: "Open",
     };
   if (pnlFilled && !allPostFilled)
     return {
       icon: AlertTriangle,
       color: "bg-orange-100 text-orange-600 border border-orange-300",
+      label: "In progress",
     };
   if (allPreFilled && allPostFilled)
     return {
       icon: CheckCircle,
       color: "bg-emerald-100 text-emerald-700 border border-emerald-300",
+      label: "Completed",
     };
 
   return {
     icon: Clock,
     color: "bg-gray-100 text-gray-600 border border-gray-300",
+    label: "Open",
   };
 }
 
@@ -62,14 +101,12 @@ async function removeDropdownOption(variable, optionToRemove, setVariables) {
     (opt) => opt !== optionToRemove
   );
 
-  // 1) local state updaten
   setVariables((prev) =>
     prev.map((v) =>
       v.id === variable.id ? { ...v, options: updatedOptions } : v
     )
   );
 
-  // 2) Supabase updaten
   const { error } = await supabase
     .from("variables")
     .update({ options: updatedOptions })
@@ -88,14 +125,13 @@ const DeleteableOption = (props) => {
       {...props.innerProps}
       className="flex items-start justify-between gap-2 px-2 py-1 text-xs cursor-pointer hover:bg-gray-100"
     >
-      {/* label mag nu meerdere regels pakken */}
       <span className="flex-1 break-words pr-2">{data.label}</span>
 
       <button
         type="button"
         className="p-0.5 mt-[2px] text-red-500 hover:text-red-700 flex-shrink-0"
         onClick={(e) => {
-          e.stopPropagation(); // voorkomt selecteren van de optie
+          e.stopPropagation();
           if (selectProps.onDeleteOption) {
             selectProps.onDeleteOption(data.value);
           }
@@ -113,23 +149,22 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   const [manualOverride, setManualOverride] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
 
-  // 🔢 Numeric input helpers
   const handleNumericChange = (e) => {
     const val = e.target.value;
-    saveTrade({ ...trade, [v.name]: val }); // keep raw string while typing
+    saveTrade({ ...trade, [v.name]: val });
   };
 
   const handleNumericBlur = (e) => {
     const val = e.target.value;
     saveTrade({
       ...trade,
-      [v.name]: val === "" ? "" : Number(val), // only coerce on blur
+      [v.name]: val === "" ? "" : Number(val),
     });
   };
 
   useEffect(() => {
     if (v.varType === "calculated" && !manualOverride && v.formula) {
-      setCalcLoading(true); // start berekening
+      setCalcLoading(true);
       try {
         const parser = new Parser();
         const expr = parser.parse(v.formula);
@@ -147,14 +182,12 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           .every((key) => values[key] !== undefined && values[key] !== "");
 
         if (!hasAllInputs) {
-          console.log("⏸️ Nog niet alle inputs beschikbaar voor", v.name);
           setCalcLoading(false);
           return;
         }
 
         let calc = expr.evaluate(values);
 
-        // Probeer string alsnog als formule
         if (typeof calc === "string") {
           try {
             const innerExpr = parser.parse(calc);
@@ -164,7 +197,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             );
             if (hasAllInner) calc = innerExpr.evaluate(values);
           } catch {
-            // blijft gewoon string
+            // blijft string
           }
         }
 
@@ -179,17 +212,15 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           if (boolStr !== value) saveTrade({ ...trade, [v.name]: boolStr });
         }
       } catch (err) {
-        console.warn(`⚠️ Invalid formula for ${v.name}:`, err.message);
         if (value !== "N/A") {
           saveTrade({ ...trade, [v.name]: "N/A" });
         }
       } finally {
-        setCalcLoading(false); // klaar
+        setCalcLoading(false);
       }
     }
   }, [trade, v.formula, v.varType, manualOverride, value, saveTrade, v.name]);
 
-  // 🗑 Opties uit dropdown verwijderen
   const handleDeleteOption = async (optionToRemove) => {
     if (!optionToRemove) return;
 
@@ -202,14 +233,12 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
       (opt) => opt !== optionToRemove
     );
 
-    // local state updaten
     setVariables((prev) =>
       prev.map((varObj) =>
         varObj.id === v.id ? { ...varObj, options: updatedOptions } : varObj
       )
     );
 
-    // DB updaten
     const { error } = await supabase
       .from("variables")
       .update({ options: updatedOptions })
@@ -219,13 +248,12 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
       console.error("❌ Error removing option:", error);
     }
 
-    // als huidige trade deze value had → leegmaken
     if (trade[v.name] === optionToRemove) {
       saveTrade({ ...trade, [v.name]: "" });
     }
   };
 
-  // 🔻 Dropdown
+  // Dropdown
   if (!v.varType || v.varType === "dropdown") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
@@ -243,11 +271,8 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             onDeleteOption={handleDeleteOption}
             onChange={async (sel) => {
               const newVal = sel ? sel.value : null;
-
-              // trade value opslaan
               saveTrade({ ...trade, [v.name]: newVal });
 
-              // nieuwe optie toevoegen als hij nog niet bestaat
               if (newVal && !v.options.includes(newVal)) {
                 const updatedOptions = [...(v.options || []), newVal];
 
@@ -336,14 +361,13 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // calculated
+  // Calculated
   if (v.varType === "calculated") {
     const isNumber = typeof value === "number" || !isNaN(Number(value));
 
-    // haal string-opties uit de formule
     let stringOptions = [];
     if (v.formula) {
-      const matches = v.formula.match(/"([^"]+)"/g); // alle "..." stukjes
+      const matches = v.formula.match(/"([^"]+)"/g);
       if (matches) {
         stringOptions = [...new Set(matches.map((m) => m.replace(/"/g, "")))];
       }
@@ -358,32 +382,8 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           </div>
 
           {calcLoading ? (
-            <div className="flex items-center justify-center h-[calc(100vh-4rem)] md:h-screen md:ml-16 pt-16 md:pt-0">
-              <div className="flex flex-col items-center">
-                <svg
-                  className="animate-spin h-12 w-12 text-black"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                  />
-                </svg>
-                <p className="mt-4 text-lg font-semibold text-black">
-                  Loading trades...
-                </p>
-              </div>
+            <div className="flex items-center text-xs text-gray-400">
+              Calculating...
             </div>
           ) : isNumber ? (
             <input
@@ -407,10 +407,9 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             >
               {stringOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  <>{opt}</>
+                  {opt}
                 </option>
               ))}
-              {/* custom optie */}
               {!stringOptions.includes(value) && value && (
                 <option value={value}>{value}</option>
               )}
@@ -526,8 +525,8 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // Chart
-  if (v.varType === "chart") {
+  // Link / Chart
+  if (v.varType === "chart" || v.varType === "link") {
     return (
       <div className="bg-white rounded-lg text-sm p-1">
         <div className="grid grid-cols-[76px,1fr] items-center gap-2">
@@ -536,7 +535,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
             type="text"
             value={value}
             onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
-            placeholder="Paste chart link..."
+            placeholder="Paste link..."
             className="px-2 py-1 text-xs w-full border border-transparent hover:border-gray-400 focus:border-gray-500 focus:ring-0 truncate"
           />
         </div>
@@ -610,12 +609,14 @@ export default function TradeViewPage() {
       console.error("❌ Delete error:", error);
       return;
     }
-    window.location.href = "/";
+    window.location.href = "/trades";
   };
 
   if (!trade) return <div className="p-4">Loading trade...</div>;
 
   const status = getTradeStatus(trade, variables);
+  const pnlValue = getPnlValue(trade, variables);
+  const numericPnl = Number(pnlValue) || 0;
 
   return (
     <div className="flex flex-col max-w-7xl mx-auto">
@@ -623,18 +624,18 @@ export default function TradeViewPage() {
       <div className="flex justify-between items-center px-6 py-4 bg-transparent">
         <div className="flex items-center gap-3">
           <h2 className="text-3xl font-semibold">
-            {trade.Coins || "Unknown Coin"}
+            {trade.Coins || trade["Coin"] || "Unknown Coin"}
           </h2>
 
           <div
             className={`rounded-lg text-xl font-semibold shadow-inner px-3 py-1 ${
-              Number(trade["PNL"]) >= 0
+              numericPnl >= 0
                 ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
                 : "bg-red-50 text-red-600 border border-red-200"
             }`}
           >
-            {Number(trade["PNL"]) >= 0 ? "+" : ""}
-            {trade["PNL"] || 0}
+            {numericPnl >= 0 ? "+" : ""}
+            {pnlValue !== "" && pnlValue !== null ? pnlValue : 0}
           </div>
         </div>
 
@@ -646,7 +647,7 @@ export default function TradeViewPage() {
             {status.label}
           </span>
 
-          <span>{trade.Datum || "—"}</span>
+          <span>{trade.Datum || trade["Date"] || "—"}</span>
           <button
             onClick={deleteTrade}
             className="text-white bg-red-800 hover:bg-red-500 text-sm px-2 py-1 rounded"
@@ -707,7 +708,7 @@ export default function TradeViewPage() {
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="font-semibold mb-2">Trade evaluation</h3>
             <textarea
-              value={trade["Notes"] || ""}
+              value={trade["Notes"] || trade["Evaluation"] || ""}
               onChange={(e) => saveTrade({ ...trade, Notes: e.target.value })}
               className="w-full min-h-[150px] border rounded px-2 py-1 text-sm"
             />
@@ -719,7 +720,10 @@ export default function TradeViewPage() {
           {/* Pre-trade charts */}
           {variables
             .filter(
-              (v) => v.varType === "chart" && v.visible && v.phase === "pre"
+              (v) =>
+                (v.varType === "chart" || v.varType === "link") &&
+                v.visible &&
+                v.phase === "pre"
             )
             .sort((a, b) => a.order - b.order)
             .map((v) => (
@@ -735,6 +739,10 @@ export default function TradeViewPage() {
                       src={trade[v.name]}
                       alt={v.name}
                       className="max-w-full max-h-[800px] object-contain rounded"
+                      onError={(e) => {
+                        // Als het geen geldige afbeelding is, verberg img entoon link tekst
+                        e.target.style.display = "none";
+                      }}
                     />
                   </a>
                 ) : (
@@ -748,7 +756,10 @@ export default function TradeViewPage() {
           {/* Post-trade charts */}
           {variables
             .filter(
-              (v) => v.varType === "chart" && v.visible && v.phase === "post"
+              (v) =>
+                (v.varType === "chart" || v.varType === "link") &&
+                v.visible &&
+                v.phase === "post"
             )
             .sort((a, b) => a.order - b.order)
             .map((v) => (
@@ -764,6 +775,9 @@ export default function TradeViewPage() {
                       src={trade[v.name]}
                       alt={v.name}
                       className="max-w-full max-h-[800px] object-contain rounded"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
                     />
                   </a>
                 ) : (

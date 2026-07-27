@@ -1,21 +1,27 @@
+// components/ManageVariablesModal.jsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { DndContext, closestCenter, DragOverlay } from "@dnd-kit/core";
+import { useState } from "react";
+import {
+  DndContext,
+  pointerWithin,
+  DragOverlay,
+  useDroppable,
+} from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
   defaultAnimateLayoutChanges,
+  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "../lib/supabaseClient";
 import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import { Parser } from "expr-eval";
 import ConditionalBuilder from "./ConditionalBuilder";
 
-// 🔄 Recalc helper (met auto-formule evaluatie)
+// 🔄 Recalc helper
 async function recalcAllTrades(variable) {
   if (variable.varType !== "calculated" || !variable.formula) return;
 
@@ -39,6 +45,8 @@ async function recalcAllTrades(variable) {
   const updatedTrades = [];
 
   for (const trade of trades) {
+    if (!trade.data) continue;
+
     const values = Object.fromEntries(
       Object.entries(trade.data).map(([k, val]) => {
         const key = k.replace(/\s+/g, "").toLowerCase();
@@ -56,7 +64,6 @@ async function recalcAllTrades(variable) {
     try {
       let calc = expr.evaluate(values);
 
-      // 👉 extra check voor inner formulas
       if (typeof calc === "string") {
         try {
           const innerExpr = parser.parse(calc);
@@ -65,9 +72,7 @@ async function recalcAllTrades(variable) {
             (key) => values[key] !== undefined
           );
           if (hasAllInner) calc = innerExpr.evaluate(values);
-        } catch {
-          // blijft gewoon string
-        }
+        } catch {}
       }
 
       if (typeof calc === "number" && !isNaN(calc)) {
@@ -86,17 +91,12 @@ async function recalcAllTrades(variable) {
     }
   }
 
-  // 🔄 batch update in één keer
   if (updatedTrades.length > 0) {
     const { error: updateError } = await supabase
       .from("trades")
       .upsert(updatedTrades, { onConflict: "id" });
 
-    if (updateError) {
-      console.error("❌ Batch update error:", updateError);
-    } else {
-      console.log(`✅ ${updatedTrades.length} trades updated`);
-    }
+    if (updateError) console.error("❌ Batch update error:", updateError);
   }
 }
 
@@ -125,40 +125,50 @@ function SortableItemModal({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="flex flex-col-2 items-center justify-between p-2 border rounded bg-white mb-1"
+      className="flex items-center justify-between p-2.5 border border-slate-200 rounded-xl bg-white mb-2 shadow-sm"
     >
-      {/* Drag handle */}
-      <span {...listeners} className="cursor-grab text-gray-400 mr-2">
+      <span
+        {...listeners}
+        className="cursor-grab text-slate-300 hover:text-slate-500 mr-2 select-none text-base"
+      >
         ⠿
       </span>
-
-      {/* Variable name */}
-      <span className="flex-1 text-xs">{v.name}</span>
-
-      {/* Actions */}
-      <div className="flex gap-2 text-gray-500">
+      <span className="flex-1 text-xs font-medium text-slate-800">
+        {v.name}
+      </span>
+      <div className="flex items-center gap-2.5 text-slate-400">
         <button
+          type="button"
           onClick={() => onToggleVisible(v)}
-          className="hover:text-gray-700"
+          className="hover:text-slate-600 transition"
         >
-          {v.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+          {v.visible ? <Eye size={15} /> : <EyeOff size={15} />}
         </button>
 
         {v.type === "custom" && (
           <>
-            <button onClick={() => onRename(v)} className="hover:text-blue-600">
-              <Pencil size={16} />
+            <button
+              type="button"
+              onClick={() => onRename(v)}
+              className="hover:text-blue-600 transition"
+            >
+              <Pencil size={15} />
             </button>
             {v.varType === "calculated" && (
               <button
+                type="button"
                 onClick={() => onEditFormula(v)}
-                className="hover:text-purple-600"
+                className="hover:text-purple-600 font-bold text-xs transition"
               >
                 ƒx
               </button>
             )}
-            <button onClick={() => onDelete(v)} className="hover:text-red-600">
-              <Trash2 size={16} />
+            <button
+              type="button"
+              onClick={() => onDelete(v)}
+              className="hover:text-red-600 transition"
+            >
+              <Trash2 size={15} />
             </button>
           </>
         )}
@@ -167,8 +177,29 @@ function SortableItemModal({
   );
 }
 
+/* ---------- Droppable Container voor Fase-kolommen ---------- */
+function DroppableSection({ id, title, children }) {
+  const { setNodeRef } = useDroppable({ id });
+
+  return (
+    <div className="flex flex-col bg-slate-50 p-3.5 rounded-2xl border border-slate-200 min-h-[260px]">
+      <h3 className="font-bold mb-3 text-xs text-slate-700 uppercase tracking-wider">
+        {title}
+      </h3>
+      <div ref={setNodeRef} className="flex-1 min-h-[200px]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Modal ---------- */
-function ManageVariablesModal({ context, variables, setVariables, onClose }) {
+export default function ManageVariablesModal({
+  context,
+  variables,
+  setVariables,
+  onClose,
+}) {
   const [activeId, setActiveId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newVarName, setNewVarName] = useState("");
@@ -177,7 +208,6 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const [showConditional, setShowConditional] = useState(false);
   const [inConditionalFocus, setInConditionalFocus] = useState(false);
 
-  // 🔄 loading states
   const [isRenaming, setIsRenaming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingFormula, setIsUpdatingFormula] = useState(false);
@@ -201,7 +231,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
 
       const updatedTrades = trades
         .map((trade) => {
-          if (trade.data.hasOwnProperty(variable.name)) {
+          if (trade.data?.hasOwnProperty(variable.name)) {
             const newData = { ...trade.data };
             newData[newName] = newData[variable.name];
             delete newData[variable.name];
@@ -309,34 +339,43 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
   const handleDragEnd = async (event) => {
     setActiveId(null);
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
 
     const activeVar = variables.find((v) => v.id === active.id);
-    const overVar = variables.find((v) => v.id === over.id);
     if (!activeVar) return;
 
     let targetPhase = activeVar.phase;
-    if (overVar && overVar.phase !== activeVar.phase)
-      targetPhase = overVar.phase;
-    if (!overVar && event.over?.id === "post-dropzone") targetPhase = "post";
-    if (!overVar && event.over?.id === "pre-dropzone") targetPhase = "pre";
+    if (over.id === "pre-dropzone") {
+      targetPhase = "pre";
+    } else if (over.id === "post-dropzone") {
+      targetPhase = "post";
+    } else {
+      const overVar = variables.find((v) => v.id === over.id);
+      if (overVar) targetPhase = overVar.phase;
+    }
 
     const varsInTarget = variables.filter((v) => v.phase === targetPhase);
+    const overVar = variables.find((v) => v.id === over.id);
+
     const oldIndex = variables
       .filter((v) => v.phase === activeVar.phase)
       .findIndex((v) => v.id === active.id);
+
     const newIndex = overVar
       ? varsInTarget.findIndex((v) => v.id === over.id)
       : varsInTarget.length;
 
-    const reordered =
-      activeVar.phase === targetPhase
-        ? arrayMove(varsInTarget, oldIndex, newIndex)
-        : [
-            ...varsInTarget.slice(0, newIndex),
-            { ...activeVar, phase: targetPhase },
-            ...varsInTarget.slice(newIndex),
-          ];
+    let reordered;
+    if (activeVar.phase === targetPhase) {
+      if (active.id === over.id) return;
+      reordered = arrayMove(varsInTarget, oldIndex, newIndex);
+    } else {
+      reordered = [
+        ...varsInTarget.slice(0, newIndex),
+        { ...activeVar, phase: targetPhase },
+        ...varsInTarget.slice(newIndex),
+      ];
+    }
 
     setVariables((prev) => {
       const others = prev.filter(
@@ -349,6 +388,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
       .from("variables")
       .update({ phase: targetPhase })
       .eq("id", activeVar.id);
+
     await Promise.all(
       reordered.map((v, index) =>
         supabase.from("variables").update({ order: index }).eq("id", v.id)
@@ -396,8 +436,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     const varsInPhase = variables.filter((v) => v.phase === phase);
 
     return (
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">{title}</h3>
+      <DroppableSection id={dropzoneId} title={title}>
         <SortableContext
           id={dropzoneId}
           items={varsInPhase.map((v) => v.id)}
@@ -415,9 +454,11 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           ))}
         </SortableContext>
         {varsInPhase.length === 0 && (
-          <div className="text-xs text-gray-400 italic">Drop items here</div>
+          <div className="text-xs text-slate-400 italic text-center py-10">
+            Sleep variabelen hierheen
+          </div>
         )}
-      </div>
+      </DroppableSection>
     );
   };
 
@@ -427,58 +468,61 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     (isUpdatingFormula && "Updating formula…");
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-[500px] max-h-[80vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          Manage Variables
-          {currentAction && (
-            <span className="flex items-center gap-1 text-sm text-gray-500">
-              <svg
-                className="animate-spin h-4 w-4 text-gray-500"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                />
-              </svg>
-              {currentAction}
-            </span>
-          )}
-        </h2>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-slate-200">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            Manage Variables
+            {currentAction && (
+              <span className="flex items-center gap-1.5 text-xs font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                <svg
+                  className="animate-spin h-3.5 w-3.5 text-slate-500"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+                {currentAction}
+              </span>
+            )}
+          </h2>
+        </div>
 
         {!showAddForm ? (
           <button
+            type="button"
             onClick={() => setShowAddForm(true)}
-            className="mb-4 px-3 py-1 bg-sky-100 hover:bg-sky-200 text-sky-600 rounded text-sm font-medium"
+            className="mb-4 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-semibold transition"
           >
             + Add new variable
           </button>
         ) : (
-          <div className="mb-4 flex flex-col gap-2">
+          <div className="mb-5 flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 placeholder="Variable name"
                 value={newVarName}
                 onChange={(e) => setNewVarName(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-xs flex-1"
+                className="border border-slate-300 rounded-xl px-3 py-2 text-xs flex-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               />
               <select
                 value={newVarType}
                 onChange={(e) => setNewVarType(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-xs"
+                className="border border-slate-300 rounded-xl px-3 py-2 text-xs outline-none bg-white"
               >
                 <option value="text">Text</option>
                 <option value="number">Number</option>
@@ -492,12 +536,14 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
             </div>
 
             {newVarType === "calculated" && (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 pt-2 border-t border-slate-200">
                 {!showConditional && (
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Build formula:</p>
+                    <p className="text-xs font-medium text-slate-600 mb-1.5">
+                      Build formula:
+                    </p>
                     {!inConditionalFocus && (
-                      <div className="flex flex-wrap gap-2 mb-2">
+                      <div className="flex flex-wrap gap-1.5 mb-2">
                         {variables
                           .filter((v) =>
                             ["number", "calculated"].includes(v.varType)
@@ -515,7 +561,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                                     (prev) => (prev || "") + token
                                   )
                                 }
-                                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                                className="px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg hover:bg-slate-100 font-medium text-slate-700 transition"
                               >
                                 {token}
                               </button>
@@ -529,7 +575,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                               onClick={() =>
                                 setNewVarFormula((prev) => (prev || "") + op)
                               }
-                              className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                              className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg hover:bg-slate-100 font-bold text-slate-700 transition"
                             >
                               {op}
                             </button>
@@ -542,7 +588,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                       placeholder="Formula"
                       value={newVarFormula}
                       onChange={(e) => setNewVarFormula(e.target.value)}
-                      className="border border-gray-300 rounded px-2 py-1 text-sm w-full"
+                      className="border border-slate-300 rounded-xl px-3 py-2 text-xs w-full outline-none focus:ring-2 focus:ring-blue-500 bg-white font-mono"
                     />
                   </div>
                 )}
@@ -551,13 +597,13 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                   <button
                     type="button"
                     onClick={() => setShowConditional(true)}
-                    className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200 w-fit"
+                    className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg w-fit font-semibold transition"
                   >
                     + Conditional
                   </button>
                 ) : (
-                  <div className="mt-2 border-t pt-2">
-                    <p className="text-xs text-gray-500 mb-1">
+                  <div className="mt-2 border-t pt-3">
+                    <p className="text-xs font-medium text-slate-600 mb-1.5">
                       Conditional logic:
                     </p>
                     <ConditionalBuilder
@@ -571,7 +617,7 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
                         setShowConditional(false);
                         setInConditionalFocus(false);
                       }}
-                      className="mt-2 px-2 py-1 text-xs bg-red-100 rounded hover:bg-red-200 w-fit"
+                      className="mt-3 px-3 py-1.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded-lg w-fit font-semibold transition"
                     >
                       ✕ Remove conditional
                     </button>
@@ -580,16 +626,18 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1">
               <button
+                type="button"
                 onClick={handleAdd}
-                className="px-3 py-1 bg-emerald-500 text-white rounded text-sm hover:bg-emerald-600"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition"
               >
-                Save
+                Save Variable
               </button>
               <button
+                type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-3 py-1 bg-gray-200 rounded text-sm hover:bg-gray-300"
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition"
               >
                 Cancel
               </button>
@@ -598,16 +646,16 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
         )}
 
         <DndContext
-          collisionDetection={closestCenter}
+          collisionDetection={pointerWithin}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             {renderSection("pre", "Pre-Trade", "pre-dropzone")}
             {renderSection("post", "Post-Trade", "post-dropzone")}
           </div>
 
-          <DragOverlay dropAnimation={{ duration: 200, easing: "ease-out" }}>
+          <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
             {activeId ? (
               <SortableItemModal
                 key={activeId}
@@ -621,10 +669,11 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
           </DragOverlay>
         </DndContext>
 
-        <div className="flex justify-end mt-4">
+        <div className="flex justify-end mt-5 pt-4 border-t border-slate-100">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
           >
             Close
           </button>
@@ -633,5 +682,3 @@ function ManageVariablesModal({ context, variables, setVariables, onClose }) {
     </div>
   );
 }
-
-export default ManageVariablesModal;

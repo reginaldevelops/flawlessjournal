@@ -4,45 +4,44 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 
-export default function AuthWrapper({ children }) {
+export function useOnboardingCheck() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    async function checkAccess() {
-      // Homepage (login) is altijd vrij
-      if (pathname === "/") {
-        setLoading(false);
-        return;
-      }
-
-      // 1. Check Supabase user (Authenticatie)
+    async function checkUserVariables() {
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        router.replace("/"); // Terug naar login
+        console.warn("Geen ingelogde gebruiker gevonden:", userError);
+        setLoading(false);
         return;
       }
 
-      // 2. Check of de gebruiker variabelen heeft (Onboarding)
-      const { data: variables, error: varsError } = await supabase
+      // Haal variabelen op voor de ingelogde gebruiker
+      const { data: variables, error } = await supabase
         .from("variables")
         .select("id")
         .eq("user_id", user.id);
 
-      if (varsError) {
-        console.error("❌ Fout bij ophalen variabelen:", varsError.message);
+      if (error) {
+        // Uitgebreidere log om exact de boodschap en code te zien:
+        console.error("❌ Fout bij ophalen variabelen:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
         setLoading(false);
         return;
       }
 
       const hasVariables = variables && variables.length > 0;
 
-      // 3. Stuur door op basis van onboarding status
       if (!hasVariables && pathname !== "/onboarding") {
         router.replace("/onboarding");
       } else if (hasVariables && pathname === "/onboarding") {
@@ -52,16 +51,8 @@ export default function AuthWrapper({ children }) {
       }
     }
 
-    checkAccess();
-  }, [router, pathname]);
+    checkUserVariables();
+  }, [pathname, router]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <p className="text-gray-400">Loading...</p>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+  return { loading };
 }
