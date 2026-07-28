@@ -1,67 +1,85 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
+import { LogoMark } from "./shell/Logo";
+
+const PUBLIC_ROUTES = ["/"];
 
 export default function AuthWrapper({ children }) {
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState("checking");
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkAccess() {
-      // Homepage (login) is altijd vrij
-      if (pathname === "/") {
-        setLoading(false);
+      if (PUBLIC_ROUTES.includes(pathname)) {
+        setState("ready");
         return;
       }
 
-      // 1. Check Supabase user (Authenticatie)
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
+      if (cancelled) return;
+
       if (userError || !user) {
-        router.replace("/"); // Terug naar login
+        router.replace("/");
         return;
       }
 
-      // 2. Check of de gebruiker variabelen heeft (Onboarding)
+      // A journal is only usable once variables exist, so unconfigured accounts
+      // are routed through onboarding first.
       const { data: variables, error: varsError } = await supabase
         .from("variables")
         .select("id")
         .eq("user_id", user.id);
 
+      if (cancelled) return;
+
       if (varsError) {
-        console.error("❌ Fout bij ophalen variabelen:", varsError.message);
-        setLoading(false);
+        // Never hard-block the app on a schema/RLS hiccup.
+        console.error("Could not verify onboarding state:", varsError.message);
+        setState("ready");
         return;
       }
 
-      const hasVariables = variables && variables.length > 0;
+      const configured = (variables ?? []).length > 0;
 
-      // 3. Stuur door op basis van onboarding status
-      if (!hasVariables && pathname !== "/onboarding") {
+      if (!configured && pathname !== "/onboarding") {
         router.replace("/onboarding");
-      } else if (hasVariables && pathname === "/onboarding") {
-        router.replace("/trades");
+      } else if (configured && pathname === "/onboarding") {
+        router.replace("/dashboard");
       } else {
-        setLoading(false);
+        setState("ready");
       }
     }
 
+    setState("checking");
     checkAccess();
+    return () => {
+      cancelled = true;
+    };
   }, [router, pathname]);
 
-  if (loading) {
+  if (state === "checking") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <p className="text-gray-400">Loading...</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas">
+        <div className="relative">
+          <span className="absolute inset-0 animate-pulse-ring rounded-xl" aria-hidden />
+          <LogoMark size={40} />
+        </div>
+        <p className="text-xs font-medium tracking-wide text-content-subtle">
+          Loading your journal…
+        </p>
       </div>
     );
   }
 
-  return <>{children}</>;
+  return children;
 }
