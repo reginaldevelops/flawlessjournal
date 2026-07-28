@@ -225,11 +225,9 @@ export default function PositionCandlesChart({
           <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
             Price chart
             {activeTf ? ` · ${activeTf}` : ""}
-            {chartData.length ? ` · ${chartData.length} candles` : ""}
-            {usingSnapshot ? " · snapshot" : ""}
-            {fillMarks.length
-              ? ` · ${fillMarks.length} fill${fillMarks.length === 1 ? "" : "s"}`
-              : ""}
+            {usingSnapshot ? (
+              <span className="ml-1 font-normal normal-case text-content-muted">(snapshot)</span>
+            ) : null}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-2xs text-content-subtle">
             <span className="inline-flex items-center gap-1">
@@ -238,9 +236,6 @@ export default function PositionCandlesChart({
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-loss" aria-hidden /> Sell
             </span>
-            {interval === "auto" && (
-              <span>Auto ≈ {suggested} from trade length</span>
-            )}
           </div>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-2 overflow-x-auto">

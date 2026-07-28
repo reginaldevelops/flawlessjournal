@@ -1,6 +1,7 @@
 "use client";
 
-import { Flame } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Flame } from "lucide-react";
 import { Card, CardBody, CardHeader, Progress, Skeleton, Tooltip, cn } from "../ui";
 import { formatDate, pluralize } from "../../lib/format";
 
@@ -22,12 +23,17 @@ function Stat({ label, value, hint, tone = "neutral" }) {
 }
 
 export default function StreakCard({ coverage, monthEntries, totalEntries, loading = false }) {
+  const [expanded, setExpanded] = useState(false);
   const { sessions = [], total = 0, journalled = 0, streak = 0, best = 0 } = coverage ?? {};
   const pct = total ? (journalled / total) * 100 : 0;
 
   const headline = total
     ? `Journalled ${journalled} of the last ${pluralize(total, "session")}`
     : "No trading sessions logged yet";
+  const compactSummary =
+    streak > 0
+      ? `${streak} streak · ${Math.round(pct)}% coverage`
+      : `${Math.round(pct)}% session coverage`;
 
   return (
     <Card>
@@ -36,14 +42,33 @@ export default function StreakCard({ coverage, monthEntries, totalEntries, loadi
         icon={Flame}
         title="Consistency"
         actions={
-          <Tooltip content="A session is a day you took at least one trade — the days a written review actually matters.">
-            <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line text-[9px] font-semibold text-content-subtle">
-              ?
-            </span>
-          </Tooltip>
+          <div className="flex items-center gap-1">
+            <Tooltip content="A session is a day you took at least one trade — the days a written review actually matters.">
+              <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line text-[9px] font-semibold text-content-subtle">
+                ?
+              </span>
+            </Tooltip>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-label={expanded ? "Collapse consistency panel" : "Expand consistency panel"}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-content-subtle transition hover:bg-surface-hover hover:text-content lg:hidden"
+            >
+              <ChevronDown size={15} className={cn("transition-transform", expanded && "rotate-180")} aria-hidden />
+            </button>
+          </div>
         }
       />
-      <CardBody className="space-y-3 p-3.5">
+      {!expanded && !loading && (
+        <p className="border-b border-line px-4 py-2 text-xs text-content-muted lg:hidden">{compactSummary}</p>
+      )}
+      {!expanded && loading && (
+        <div className="border-b border-line px-4 py-2 lg:hidden">
+          <Skeleton className="h-4 w-32" />
+        </div>
+      )}
+      <CardBody className={cn("space-y-3 p-3.5", !expanded && !loading && "hidden lg:block")}>
         {loading ? (
           <>
             <Skeleton className="h-4 w-40" />

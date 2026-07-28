@@ -99,3 +99,14 @@ export function validateLabel(label) {
   if (value.length > 60) return { ok: false, error: "Keep the name under 60 characters." };
   return { ok: true, error: null };
 }
+
+/** Strict https DexScreener Solana pair URL — rejects embedded/substring matches. */
+export function isValidDexScreenerSolanaUrl(value) {
+  try {
+    const url = new URL(String(value ?? "").trim());
+    if (url.protocol !== "https:" || url.hostname !== "dexscreener.com") return false;
+    return /^\/solana\/[1-9A-HJ-NP-Za-km-z]{32,48}\/?$/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}

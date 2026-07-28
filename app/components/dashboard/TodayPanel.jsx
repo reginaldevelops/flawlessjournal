@@ -14,7 +14,7 @@ import {
   Tooltip,
   cn,
 } from "../ui";
-import { formatCurrency, formatDate, formatPercent, pluralize } from "../../lib/format";
+import { formatCurrency, formatDate, pluralize } from "../../lib/format";
 import {
   eventLocalTime,
   minutesToClock,

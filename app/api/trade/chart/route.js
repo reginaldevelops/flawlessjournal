@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isValidSolanaAddress, isValidDexScreenerSolanaUrl } from "../../../lib/chain/validate";
+import { publicApiError } from "../../../lib/api/publicError";
 import {
   fetchFillChartWindow,
   fetchPositionChartWindow,
@@ -35,6 +37,16 @@ export async function GET(request) {
       );
     }
 
+    if (mint && !isValidSolanaAddress(mint)) {
+      return NextResponse.json({ error: "Invalid mint address" }, { status: 400 });
+    }
+    if (pair && !isValidSolanaAddress(pair)) {
+      return NextResponse.json({ error: "Invalid pair address" }, { status: 400 });
+    }
+    if (pairUrl && !isValidDexScreenerSolanaUrl(pairUrl)) {
+      return NextResponse.json({ error: "pairUrl must be a DexScreener Solana URL" }, { status: 400 });
+    }
+
     let result;
     if (from || to) {
       result = await fetchPositionChartWindow({
@@ -69,9 +81,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("[trade/chart]", error);
-    return NextResponse.json(
-      { error: error?.message ?? "Chart fetch failed" },
-      { status: 502 }
-    );
+    return NextResponse.json(publicApiError("Chart fetch failed"), { status: 502 });
   }
 }

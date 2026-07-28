@@ -349,6 +349,7 @@ function WalletSummary({ wallets, balances, balancesLoading }) {
 /* ------------------------------------------------------------------ */
 
 function usePortfolioBalances(wallets, walletsLoading) {
+  const toast = useToast();
   const [balances, setBalances] = useState(new Map());
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
@@ -383,6 +384,9 @@ function usePortfolioBalances(wallets, walletsLoading) {
         cache: "no-store",
       });
       const data = await res.json().catch(() => null);
+      if (!controller.signal.aborted && !res.ok) {
+        throw new Error(data?.error || `Balance fetch failed (${res.status})`);
+      }
       if (!controller.signal.aborted) {
         const map = new Map();
         for (const w of data?.wallets ?? []) {
@@ -395,10 +399,11 @@ function usePortfolioBalances(wallets, walletsLoading) {
       }
     } catch (err) {
       if (err?.name === "AbortError") return;
+      toast.error("Could not load balances", { description: err.message });
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   const refresh = useCallback(() => {
     fetch_(walletsRef.current);

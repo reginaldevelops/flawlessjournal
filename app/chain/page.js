@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowDownRight,
   ArrowUpRight,
+  ChevronDown,
   Flame,
   Globe2,
   RefreshCw,
@@ -74,35 +75,46 @@ function HeatBanner({ heat }) {
           ? Waves
           : Activity;
 
+  const iconToneClass =
+    heat.tone === "profit"
+      ? "text-profit"
+      : heat.tone === "brand"
+        ? "text-brand"
+        : heat.tone === "warn"
+          ? "text-warn"
+          : heat.tone === "loss"
+            ? "text-loss"
+            : "text-content-muted";
+
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
-        heat.tone === "profit" && "border-profit/30 bg-profit-soft/40",
-        heat.tone === "brand" && "border-brand/30 bg-brand-soft/40",
-        heat.tone === "warn" && "border-warn/30 bg-warn-soft/40",
-        heat.tone === "loss" && "border-loss/30 bg-loss-soft/40",
+        "rounded-xl border px-4 py-3.5",
+        heat.tone === "profit" && "border-profit/35 bg-profit-soft/50",
+        heat.tone === "brand" && "border-brand/35 bg-brand-soft/50",
+        heat.tone === "warn" && "border-warn/35 bg-warn-soft/50",
+        heat.tone === "loss" && "border-loss/35 bg-loss-soft/50",
         heat.tone === "neutral" && "border-line bg-surface"
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <Icon size={18} className="mt-0.5 shrink-0 text-content" aria-hidden />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-content">
-            Market heat: {heat.label}
-            <span className="ml-2 font-mono text-2xs tnum text-content-subtle">
-              score {heat.score > 0 ? "+" : ""}
-              {heat.score}
-            </span>
-          </p>
-          <p className="mt-0.5 text-xs text-content-muted">
+        <Icon size={22} className={cn("mt-0.5 shrink-0", iconToneClass)} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="text-base font-semibold tracking-tight text-content">{heat.label}</p>
+            <Badge tone={heat.tone === "brand" ? "brand" : heat.tone} size="sm">
+              Market heat
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm leading-snug text-content-muted">
             {HEAT_COPY[heat.label] || HEAT_COPY.Neutral}
+          </p>
+          <p className="mt-1.5 font-mono text-2xs tnum text-content-subtle">
+            Score {heat.score > 0 ? "+" : ""}
+            {heat.score}
           </p>
         </div>
       </div>
-      <Badge tone={heat.tone === "brand" ? "brand" : heat.tone} size="sm">
-        {heat.label}
-      </Badge>
     </div>
   );
 }
@@ -219,27 +231,26 @@ function CompareCards({ rows, active, onSelect }) {
                   <p className="font-mono text-sm tnum font-semibold text-content">
                     {formatCurrency(row.dexVolume24h, { compact: true })}
                   </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xs text-content-subtle">TVL</p>
-                  <p className="font-mono text-xs tnum text-content-muted">
-                    {formatCurrency(row.tvl, { compact: true })}
-                  </p>
-                  {row.dexVolumeChange1d != null ? (
-                    <p
-                      className={cn(
-                        "mt-0.5 inline-flex items-center gap-0.5 font-mono text-2xs tnum",
-                        toneTextClass(row.dexVolumeChange1d)
-                      )}
-                    >
-                      <DeltaIcon size={10} />
-                      {formatPercent(row.dexVolumeChange1d, {
-                        signed: true,
-                        decimals: 1,
-                      })}
+                  {row.tvl != null ? (
+                    <p className="mt-0.5 text-2xs text-content-subtle">
+                      TVL {formatCurrency(row.tvl, { compact: true })}
                     </p>
                   ) : null}
                 </div>
+                {row.dexVolumeChange1d != null ? (
+                  <p
+                    className={cn(
+                      "inline-flex items-center gap-0.5 font-mono text-xs tnum font-medium",
+                      toneTextClass(row.dexVolumeChange1d)
+                    )}
+                  >
+                    <DeltaIcon size={12} />
+                    {formatPercent(row.dexVolumeChange1d, {
+                      signed: true,
+                      decimals: 1,
+                    })}
+                  </p>
+                ) : null}
               </div>
             )}
           </button>
@@ -253,6 +264,7 @@ export default function ChainAnalysisPage() {
   const [chain, setChain] = useState("solana");
   const [metric, setMetric] = useState("dexVolume");
   const [range, setRange] = useState("30d");
+  const [platformsOpen, setPlatformsOpen] = useState(false);
   const [state, setState] = useState({
     loading: true,
     error: null,
@@ -430,39 +442,65 @@ export default function ChainAnalysisPage() {
               )}
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              <PlatformTable title="Top DEX platforms" rows={state.data.topDexs} valueLabel="Vol 24h" />
-              <PlatformTable title="Top fees" rows={state.data.topFees} valueLabel="Fees 24h" />
-              <PlatformTable
-                title="Top revenue"
-                rows={state.data.topRevenue}
-                valueLabel="Rev 24h"
-              />
-              {chain === "solana" ? (
-                <PlatformTable
-                  title="Launchpads & meme rails"
-                  rows={state.data.launchpads}
-                  valueLabel="Rev 24h"
+            <section className="rounded-2xl border border-line bg-surface overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setPlatformsOpen((o) => !o)}
+                aria-expanded={platformsOpen}
+                aria-label={platformsOpen ? "Hide platform breakdown" : "Show platform breakdown"}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-surface-hover/50"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-content">Platform breakdown</p>
+                  <p className="mt-0.5 text-xs text-content-muted">
+                    DEX volume, fees, revenue{chain === "solana" ? " & launchpads" : ""}
+                  </p>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={cn(
+                    "shrink-0 text-content-subtle transition-transform",
+                    platformsOpen && "rotate-180"
+                  )}
+                  aria-hidden
                 />
-              ) : (
-                <Card>
-                  <CardHeader
-                    title="How to use this"
-                    subtitle="Vacation vs desk time"
+              </button>
+              {platformsOpen ? (
+                <div className="grid gap-3 border-t border-line p-3 lg:grid-cols-2">
+                  <PlatformTable title="Top DEX platforms" rows={state.data.topDexs} valueLabel="Vol 24h" />
+                  <PlatformTable title="Top fees" rows={state.data.topFees} valueLabel="Fees 24h" />
+                  <PlatformTable
+                    title="Top revenue"
+                    rows={state.data.topRevenue}
+                    valueLabel="Rev 24h"
                   />
-                  <CardBody className="space-y-2 text-xs leading-relaxed text-content-muted">
-                    <p>
-                      Rising 24h/7d DEX volume and fees usually means more flow and better
-                      opportunity density. Falling volume is your cue to reduce screen time.
-                    </p>
-                    <p>
-                      Compare Solana DEX heat with Hyperliquid when you care about overall
-                      crypto risk-on — HL often leads on perps scale even when SOL memes cool off.
-                    </p>
-                  </CardBody>
-                </Card>
-              )}
-            </div>
+                  {chain === "solana" ? (
+                    <PlatformTable
+                      title="Launchpads & meme rails"
+                      rows={state.data.launchpads}
+                      valueLabel="Rev 24h"
+                    />
+                  ) : (
+                    <Card>
+                      <CardHeader
+                        title="How to use this"
+                        subtitle="Vacation vs desk time"
+                      />
+                      <CardBody className="space-y-2 text-xs leading-relaxed text-content-muted">
+                        <p>
+                          Rising 24h/7d DEX volume and fees usually means more flow and better
+                          opportunity density. Falling volume is your cue to reduce screen time.
+                        </p>
+                        <p>
+                          Compare Solana DEX heat with Hyperliquid when you care about overall
+                          crypto risk-on — HL often leads on perps scale even when SOL memes cool off.
+                        </p>
+                      </CardBody>
+                    </Card>
+                  )}
+                </div>
+              ) : null}
+            </section>
 
             <Card>
               <CardHeader

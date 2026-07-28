@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarRange, Check, ListFilter, X } from "lucide-react";
+import { CalendarRange, Check, ListFilter, SlidersHorizontal, X } from "lucide-react";
 import {
   Badge,
   Button,
@@ -134,9 +134,55 @@ function DimensionFilterPopover({ dims, facets, filters, onToggle, onClear }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Toolbar                                                            */
-/* ------------------------------------------------------------------ */
+function QuickFilterPills({ filters, onToggle, className }) {
+  return (
+    <div className={cn("flex items-center gap-1", className)}>
+      {QUICK_FILTERS.map((q) => {
+        const on = Boolean(filters.quick[q.id]);
+        return (
+          <button
+            key={q.id}
+            type="button"
+            onClick={() => onToggle(q.id)}
+            aria-pressed={on}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors",
+              on
+                ? "border-brand/40 bg-brand-soft text-brand"
+                : "border-line text-content-subtle hover:border-line-strong hover:text-content-muted"
+            )}
+          >
+            {q.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function QuickFilterPopover({ filters, onToggle }) {
+  const active = QUICK_FILTERS.filter((q) => filters.quick[q.id]).length;
+
+  return (
+    <Popover
+      align="start"
+      width="w-52"
+      contentClassName="p-2"
+      trigger={
+        <Button variant="secondary" size="sm" icon={SlidersHorizontal} className="lg:hidden">
+          Quick
+          {active > 0 && (
+            <Badge tone="brand" size="xs" className="ml-0.5">
+              {active}
+            </Badge>
+          )}
+        </Button>
+      }
+    >
+      <QuickFilterPills filters={filters} onToggle={onToggle} className="flex-col items-stretch gap-1" />
+    </Popover>
+  );
+}
 
 export function FilterBar({
   filters,
@@ -234,27 +280,8 @@ export function FilterBar({
           onClear={onClearDimension}
         />
 
-        <div className="flex items-center gap-1">
-          {QUICK_FILTERS.map((q) => {
-            const on = Boolean(filters.quick[q.id]);
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => onToggleQuick(q.id)}
-                aria-pressed={on}
-                className={cn(
-                  "rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors",
-                  on
-                    ? "border-brand/40 bg-brand-soft text-brand"
-                    : "border-line text-content-subtle hover:border-line-strong hover:text-content-muted"
-                )}
-              >
-                {q.label}
-              </button>
-            );
-          })}
-        </div>
+        <QuickFilterPopover filters={filters} onToggle={onToggleQuick} />
+        <QuickFilterPills filters={filters} onToggle={onToggleQuick} className="hidden lg:flex" />
 
         <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <SearchInput
@@ -316,6 +343,7 @@ export function FilterChips({
   activeCount,
 }) {
   const labelFor = (field) => dims.find((d) => d.field === field)?.label ?? field;
+  const hasChips = activeCount > 0;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -323,33 +351,35 @@ export function FilterChips({
         {formatNumber(matched, { decimals: 0 })} of {formatNumber(total, { decimals: 0 })} trades
       </span>
 
-      {Object.entries(filters.custom ?? {}).map(([field, values]) =>
-        values.map((v) => (
-          <Chip
-            key={`${field}-${v}`}
-            label={labelFor(field)}
-            value={field === "__tags" ? `#${v}` : v}
-            onRemove={() => onToggleDimension(field, v)}
-          />
-        ))
-      )}
+      {hasChips && (
+        <>
+          {Object.entries(filters.custom ?? {}).map(([field, values]) =>
+            values.map((v) => (
+              <Chip
+                key={`${field}-${v}`}
+                label={labelFor(field)}
+                value={field === "__tags" ? `#${v}` : v}
+                onRemove={() => onToggleDimension(field, v)}
+              />
+            ))
+          )}
 
-      {QUICK_FILTERS.filter((q) => filters.quick[q.id]).map((q) => (
-        <Chip key={q.id} label="Filter" value={q.label} onRemove={() => onToggleQuick(q.id)} />
-      ))}
+          {QUICK_FILTERS.filter((q) => filters.quick[q.id]).map((q) => (
+            <Chip key={q.id} label="Filter" value={q.label} onRemove={() => onToggleQuick(q.id)} />
+          ))}
 
-      {filters.search?.trim() && (
-        <Chip label="Search" value={filters.search.trim()} onRemove={() => patch({ search: "" })} />
-      )}
+          {filters.search?.trim() && (
+            <Chip label="Search" value={filters.search.trim()} onRemove={() => patch({ search: "" })} />
+          )}
 
-      {activeCount > 0 && (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="ml-1 text-2xs font-medium text-brand transition hover:underline"
-        >
-          Clear all
-        </button>
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="ml-1 text-2xs font-medium text-brand transition hover:underline"
+          >
+            Clear all
+          </button>
+        </>
       )}
     </div>
   );

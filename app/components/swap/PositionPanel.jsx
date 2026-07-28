@@ -25,6 +25,7 @@ export default function PositionPanel({ trade, onRefresh }) {
   const [swapOpen, setSwapOpen] = useState(false);
   const [swapSide, setSwapSide] = useState("buy");
   const [showChart, setShowChart] = useState(false);
+  const [showFillsOverride, setShowFillsOverride] = useState(null);
   const [markPrice, setMarkPrice] = useState(null);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function PositionPanel({ trade, onRefresh }) {
     (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)
   );
   const fills = [...fillsChrono].reverse();
+  const showFills = showFillsOverride ?? fills.length <= 3;
   const unrealized = live ? unrealizedPnlUsd(c, markPrice) : null;
 
   const openSwap = (side) => {
@@ -219,9 +221,25 @@ export default function PositionPanel({ trade, onRefresh }) {
 
         {fills.length > 0 && (
           <div className="border-t border-line">
-            <p className="px-4 pt-3 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-              Fill history
-            </p>
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                Fill history
+                <span className="ml-1.5 font-normal normal-case text-content-muted">
+                  ({fills.length})
+                </span>
+              </p>
+              <Button
+                variant="subtle"
+                size="xs"
+                iconRight={ChevronDown}
+                onClick={() => setShowFillsOverride(!showFills)}
+                aria-expanded={showFills}
+                className={showFills ? "[&_svg:last-child]:rotate-180" : undefined}
+              >
+                {showFills ? "Hide" : "Show"}
+              </Button>
+            </div>
+            {showFills && (
             <ul className="divide-y divide-line/80">
               {fills.map((f) => (
                 <li
@@ -269,6 +287,7 @@ export default function PositionPanel({ trade, onRefresh }) {
                 </li>
               ))}
             </ul>
+            )}
           </div>
         )}
       </section>

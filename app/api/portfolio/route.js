@@ -21,6 +21,7 @@ const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 const HL_API = "https://api.hyperliquid.xyz/info";
 const SOL_DECIMALS = 9;
 const DUST_USD = 0.05;
+const MAX_WALLETS = 25;
 
 /* ------------------------------------------------------------------ */
 /* Caches (survive across requests while the Node process lives)      */
@@ -470,6 +471,27 @@ export async function POST(request) {
       { totalUSD: 0, wallets: [], assets: [], errors: [], updatedAt: new Date().toISOString() },
       { status: 200 }
     );
+  }
+
+  if (wallets.length > MAX_WALLETS) {
+    return NextResponse.json(
+      { error: `At most ${MAX_WALLETS} wallets per request` },
+      { status: 400 }
+    );
+  }
+
+  for (const w of wallets) {
+    const chain = String(w?.chain ?? "").toLowerCase();
+    const address = String(w?.address ?? "").trim();
+    if (chain === "solana" && !isValidSolanaAddress(address)) {
+      return NextResponse.json({ error: "Invalid Solana wallet address" }, { status: 400 });
+    }
+    if ((chain === "hyperliquid" || chain === "evm") && !isValidEvmAddress(address)) {
+      return NextResponse.json({ error: "Invalid EVM wallet address" }, { status: 400 });
+    }
+    if (!["solana", "hyperliquid", "evm"].includes(chain)) {
+      return NextResponse.json({ error: `Unsupported chain "${w?.chain}"` }, { status: 400 });
+    }
   }
 
   try {
