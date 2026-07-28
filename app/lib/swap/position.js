@@ -108,11 +108,21 @@ export function makeFill({
   priceUsd,
   usdValue,
   wallet,
+  ts,
 }) {
+  const executedAt =
+    ts instanceof Date
+      ? ts.toISOString()
+      : typeof ts === "number"
+        ? new Date(ts > 1e12 ? ts : ts * 1000).toISOString()
+        : typeof ts === "string" && ts
+          ? new Date(ts).toISOString()
+          : new Date().toISOString();
+
   return {
     id: `${signature || Date.now()}-${side}`,
     side,
-    ts: new Date().toISOString(),
+    ts: Number.isNaN(Date.parse(executedAt)) ? new Date().toISOString() : executedAt,
     signature: signature || null,
     quoteMint,
     quoteSymbol,

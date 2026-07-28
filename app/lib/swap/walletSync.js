@@ -18,6 +18,8 @@ import {
   JUPITER_PRICE_API,
   JUPITER_TOKEN_API,
   QUOTE_TOKENS,
+  SYNC_BATCH_DEFAULT,
+  SYNC_BATCH_MAX,
 } from "./constants";
 
 const QUOTE_MINTS = new Set(QUOTE_TOKENS.map((t) => t.mint));
@@ -218,38 +220,111 @@ async function fetchTokenMeta(mint) {
 /**
  * Scan a wallet for recent swaps classifiable against quote mints.
  *
- * @param {{ address: string, limit?: number, untilSignature?: string|null, rpcUrl?: string }} opts
+ * Never walks a full million-tx history — one batch of `limit` signatures
+ * (newest first, or older via `before`). Pass `onProgress` for live UI.
+ *
+ * @param {{
+ *   address: string,
+ *   limit?: number,
+ *   untilSignature?: string|null,
+ *   before?: string|null,
+ *   rpcUrl?: string,
+ *   onProgress?: (event: object) => void,
+ * }} opts
  */
 export async function syncWalletSwaps({
   address,
-  limit = 40,
+  limit = SYNC_BATCH_DEFAULT,
   untilSignature = null,
+  before = null,
   rpcUrl = DEFAULT_RPC,
+  onProgress,
 } = {}) {
   if (!address) throw new Error("address required");
 
-  const sigParams = { limit: Math.min(100, Math.max(5, limit)) };
-  // `until` returns signatures at or before — we use it to stop at last synced? 
-  // Better: fetch newest `limit` and filter client-side by known sigs.
+  const batchLimit = Math.min(SYNC_BATCH_MAX, Math.max(5, limit));
+  const sigParams = { limit: batchLimit };
+  if (before) sigParams.before = before;
+
+  const emit = (event) => {
+    try {
+      onProgress?.(event);
+    } catch {
+      /* ignore UI errors */
+    }
+  };
+
+  emit({ type: "phase", phase: "signatures", message: "Fetching signature list…" });
+
   const signatures = await rpc(rpcUrl, "getSignaturesForAddress", [
     address,
     sigParams,
   ]);
 
+  // Trim to new-only window when we have a cursor
+  let list = Array.isArray(signatures) ? [...signatures] : [];
+  let stoppedAtCursor = false;
+  if (untilSignature) {
+    const idx = list.findIndex((r) => r?.signature === untilSignature);
+    if (idx >= 0) {
+      list = list.slice(0, idx);
+      stoppedAtCursor = true;
+    }
+  }
+
+  const times = list
+    .map((r) => r?.blockTime)
+    .filter((t) => typeof t === "number" && t > 0);
+  const newestTime = times.length ? Math.max(...times) : null;
+  const oldestTime = times.length ? Math.min(...times) : null;
+  const lookbackDays =
+    newestTime && oldestTime
+      ? Math.max(0, (newestTime - oldestTime) / 86400)
+      : null;
+
+  const total = list.length;
+  emit({
+    type: "start",
+    total,
+    batchLimit,
+    lookbackDays,
+    newestTime,
+    oldestTime,
+    stoppedAtCursor,
+    hasMoreOlder: list.length >= batchLimit,
+    newestSignature: list[0]?.signature ?? null,
+    oldestSignature: list[list.length - 1]?.signature ?? null,
+    message:
+      total === 0
+        ? "No new transactions in this batch"
+        : `Scanning ${total} tx${total === 1 ? "" : "s"}${
+            lookbackDays != null ? ` (~${formatDays(lookbackDays)})` : ""
+          }`,
+  });
+
   const swaps = [];
   const skipped = [];
   let scanned = 0;
 
-  for (const row of signatures ?? []) {
+  for (const row of list) {
     if (!row?.signature) continue;
-    if (untilSignature && row.signature === untilSignature) break;
+
     if (row.err) {
       skipped.push({ signature: row.signature, reason: "failed_tx" });
+      scanned += 1;
+      emit({
+        type: "progress",
+        scanned,
+        total,
+        swapsFound: swaps.length,
+        skipped: skipped.length,
+        signature: row.signature,
+        status: "failed_tx",
+      });
       continue;
     }
 
-    scanned += 1;
-    await sleep(120); // be gentle on free RPC
+    await sleep(120);
 
     let tx;
     try {
@@ -259,10 +334,32 @@ export async function syncWalletSwaps({
       ]);
     } catch (error) {
       skipped.push({ signature: row.signature, reason: error.message });
+      scanned += 1;
+      emit({
+        type: "progress",
+        scanned,
+        total,
+        swapsFound: swaps.length,
+        skipped: skipped.length,
+        signature: row.signature,
+        status: "error",
+      });
       continue;
     }
+
+    scanned += 1;
+
     if (!tx) {
       skipped.push({ signature: row.signature, reason: "missing" });
+      emit({
+        type: "progress",
+        scanned,
+        total,
+        swapsFound: swaps.length,
+        skipped: skipped.length,
+        signature: row.signature,
+        status: "missing",
+      });
       continue;
     }
 
@@ -270,18 +367,44 @@ export async function syncWalletSwaps({
     const classified = classifySwap(deltas);
     if (!classified) {
       skipped.push({ signature: row.signature, reason: "not_swap" });
+      emit({
+        type: "progress",
+        scanned,
+        total,
+        swapsFound: swaps.length,
+        skipped: skipped.length,
+        signature: row.signature,
+        status: "not_swap",
+      });
       continue;
     }
 
-    swaps.push({
+    const swap = {
       ...classified,
       signature: row.signature,
       blockTime: row.blockTime ?? null,
       slot: row.slot ?? null,
+    };
+    swaps.push(swap);
+    emit({
+      type: "progress",
+      scanned,
+      total,
+      swapsFound: swaps.length,
+      skipped: skipped.length,
+      signature: row.signature,
+      status: "swap",
+      side: swap.side,
+      tokenMint: swap.tokenMint,
     });
   }
 
-  // Enrich with prices + token meta
+  emit({
+    type: "phase",
+    phase: "enrich",
+    message: `Enriching ${swaps.length} swap${swaps.length === 1 ? "" : "s"}…`,
+  });
+
   const mints = [
     ...new Set(swaps.flatMap((s) => [s.tokenMint, s.quoteMint])),
   ];
@@ -316,13 +439,41 @@ export async function syncWalletSwaps({
     });
   }
 
-  return {
+  const result = {
     address,
     scanned,
+    total,
     signatures: (signatures ?? []).length,
-    newestSignature: signatures?.[0]?.signature ?? null,
+    batchLimit,
+    lookbackDays,
+    newestTime,
+    oldestTime,
+    newestSignature: list[0]?.signature ?? null,
+    oldestSignature: list[list.length - 1]?.signature ?? null,
+    hasMoreOlder: (signatures ?? []).length >= batchLimit,
+    stoppedAtCursor,
     swaps: enriched,
     skipped: skipped.length,
     fetchedAt: new Date().toISOString(),
   };
+
+  emit({
+    type: "done",
+    scanned: result.scanned,
+    total: result.total,
+    swapsFound: enriched.length,
+    skipped: result.skipped,
+    batchLimit: result.batchLimit,
+    lookbackDays: result.lookbackDays,
+    hasMoreOlder: result.hasMoreOlder,
+    message: `Done · scanned ${result.scanned}/${result.total} · ${enriched.length} swaps`,
+  });
+  return result;
+}
+
+function formatDays(days) {
+  if (days == null || !Number.isFinite(days)) return "?";
+  if (days < 1) return `${Math.max(1, Math.round(days * 24))}h`;
+  if (days < 10) return `${days.toFixed(1)}d`;
+  return `${Math.round(days)}d`;
 }

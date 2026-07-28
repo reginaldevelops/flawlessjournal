@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import PositionPanel from "../../components/swap/PositionPanel";
+import ChartField from "../../components/trade/ChartField";
 import { Parser } from "expr-eval";
 import {
   XCircle,
@@ -550,20 +551,9 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // Link / Chart
+  // Chart / link fields are edited in the main chart panels (paste image or URL).
   if (v.varType === "chart" || v.varType === "link") {
-    return (
-      <div className={rowCls}>
-        <span className={labelCls}>{colLabel(v.name)}</span>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
-          placeholder="Paste link…"
-          className={fieldCls}
-        />
-      </div>
-    );
+    return null;
   }
 
   return null;
@@ -779,27 +769,11 @@ export default function TradeViewPage() {
             .sort((a, b) => a.order - b.order)
             .map((v) => (
               <div key={v.id} className="rounded-xl border border-line bg-surface p-4">
-                <h3 className="text-sm font-semibold text-content mb-3">{v.name}</h3>
-                {trade[v.name] ? (
-                  <a
-                    href={trade[v.name]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={trade[v.name]}
-                      alt={v.name}
-                      className="max-w-full max-h-[800px] object-contain rounded-lg"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  </a>
-                ) : (
-                  <div className="text-xs text-content-subtle text-center py-10 border border-dashed border-line rounded-lg">
-                    No chart added
-                  </div>
-                )}
+                <ChartField
+                  label={v.name}
+                  value={trade[v.name] || ""}
+                  onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
+                />
               </div>
             ))}
 
@@ -813,27 +787,11 @@ export default function TradeViewPage() {
             .sort((a, b) => a.order - b.order)
             .map((v) => (
               <div key={v.id} className="rounded-xl border border-line bg-surface p-4">
-                <h3 className="text-sm font-semibold text-content mb-3">{v.name}</h3>
-                {trade[v.name] ? (
-                  <a
-                    href={trade[v.name]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={trade[v.name]}
-                      alt={v.name}
-                      className="max-w-full max-h-[800px] object-contain rounded-lg"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  </a>
-                ) : (
-                  <div className="text-xs text-content-subtle text-center py-10 border border-dashed border-line rounded-lg">
-                    No chart added
-                  </div>
-                )}
+                <ChartField
+                  label={v.name}
+                  value={trade[v.name] || ""}
+                  onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
+                />
               </div>
             ))}
         </div>

@@ -33,7 +33,9 @@ import WalletFormModal from "./WalletFormModal";
 import {
   getWalletSyncMeta,
   runWalletSync,
+  formatSyncProgress,
 } from "../lib/swap/importFills";
+import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
@@ -51,17 +53,56 @@ export default function WalletsPage() {
   const [deleting, setDeleting] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
   const [syncTick, setSyncTick] = useState(0);
+  const [syncProgress, setSyncProgress] = useState({}); // walletId -> { label, scanned, total, swapsFound, lookbackDays }
 
-  const handleSyncWallet = async (wallet) => {
+  const handleSyncWallet = async (wallet, { older = false } = {}) => {
     if (wallet.chain !== "solana") return;
     setSyncingId(wallet.id);
+    setSyncProgress((prev) => ({
+      ...prev,
+      [wallet.id]: {
+        label: older ? "Scanning older txs…" : "Starting sync…",
+        scanned: 0,
+        total: 0,
+        swapsFound: 0,
+        lookbackDays: null,
+        older,
+      },
+    }));
     try {
-      const result = await runWalletSync(wallet.address, { limit: 40 });
+      const result = await runWalletSync(wallet.address, {
+        limit: SYNC_BATCH_DEFAULT,
+        older,
+        onProgress: (ev) => {
+          const label = formatSyncProgress(ev);
+          setSyncProgress((prev) => ({
+            ...prev,
+            [wallet.id]: {
+              label: label || prev[wallet.id]?.label || "Syncing…",
+              scanned: ev.scanned ?? prev[wallet.id]?.scanned ?? 0,
+              total: ev.total ?? prev[wallet.id]?.total ?? 0,
+              swapsFound: ev.swapsFound ?? ev.swaps?.length ?? prev[wallet.id]?.swapsFound ?? 0,
+              lookbackDays: ev.lookbackDays ?? prev[wallet.id]?.lookbackDays ?? null,
+              batchLimit: ev.batchLimit ?? prev[wallet.id]?.batchLimit ?? SYNC_BATCH_DEFAULT,
+              older,
+            },
+          }));
+        },
+      });
       setSyncTick((t) => t + 1);
       const n = result.imported?.length ?? 0;
+      const days =
+        result.lookbackDays != null && Number.isFinite(result.lookbackDays)
+          ? result.lookbackDays < 1
+            ? `~${Math.max(1, Math.round(result.lookbackDays * 24))}h`
+            : `~${result.lookbackDays < 10 ? result.lookbackDays.toFixed(1) : Math.round(result.lookbackDays)}d`
+          : null;
+      const scanLine = `Scanned ${result.scanned}/${result.total ?? result.scanned} txs${
+        days ? ` (${days})` : ""
+      } · batch ≤${result.batchLimit ?? SYNC_BATCH_DEFAULT}`;
       if (n > 0) {
         toast.success(`Imported ${n} fill${n === 1 ? "" : "s"}`, {
-          description: `${result.deduped?.length ?? 0} already known · ${result.scanned} txs scanned`,
+          description: `${scanLine} · ${result.deduped?.length ?? 0} already known`,
           action: result.imported[0]?.tradeId
             ? {
                 label: "Open trade",
@@ -73,13 +114,18 @@ export default function WalletsPage() {
         });
       } else {
         toast.info("No new swaps", {
-          description: `Scanned ${result.scanned} txs · ${result.deduped?.length ?? 0} already journaled`,
+          description: `${scanLine} · ${result.deduped?.length ?? 0} already journaled`,
         });
       }
     } catch (err) {
       toast.error("Wallet sync failed", { description: err.message });
     } finally {
       setSyncingId(null);
+      setSyncProgress((prev) => {
+        const next = { ...prev };
+        delete next[wallet.id];
+        return next;
+      });
     }
   };
 
@@ -114,7 +160,7 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track on-chain balances across Solana and Hyperliquid. Sync Solana wallets to import external swaps into your journal (free RPC, runs slowly)."
+        description="Track on-chain balances across Solana and Hyperliquid. Sync imports external Solana swaps in capped batches (not full history) so large wallets stay usable."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -185,7 +231,9 @@ export default function WalletsPage() {
                     balanceData={bal}
                     balancesLoading={balancesLoading}
                     syncing={syncingId === wallet.id}
+                    syncProgress={syncProgress[wallet.id] || null}
                     onSync={() => handleSyncWallet(wallet)}
+                    onSyncOlder={() => handleSyncWallet(wallet, { older: true })}
                     onEdit={() => setEditTarget(wallet)}
                     onDelete={() => setDeleteTarget(wallet)}
                     onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
@@ -379,7 +427,9 @@ function WalletCard({
   balanceData,
   balancesLoading,
   syncing,
+  syncProgress,
   onSync,
+  onSyncOlder,
   onEdit,
   onDelete,
   onToggle,
@@ -392,6 +442,16 @@ function WalletCard({
   const showAssets = !balancesLoading && assets.length > 0;
   const syncMeta =
     wallet.chain === "solana" ? getWalletSyncMeta(wallet.address) : null;
+  const canScanOlder =
+    wallet.chain === "solana" &&
+    Boolean(syncMeta?.oldestSignature) &&
+    syncMeta?.hasMoreOlder !== false;
+  const progressPct =
+    syncProgress?.total > 0
+      ? Math.min(100, Math.round((syncProgress.scanned / syncProgress.total) * 100))
+      : syncing
+        ? 8
+        : 0;
 
   return (
     <Card>
@@ -434,9 +494,12 @@ function WalletCard({
                   <ExternalLink size={10} aria-hidden />
                 </a>
               )}
-              {syncMeta?.lastAt && (
+              {syncMeta?.lastAt && !syncing && (
                 <span className="text-2xs text-content-subtle">
                   Journal synced {formatRelative(syncMeta.lastAt)}
+                  {syncMeta.lastScanned != null
+                    ? ` · last batch ${syncMeta.lastScanned} tx${syncMeta.lastScanned === 1 ? "" : "s"}`
+                    : ""}
                 </span>
               )}
             </div>
@@ -469,17 +532,33 @@ function WalletCard({
           {/* Actions */}
           <div className="flex shrink-0 items-center gap-1">
             {wallet.chain === "solana" && (
-              <Tooltip content="Import external swaps into /trade (free RPC, may take a bit)">
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  icon={Download}
-                  loading={syncing}
-                  onClick={onSync}
-                >
-                  Sync
-                </Button>
-              </Tooltip>
+              <>
+                <Tooltip content="Import new external swaps (one capped batch via free RPC)">
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    icon={Download}
+                    loading={syncing && !syncProgress?.older}
+                    disabled={syncing}
+                    onClick={onSync}
+                  >
+                    Sync
+                  </Button>
+                </Tooltip>
+                {canScanOlder && (
+                  <Tooltip content="Scan the next older batch (same size cap — never full history)">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={syncing && syncProgress?.older}
+                      disabled={syncing}
+                      onClick={onSyncOlder}
+                    >
+                      Older
+                    </Button>
+                  </Tooltip>
+                )}
+              </>
             )}
             <Tooltip
               content={
@@ -513,6 +592,40 @@ function WalletCard({
             />
           </div>
         </div>
+
+        {/* Live sync progress */}
+        {syncing && syncProgress && (
+          <div className="border-t border-line/40 px-5 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="min-w-0 truncate text-2xs text-content-muted">
+                {syncProgress.label || "Syncing…"}
+              </p>
+              {syncProgress.total > 0 && (
+                <span className="shrink-0 font-mono text-2xs tnum text-content-subtle">
+                  {syncProgress.scanned}/{syncProgress.total}
+                </span>
+              )}
+            </div>
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-raised"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPct}
+              aria-label="Wallet sync progress"
+            >
+              <div
+                className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-2xs text-content-subtle">
+              Free RPC · max {syncProgress.batchLimit ?? SYNC_BATCH_DEFAULT} txs per
+              press
+              {syncProgress.older ? " · walking older history" : " · new txs only"}
+            </p>
+          </div>
+        )}
 
         {/* Token breakdown row */}
         {showAssets && (

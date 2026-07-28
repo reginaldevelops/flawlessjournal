@@ -71,3 +71,7 @@ export const DEFAULT_SWAP_SETTINGS = {
 };
 
 export const POSITION_KIND = "solana_position";
+
+/** Wallet sync: free RPC is slow — hard batch caps, never full history. */
+export const SYNC_BATCH_DEFAULT = 50;
+export const SYNC_BATCH_MAX = 100;

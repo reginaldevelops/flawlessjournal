@@ -326,6 +326,16 @@ export default function SwapSheet({
         "confirmed"
       );
 
+      let blockTime = Math.floor(Date.now() / 1000);
+      try {
+        const parsed = await connection.getTransaction(signature, {
+          maxSupportedTransactionVersion: 0,
+        });
+        if (parsed?.blockTime) blockTime = parsed.blockTime;
+      } catch {
+        /* keep wall-clock fallback */
+      }
+
       const result = await appendFillToPosition({
         tokenMint: positionMint,
         tokenSymbol: positionSymbol,
@@ -341,6 +351,7 @@ export default function SwapSheet({
         priceUsd: preview.priceUsd,
         usdValue: preview.usdValue,
         wallet: wallet.publicKey.toBase58(),
+        blockTime,
       });
 
       toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
