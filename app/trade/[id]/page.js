@@ -7,6 +7,7 @@ import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import PositionPanel from "../../components/swap/PositionPanel";
 import ChartField from "../../components/trade/ChartField";
+import { isPositionLive } from "../../lib/swap/position";
 import { Parser } from "expr-eval";
 import {
   XCircle,
@@ -15,6 +16,7 @@ import {
   CheckCircle,
   Sigma,
   Trash2,
+  Activity,
 } from "lucide-react";
 
 const COL_LABELS = {
@@ -66,6 +68,22 @@ function getPnlValue(trade, variables) {
 }
 
 function getTradeStatus(trade, variables) {
+  const fj = trade?._fj;
+  if (fj?.kind === "solana_position") {
+    if (isPositionLive(fj.computed)) {
+      return {
+        icon: Activity,
+        color: "bg-profit-soft text-profit-fg border border-profit/30",
+        label: "Position live",
+      };
+    }
+    return {
+      icon: CheckCircle,
+      color: "bg-surface-raised text-content-muted border border-line",
+      label: "Position closed",
+    };
+  }
+
   const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
   const postVars = variables.filter((v) => v.phase === "post" && v.visible);
 

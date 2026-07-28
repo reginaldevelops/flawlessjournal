@@ -77,16 +77,35 @@ export async function resolveSolanaPair({ mint, pairAddress, pairUrl } = {}) {
 }
 
 /**
- * Choose candle size so a window still has a readable number of points (~40–120).
+ * Choose candle size so a window still has a readable number of points.
+ * Prefer finer TF when the span is short; coarser when long.
  */
 export function pickTimeframe(windowMinutes) {
   const w = Math.max(15, Number(windowMinutes) || 60);
-  if (w <= 45) return { timeframe: "minute", aggregate: 1, label: "1m", seconds: 60 };
-  if (w <= 180) return { timeframe: "minute", aggregate: 5, label: "5m", seconds: 300 };
-  if (w <= 720) return { timeframe: "minute", aggregate: 15, label: "15m", seconds: 900 };
-  if (w <= 60 * 48) return { timeframe: "hour", aggregate: 1, label: "1h", seconds: 3600 };
-  if (w <= 60 * 24 * 14) return { timeframe: "hour", aggregate: 4, label: "4h", seconds: 14400 };
+  if (w <= 90) return { timeframe: "minute", aggregate: 1, label: "1m", seconds: 60 };
+  if (w <= 400) return { timeframe: "minute", aggregate: 5, label: "5m", seconds: 300 };
+  if (w <= 1200) return { timeframe: "minute", aggregate: 15, label: "15m", seconds: 900 };
+  if (w <= 60 * 72) return { timeframe: "hour", aggregate: 1, label: "1h", seconds: 3600 };
+  if (w <= 60 * 24 * 21) return { timeframe: "hour", aggregate: 4, label: "4h", seconds: 14400 };
   return { timeframe: "day", aggregate: 1, label: "1d", seconds: 86400 };
+}
+
+/** Pick TF so the span yields roughly `target` candles (not too dense/sparse). */
+export function pickTimeframeForTarget(spanSeconds, target = 100) {
+  const tfs = [
+    { timeframe: "minute", aggregate: 1, label: "1m", seconds: 60 },
+    { timeframe: "minute", aggregate: 5, label: "5m", seconds: 300 },
+    { timeframe: "minute", aggregate: 15, label: "15m", seconds: 900 },
+    { timeframe: "hour", aggregate: 1, label: "1h", seconds: 3600 },
+    { timeframe: "hour", aggregate: 4, label: "4h", seconds: 14400 },
+    { timeframe: "day", aggregate: 1, label: "1d", seconds: 86400 },
+  ];
+  const span = Math.max(60, spanSeconds);
+  // Finest TF that still keeps candle count under ~1.6× target
+  for (const tf of tfs) {
+    if (span / tf.seconds <= target * 1.6) return tf;
+  }
+  return tfs[tfs.length - 1];
 }
 
 function parseCandles(raw) {
@@ -121,6 +140,7 @@ async function fetchGeckoOhlcv({ pairAddress, timeframe, aggregate, before, limi
 
 /**
  * Fetch OHLCV candles for [fromTs, toTs] (unix or ISO), with padding.
+ * Expands the window so the response has at least `minCandles` bars when possible.
  */
 export async function fetchPositionChartWindow({
   mint,
@@ -129,6 +149,7 @@ export async function fetchPositionChartWindow({
   fromTs,
   toTs,
   padMinutes,
+  minCandles = 100,
 } = {}) {
   let from = toUnixSeconds(fromTs);
   let to = toUnixSeconds(toTs);
@@ -142,28 +163,39 @@ export async function fetchPositionChartWindow({
     throw new Error("No Solana pool found for this token");
   }
 
+  const target = Math.max(40, Math.min(300, Number(minCandles) || 100));
   const spanMin = Math.max(1, (to - from) / 60);
   const pad = Math.max(
-    20,
+    30,
     padMinutes != null && Number.isFinite(Number(padMinutes))
       ? Number(padMinutes)
-      : Math.max(30, Math.round(spanMin * 0.2))
+      : Math.max(45, Math.round(spanMin * 0.25))
   );
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const rightEdge = Math.min(nowSec, to + pad * 60);
+  let rightEdge = Math.min(nowSec, to + pad * 60);
   let leftEdge = from - pad * 60;
-  // Near "now": still show enough left history
   if (rightEdge - leftEdge < pad * 60) {
-    leftEdge = rightEdge - Math.max(pad * 2, 60) * 60;
+    leftEdge = rightEdge - Math.max(pad * 2, 90) * 60;
   }
 
-  const windowMinutes = Math.max(15, (rightEdge - leftEdge) / 60);
-  const tf = pickTimeframe(windowMinutes);
-  const spanSeconds = rightEdge - leftEdge;
+  // First pass: pick TF from current span, then expand to hit ~target candles
+  let spanSeconds = Math.max(60, rightEdge - leftEdge);
+  let tf = pickTimeframeForTarget(spanSeconds, target);
+  const minSpanSeconds = target * tf.seconds;
+  if (spanSeconds < minSpanSeconds) {
+    leftEdge = rightEdge - minSpanSeconds;
+    spanSeconds = minSpanSeconds;
+    // Re-pick if expanding changed density a lot
+    tf = pickTimeframeForTarget(spanSeconds, target);
+    const adjusted = target * tf.seconds;
+    if (rightEdge - leftEdge < adjusted) leftEdge = rightEdge - adjusted;
+    spanSeconds = rightEdge - leftEdge;
+  }
+
   const limit = Math.min(
     1000,
-    Math.max(24, Math.ceil(spanSeconds / tf.seconds) + 12)
+    Math.max(target, Math.ceil(spanSeconds / tf.seconds) + 16)
   );
 
   const raw = await fetchGeckoOhlcv({
@@ -187,6 +219,7 @@ export async function fetchPositionChartWindow({
     windowMinutes: Math.round((rightEdge - leftEdge) / 60),
     timeframe: tf.label,
     candleSeconds: tf.seconds,
+    minCandles: target,
     candles,
     fetchedAt: new Date().toISOString(),
   };

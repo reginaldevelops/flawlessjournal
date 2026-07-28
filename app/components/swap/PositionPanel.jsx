@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { Badge, Button, cn } from "../ui";
 import { formatCurrency, formatRelative, toneTextClass } from "../../lib/format";
+import {
+  isPositionLive,
+  unrealizedPnlUsd,
+} from "../../lib/swap/position";
+import { fetchUsdPrices } from "../../lib/swap/clientPrices";
 import SwapSheet from "./SwapSheet";
 import PositionCandlesChart from "./PositionCandlesChart";
 
@@ -12,16 +17,43 @@ import PositionCandlesChart from "./PositionCandlesChart";
  */
 export default function PositionPanel({ trade, onRefresh }) {
   const fj = trade?._fj;
+  const isPosition = Boolean(fj && fj.kind === "solana_position");
+  const c = isPosition ? fj.computed ?? {} : {};
+  const live = isPosition && isPositionLive(c);
+  const mint = isPosition ? fj.tokenMint : null;
+
   const [swapOpen, setSwapOpen] = useState(false);
   const [swapSide, setSwapSide] = useState("buy");
+  const [showChart, setShowChart] = useState(false);
+  const [markPrice, setMarkPrice] = useState(null);
 
-  if (!fj || fj.kind !== "solana_position") return null;
+  useEffect(() => {
+    if (!live || !mint) {
+      setMarkPrice(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const prices = await fetchUsdPrices([mint]);
+      if (!cancelled) setMarkPrice(prices[mint] ?? null);
+    })();
+    const t = setInterval(async () => {
+      const prices = await fetchUsdPrices([mint]);
+      if (!cancelled) setMarkPrice(prices[mint] ?? null);
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [live, mint]);
 
-  const c = fj.computed ?? {};
+  if (!isPosition) return null;
+
   const fillsChrono = [...(fj.fills ?? [])].sort(
     (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)
   );
   const fills = [...fillsChrono].reverse();
+  const unrealized = live ? unrealizedPnlUsd(c, markPrice) : null;
 
   const openSwap = (side) => {
     setSwapSide(side);
@@ -33,10 +65,15 @@ export default function PositionPanel({ trade, onRefresh }) {
       <section className="rounded-2xl border border-line bg-surface overflow-hidden animate-fade-in">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div>
-            <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-              Solana position
-            </p>
-            <p className="text-sm font-semibold text-content">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                Solana position
+              </p>
+              <Badge tone={live ? "profit" : "neutral"} size="xs" dot>
+                {live ? "Position live" : "Position closed"}
+              </Badge>
+            </div>
+            <p className="mt-0.5 text-sm font-semibold text-content">
               {fj.tokenSymbol}
               <span className="ml-2 font-mono text-2xs font-normal text-content-subtle">
                 {fj.tokenMint?.slice(0, 4)}…{fj.tokenMint?.slice(-4)}
@@ -63,13 +100,73 @@ export default function PositionPanel({ trade, onRefresh }) {
           </div>
         </div>
 
+        {live && (
+          <div className="border-b border-line px-4 py-3">
+            <div className="rounded-xl border border-line bg-surface-sunken/50 px-4 py-3">
+              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                Unrealized PnL
+              </p>
+              <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                <p
+                  className={cn(
+                    "font-mono tnum text-2xl font-semibold tracking-tight",
+                    unrealized != null ? toneTextClass(unrealized) : "text-content-muted"
+                  )}
+                >
+                  {unrealized == null
+                    ? "—"
+                    : formatCurrency(unrealized, { compact: true, signed: true })}
+                </p>
+                <div className="text-right text-2xs text-content-subtle">
+                  <p>
+                    Mark{" "}
+                    <span className="font-mono tnum text-content-muted">
+                      {markPrice != null
+                        ? formatCurrency(markPrice, {
+                            compact: markPrice < 0.01,
+                            decimals: markPrice < 0.01 ? 6 : 4,
+                          })
+                        : "—"}
+                    </span>
+                  </p>
+                  <p className="mt-0.5">
+                    Open cost{" "}
+                    <span className="font-mono tnum text-content-muted">
+                      {formatCurrency(c.openCostUsd, { compact: true })}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {fillsChrono.length > 0 && (
-          <PositionCandlesChart
-            mint={fj.tokenMint}
-            pairUrl={fj.pairUrl}
-            fills={fillsChrono}
-            symbol={fj.tokenSymbol}
-          />
+          <div className="border-b border-line">
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                Entry chart
+              </p>
+              <Button
+                variant="subtle"
+                size="xs"
+                iconRight={ChevronDown}
+                onClick={() => setShowChart((v) => !v)}
+                aria-expanded={showChart}
+                className={showChart ? "[&_svg:last-child]:rotate-180" : undefined}
+              >
+                {showChart ? "Hide chart" : "Show entry on chart"}
+              </Button>
+            </div>
+            {showChart && (
+              <PositionCandlesChart
+                mint={fj.tokenMint}
+                pairUrl={fj.pairUrl}
+                fills={fillsChrono}
+                symbol={fj.tokenSymbol}
+              />
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">

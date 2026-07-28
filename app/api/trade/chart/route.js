@@ -44,6 +44,7 @@ export async function GET(request) {
         fromTs: from || to,
         toTs: to || from,
         padMinutes: pad != null ? Number(pad) : undefined,
+        minCandles: Number(searchParams.get("minCandles") || 100),
       });
     } else if (around) {
       result = await fetchFillChartWindow({
