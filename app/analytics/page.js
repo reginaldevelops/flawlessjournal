@@ -1,369 +1,398 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-import Select from "react-select";
-import CalendarView from "../components/CalendarView";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  format,
-} from "date-fns";
-import DeepDiveTab from "../components/DeepDiveTab";
+  BarChart3,
+  CalendarDays,
+  Clock3,
+  FileText,
+  GitCompareArrows,
+  Layers,
+  RefreshCw,
+  Rocket,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageBody,
+  PageHeader,
+  SkeletonCard,
+  Tabs,
+} from "../components/ui";
+import { FilterBar } from "../components/analytics/FilterBar";
+import { OverviewTab } from "../components/analytics/OverviewTab";
+import { CalendarTab } from "../components/analytics/CalendarTab";
+import { BreakdownTab } from "../components/analytics/BreakdownTab";
+import { TimeTab } from "../components/analytics/TimeTab";
+import { CompareTab } from "../components/analytics/CompareTab";
+import { ReportTab } from "../components/analytics/ReportTab";
+import {
+  buildDimensions,
+  applyFilters,
+  cumulativeR,
+  dailyEquity,
+  dimensionValues,
+  equityWithDrawdown,
+  headlineDeltas,
+  plannedRiskOf,
+  rollingSeries,
+} from "../components/analytics/metrics-extra";
+import { useAnalyticsFilters, useDateWindow } from "../components/analytics/useAnalyticsFilters";
+import { supabase } from "../lib/supabaseClient";
+import { computeMetrics, normalizeTrades } from "../lib/trades";
+import { formatCurrency, formatDate, pluralize } from "../lib/format";
 
-/* ---------------- OverviewTab component ---------------- */
-function OverviewTab({ startDate, endDate, selectedVariable, selectedValues }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+const TABS = [
+  { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "breakdown", label: "Breakdown", icon: Layers },
+  { id: "time", label: "Time", icon: Clock3 },
+  { id: "compare", label: "Compare", icon: GitCompareArrows },
+  { id: "report", label: "Report", icon: FileText },
+];
 
-  useEffect(() => {
-    async function fetchStats() {
-      setLoading(true);
-
-      let query = supabase.from("trades").select("data");
-      if (startDate) query = query.gte("data->>Datum", startDate);
-      if (endDate) query = query.lte("data->>Datum", endDate);
-      if (
-        selectedVariable &&
-        selectedVariable !== "all" &&
-        selectedValues.length > 0
-      ) {
-        query = query.in(`data->>${selectedVariable}`, selectedValues);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.error(error);
-        setLoading(false);
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        setStats(null);
-        setLoading(false);
-        return;
-      }
-
-      let totalTrades = 0,
-        grossProfit = 0,
-        grossLoss = 0,
-        wins = 0,
-        losses = 0,
-        maxWin = -Infinity,
-        maxLoss = Infinity,
-        pnlSeries = [],
-        winners = [],
-        losers = [];
-
-      let cumulative = 0;
-      let peak = 0;
-      let maxDrawdown = 0;
-
-      data.forEach((row) => {
-        const pnlRaw = row.data?.PNL;
-        if (pnlRaw && pnlRaw !== "-") {
-          const pnl = parseFloat(pnlRaw);
-          if (!isNaN(pnl)) {
-            totalTrades++;
-            cumulative += pnl;
-            pnlSeries.push(cumulative);
-
-            if (pnl > 0) {
-              wins++;
-              grossProfit += pnl;
-              winners.push(pnl);
-              if (pnl > maxWin) maxWin = pnl;
-            } else {
-              losses++;
-              grossLoss += pnl;
-              losers.push(pnl);
-              if (pnl < maxLoss) maxLoss = pnl;
-            }
-
-            if (cumulative > peak) peak = cumulative;
-            const drawdown = peak - cumulative;
-            if (drawdown > maxDrawdown) maxDrawdown = drawdown;
-          }
-        }
-      });
-
-      const netPnl = grossProfit + grossLoss;
-      const winRate =
-        totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : 0;
-      const profitFactor =
-        Math.abs(grossLoss) > 0
-          ? (grossProfit / Math.abs(grossLoss)).toFixed(2)
-          : "∞";
-      const avgWinner =
-        winners.length > 0
-          ? (winners.reduce((a, b) => a + b, 0) / winners.length).toFixed(0)
-          : 0;
-      const avgLoser =
-        losers.length > 0
-          ? (
-              Math.abs(losers.reduce((a, b) => a + b, 0)) / losers.length
-            ).toFixed(0)
-          : 0;
-
-      setStats({
-        totalTrades,
-        wins,
-        losses,
-        winRate,
-        grossProfit,
-        grossLoss,
-        netPnl,
-        profitFactor,
-        maxWin: maxWin === -Infinity ? 0 : maxWin,
-        maxLoss: maxLoss === Infinity ? 0 : maxLoss,
-        maxDrawdown,
-        avgWinner,
-        avgLoser,
-      });
-      setLoading(false);
-    }
-
-    fetchStats();
-  }, [startDate, endDate, selectedVariable, selectedValues]);
-
-  if (loading) return <div>Loading overview...</div>;
-  if (!stats) return <div>No trades in this period.</div>;
-
+function LoadingShell() {
   return (
-    <div className="grid grid-cols-2 gap-6 text-sm text-gray-800">
-      <table className="w-full border border-gray-300">
-        <tbody>
-          <tr className="border-b">
-            <td className="p-2">Total Trades</td>
-            <td className="p-2 text-right">{stats.totalTrades}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Win Rate</td>
-            <td className="p-2 text-right">{stats.winRate}%</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Wins</td>
-            <td className="p-2 text-right">{stats.wins}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Losses</td>
-            <td className="p-2 text-right">{stats.losses}</td>
-          </tr>
-          <tr>
-            <td className="p-2">Profit Factor</td>
-            <td className="p-2 text-right">{stats.profitFactor}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <table className="w-full border border-gray-300">
-        <tbody>
-          <tr className="border-b">
-            <td className="p-2">Gross Profit</td>
-            <td className="p-2 text-right">€{stats.grossProfit}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Gross Loss</td>
-            <td className="p-2 text-right">€{stats.grossLoss}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Net PnL</td>
-            <td className="p-2 text-right">€{stats.netPnl}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Max Win</td>
-            <td className="p-2 text-right">€{stats.maxWin}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Max Loss</td>
-            <td className="p-2 text-right">€{stats.maxLoss}</td>
-          </tr>
-          <tr className="border-b">
-            <td className="p-2">Max Drawdown</td>
-            <td className="p-2 text-right">€{stats.maxDrawdown}</td>
-          </tr>
-          <tr>
-            <td className="p-2">Avg Winner / Loser</td>
-            <td className="p-2 text-right">
-              €{stats.avgWinner} / €{stats.avgLoser}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="space-y-4">
+      <LoadingState label="Building your analytics workspace…" compact />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonCard key={i} height="h-20" />
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <SkeletonCard className="xl:col-span-2" height="h-72" />
+        <SkeletonCard height="h-72" />
+      </div>
     </div>
   );
 }
 
-/* ---------------- AnalyticsPage ---------------- */
-export default function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState("overview");
+function useAnalyticsData() {
+  const [state, setState] = useState({
+    loading: true,
+    error: null,
+    trades: [],
+    variables: [],
+  });
 
-  const now = new Date();
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
 
-  const [rangeType, setRangeType] = useState("month");
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedValue, setSelectedValue] = useState(now.getMonth());
+    const [tradesRes, variablesRes] = await Promise.all([
+      supabase.from("trades").select("id, trade_number, data").order("trade_number", { ascending: true }),
+      supabase.from("variables").select("name, varType, phase, options, visible, order"),
+    ]);
 
-  const [availableVariables, setAvailableVariables] = useState([]);
-  const [variableValues, setVariableValues] = useState([]);
-
-  const [selectedVariable, setSelectedVariable] = useState("all");
-  const [selectedValues, setSelectedValues] = useState([]);
-
-  // bereken start en end date
-  let startDate, endDate;
-  if (rangeType === "month") {
-    const start = startOfMonth(new Date(selectedYear, selectedValue, 1));
-    const end = endOfMonth(start);
-    startDate = format(start, "yyyy-MM-dd");
-    endDate = format(end, "yyyy-MM-dd");
-  }
-  if (rangeType === "week") {
-    const firstDay = new Date(selectedYear, 0, 1 + (selectedValue - 1) * 7);
-    const start = startOfWeek(firstDay, { weekStartsOn: 1 });
-    const end = endOfWeek(start, { weekStartsOn: 1 });
-    startDate = format(start, "yyyy-MM-dd");
-    endDate = format(end, "yyyy-MM-dd");
-  }
-
-  // haal mogelijke variabelen (keys) uit supabase
-  useEffect(() => {
-    async function fetchVariables() {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("data")
-        .limit(1);
-
-      if (error) {
-        console.error("Error fetching variables:", error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const keys = Object.keys(data[0].data || {});
-        setAvailableVariables(keys);
-      }
+    if (tradesRes.error) {
+      setState({
+        loading: false,
+        error: tradesRes.error.message ?? "Could not load trades",
+        trades: [],
+        variables: [],
+      });
+      return;
     }
-    fetchVariables();
+
+    const variables = variablesRes.error ? [] : (variablesRes.data ?? []);
+    setState({
+      loading: false,
+      error: null,
+      trades: normalizeTrades(tradesRes.data ?? [], variables),
+      variables,
+    });
   }, []);
 
-  // haal mogelijke values voor gekozen variable
   useEffect(() => {
-    async function fetchValues() {
-      if (!selectedVariable || selectedVariable === "all") {
-        setVariableValues([]);
-        return;
-      }
+    let cancelled = false;
+    (async () => {
+      await load();
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
 
-      const { data, error } = await supabase
-        .from("trades")
-        .select(`data->>"${selectedVariable}"`)
-        .not(`data->>"${selectedVariable}"`, "is", null)
-        .limit(200);
+  return { ...state, reload: load };
+}
 
-      if (error) {
-        console.error("fetchValues error:", error);
-        return;
-      }
+function resolvedFilterState(filters, dateWindow) {
+  return {
+    ...filters,
+    start: dateWindow.start,
+    end: dateWindow.end,
+  };
+}
 
-      // Hier zit de value als onbekende key → pak de eerste property:
-      const vals = [
-        ...new Set(data.map((row) => Object.values(row)[0]).filter(Boolean)),
-      ];
+function previousFilterState(filters, dateWindow) {
+  return {
+    ...filters,
+    start: dateWindow.previous.start,
+    end: dateWindow.previous.end,
+  };
+}
 
-      setVariableValues(vals);
-    }
+export default function AnalyticsPage() {
+  const { trades, variables, loading, error, reload } = useAnalyticsData();
+  const {
+    filters,
+    patch,
+    setDimension,
+    toggleDimensionValue,
+    toggleQuick,
+    clearAll,
+  } = useAnalyticsFilters();
+  const [activeTab, setActiveTab] = useState("overview");
 
-    fetchValues();
-  }, [selectedVariable]);
+  const dateWindow = useDateWindow(filters, trades);
 
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "calendar", label: "Calendar View" },
-    { id: "deepdive", label: "Deep Dive" },
-  ];
+  const plannedRisk = useMemo(() => plannedRiskOf(trades), [trades]);
+  const dims = useMemo(
+    () => buildDimensions(variables, trades, { plannedRisk }),
+    [variables, trades, plannedRisk]
+  );
+
+  const currentFilters = useMemo(
+    () => resolvedFilterState(filters, dateWindow),
+    [filters, dateWindow]
+  );
+
+  const filteredTrades = useMemo(
+    () => applyFilters(trades, currentFilters, { plannedRisk }),
+    [trades, currentFilters, plannedRisk]
+  );
+
+  const metrics = useMemo(() => computeMetrics(filteredTrades), [filteredTrades]);
+
+  const previousFilters = useMemo(
+    () => previousFilterState(filters, dateWindow),
+    [filters, dateWindow]
+  );
+
+  const previousTrades = useMemo(
+    () =>
+      dateWindow.previous.start && dateWindow.previous.end
+        ? applyFilters(trades, previousFilters, { plannedRisk })
+        : [],
+    [trades, previousFilters, plannedRisk, dateWindow.previous.start, dateWindow.previous.end]
+  );
+
+  const previousMetrics = useMemo(
+    () => (previousTrades.length ? computeMetrics(previousTrades) : null),
+    [previousTrades]
+  );
+
+  const comparable = Boolean(
+    dateWindow.previous.start &&
+      dateWindow.previous.end &&
+      dateWindow.bounds.start &&
+      dateWindow.previous.end >= dateWindow.bounds.start
+  );
+  const comparing = Boolean(filters.compare && comparable && previousMetrics?.totalTrades);
+
+  const deltas = useMemo(
+    () => (comparing ? headlineDeltas(metrics, previousMetrics) : {}),
+    [comparing, metrics, previousMetrics]
+  );
+
+  const facetBaseFilters = useMemo(
+    () => ({
+      ...currentFilters,
+      custom: {},
+    }),
+    [currentFilters]
+  );
+  const facetBaseTrades = useMemo(
+    () => applyFilters(trades, facetBaseFilters, { plannedRisk }),
+    [trades, facetBaseFilters, plannedRisk]
+  );
+  const facets = useMemo(() => {
+    const entries = dims
+      .filter((d) => d.filterable)
+      .map((dim) => [dim.id, dimensionValues(facetBaseTrades, dim)]);
+    return Object.fromEntries(entries);
+  }, [dims, facetBaseTrades]);
+
+  const tradeSeries = useMemo(() => equityWithDrawdown(metrics), [metrics]);
+  const daySeries = useMemo(() => dailyEquity(metrics.days), [metrics.days]);
+  const rSeries = useMemo(() => cumulativeR(filteredTrades), [filteredTrades]);
+  const rolling = useMemo(() => rollingSeries(filteredTrades), [filteredTrades]);
+  const hasR = metrics.rTradeCount > 0;
+
+  const totalClosed = useMemo(
+    () => trades.filter((t) => t.hasResult).length,
+    [trades]
+  );
+  const noTrades = !loading && !error && trades.length === 0;
+  const noFilteredTrades = !loading && !error && trades.length > 0 && metrics.totalTrades === 0;
+
+  const rangeLabel = dateWindow.effectiveStart
+    ? `${formatDate(dateWindow.effectiveStart, "short")} → ${formatDate(dateWindow.effectiveEnd, "short")}`
+    : "No dated trades";
+
+  const toolbar =
+    !loading && !error ? (
+      <FilterBar
+        filters={filters}
+        patch={patch}
+        dims={dims}
+        facets={facets}
+        onToggleDimension={toggleDimensionValue}
+        onClearDimension={(field) => setDimension(field, [])}
+        onToggleQuick={toggleQuick}
+        onClearAll={clearAll}
+        window={dateWindow}
+        matched={metrics.totalTrades}
+        total={totalClosed}
+        comparable={comparable}
+      />
+    ) : null;
+
+  const tabContent = {
+    overview: (
+      <OverviewTab
+        metrics={metrics}
+        deltas={deltas}
+        comparing={comparing}
+        tradeSeries={tradeSeries}
+        daySeries={daySeries}
+        rSeries={rSeries}
+        rolling={rolling}
+        hasR={hasR}
+        trades={filteredTrades}
+      />
+    ),
+    calendar: <CalendarTab metrics={metrics} bounds={dateWindow.bounds} />,
+    breakdown: (
+      <BreakdownTab
+        dims={dims}
+        trades={filteredTrades}
+        onDrillDown={toggleDimensionValue}
+      />
+    ),
+    time: <TimeTab trades={filteredTrades} dims={dims} />,
+    compare: <CompareTab dims={dims} trades={filteredTrades} plannedRisk={plannedRisk} />,
+    report: (
+      <ReportTab
+        metrics={metrics}
+        trades={filteredTrades}
+        dims={dims}
+        plannedRisk={plannedRisk}
+        variables={variables}
+        window={dateWindow}
+      />
+    ),
+  };
 
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-bold mb-6">Analytics</h1>
+    <>
+      <PageHeader
+        title="Analytics"
+        description="A professional-grade trading review desk: performance, risk, timing, breakdowns, comparisons and an exportable edge report."
+        actions={
+          <>
+            <Badge tone="outline" size="sm" className="hidden sm:inline-flex">
+              {rangeLabel}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RefreshCw}
+              onClick={reload}
+              className={loading ? "pointer-events-none opacity-60" : undefined}
+            >
+              Refresh
+            </Button>
+          </>
+        }
+        toolbar={toolbar}
+      />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-6 mb-6">
-        {/* Range type */}
-        <select
-          value={rangeType}
-          onChange={(e) => {
-            setRangeType(e.target.value);
-            setSelectedValue(0);
-          }}
-          className="border rounded-md px-2 py-1 text-sm"
-        >
-          <option value="month">Month</option>
-          <option value="week">Week</option>
-        </select>
+      <PageBody className="space-y-4">
+        {error && (
+          <ErrorState
+            title="Could not load analytics"
+            description={error}
+            onRetry={reload}
+          />
+        )}
 
-        {/* Year */}
-        <input
-          type="number"
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(Number(e.target.value))}
-          className="border rounded-md px-2 py-1 text-sm w-20"
-        />
+        {loading ? (
+          <LoadingShell />
+        ) : noTrades ? (
+          <Card>
+            <CardBody>
+              <EmptyState
+                icon={Rocket}
+                title="Analytics is ready for your first trade"
+                description="Log closed trades with a date and P&L to unlock the equity curve, calendars, risk diagnostics, dimension breakdowns and comparison reports."
+                action={
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <Button as={Link} href="/trades" variant="primary" size="sm">
+                      Log a trade
+                    </Button>
+                    <Button as={Link} href="/onboarding" variant="secondary" size="sm">
+                      Configure journal fields
+                    </Button>
+                  </div>
+                }
+              />
+            </CardBody>
+          </Card>
+        ) : noFilteredTrades ? (
+          <Card>
+            <CardBody>
+              <EmptyState
+                icon={BarChart3}
+                title="No closed trades match this view"
+                description="Clear a dimension, quick filter or search term, or widen the date range to bring trades back into the analytics workspace."
+                action={
+                  <Button variant="secondary" size="sm" onClick={clearAll} className="mt-4">
+                    Clear filters
+                  </Button>
+                }
+              >
+                <p className="mt-3 text-2xs text-content-subtle">
+                  {pluralize(trades.length, "logged trade")} loaded ·{" "}
+                  {formatCurrency(computeMetrics(trades).netPnl, { decimals: 0, signed: true })} all-time net
+                </p>
+              </EmptyState>
+            </CardBody>
+          </Card>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs text-content-muted">
+                  {pluralize(metrics.totalTrades, "closed trade")} in view ·{" "}
+                  {formatCurrency(metrics.netPnl, { decimals: 0, signed: true })} net ·{" "}
+                  {pluralize(metrics.tradingDays, "session")}
+                </p>
+                {comparing && (
+                  <p className="mt-0.5 text-2xs text-content-subtle">
+                    Compared with {formatDate(dateWindow.previous.start, "short")} →{" "}
+                    {formatDate(dateWindow.previous.end, "short")} ({pluralize(previousMetrics.totalTrades, "trade")}).
+                  </p>
+                )}
+              </div>
+              <Badge tone={hasR ? "brand" : "neutral"} size="sm">
+                {hasR ? `${metrics.rTradeCount} R-tracked` : "P&L mode"}
+              </Badge>
+            </div>
 
-        {/* Value */}
-        <select
-          value={selectedValue}
-          onChange={(e) => setSelectedValue(Number(e.target.value))}
-          className="border rounded-md px-2 py-1 text-sm"
-        >
-          {rangeType === "week"
-            ? Array.from({ length: 52 }, (_, i) => i + 1).map((w) => (
-                <option key={w} value={w}>
-                  Week {w}
-                </option>
-              ))
-            : Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i}>
-                  {format(new Date(2000, i, 1), "MMMM")}
-                </option>
-              ))}
-        </select>
-      </div>
+            <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
 
-      {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-300 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-2 text-sm font-medium ${
-              activeTab === tab.id
-                ? "border-b-2 border-blue-500 text-blue-600"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === "overview" && (
-        <OverviewTab startDate={startDate} endDate={endDate} />
-      )}
-      {activeTab === "charts" && (
-        <div className="text-gray-600">📊 Charts (coming soon)</div>
-      )}
-      {activeTab === "calendar" && (
-        <CalendarView startDate={startDate} endDate={endDate} />
-      )}
-      {activeTab === "deepdive" && (
-        <div className="text-gray-600">
-          <DeepDiveTab startDate={startDate} endDate={endDate} />
-        </div>
-      )}
-    </div>
+            <section>{tabContent[activeTab] ?? tabContent.overview}</section>
+          </>
+        )}
+      </PageBody>
+    </>
   );
 }
