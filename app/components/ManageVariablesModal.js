@@ -1,4 +1,3 @@
-// components/ManageVariablesModal.jsx
 "use client";
 
 import { useState } from "react";
@@ -16,12 +15,21 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { supabase } from "../lib/supabaseClient";
-import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
+import { Pencil, Trash2, Eye, EyeOff, GripVertical, Plus, FunctionSquare } from "lucide-react";
 import { Parser } from "expr-eval";
+import { supabase } from "../lib/supabaseClient";
+import {
+  Modal,
+  Button,
+  Input,
+  Select,
+  Field,
+  ConfirmDialog,
+  Spinner,
+  cn,
+} from "./ui";
 import ConditionalBuilder from "./ConditionalBuilder";
 
-// 🔄 Recalc helper
 async function recalcAllTrades(variable) {
   if (variable.varType !== "calculated" || !variable.formula) return;
 
@@ -30,15 +38,13 @@ async function recalcAllTrades(variable) {
   try {
     expr = parser.parse(variable.formula);
   } catch (err) {
-    console.warn("⚠️ Invalid formula for", variable.name, err.message);
+    console.warn("Invalid formula for", variable.name, err.message);
     return;
   }
 
-  const { data: trades, error } = await supabase
-    .from("trades")
-    .select("id, data");
+  const { data: trades, error } = await supabase.from("trades").select("id, data");
   if (error) {
-    console.error("❌ Fetch trades error:", error);
+    console.error("Fetch trades error:", error);
     return;
   }
 
@@ -55,10 +61,7 @@ async function recalcAllTrades(variable) {
       })
     );
 
-    const hasAllInputs = expr
-      .variables()
-      .every((key) => values[key] !== undefined);
-
+    const hasAllInputs = expr.variables().every((key) => values[key] !== undefined);
     if (!hasAllInputs) continue;
 
     try {
@@ -68,11 +71,11 @@ async function recalcAllTrades(variable) {
         try {
           const innerExpr = parser.parse(calc);
           const innerVars = innerExpr.variables();
-          const hasAllInner = innerVars.every(
-            (key) => values[key] !== undefined
-          );
+          const hasAllInner = innerVars.every((key) => values[key] !== undefined);
           if (hasAllInner) calc = innerExpr.evaluate(values);
-        } catch {}
+        } catch {
+          /* keep string */
+        }
       }
 
       if (typeof calc === "number" && !isNaN(calc)) {
@@ -87,7 +90,7 @@ async function recalcAllTrades(variable) {
 
       updatedTrades.push({ id: trade.id, data: trade.data });
     } catch (err) {
-      console.warn(`⚠️ Could not calc for trade ${trade.id}:`, err.message);
+      console.warn(`Could not calc for trade ${trade.id}:`, err.message);
     }
   }
 
@@ -95,12 +98,10 @@ async function recalcAllTrades(variable) {
     const { error: updateError } = await supabase
       .from("trades")
       .upsert(updatedTrades, { onConflict: "id" });
-
-    if (updateError) console.error("❌ Batch update error:", updateError);
+    if (updateError) console.error("Batch update error:", updateError);
   }
 }
 
-/* ---------- Sortable Item ---------- */
 function SortableItemModal({
   v,
   onRename,
@@ -108,7 +109,7 @@ function SortableItemModal({
   onToggleVisible,
   onEditFormula,
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: v.id,
       animateLayoutChanges: (args) =>
@@ -125,51 +126,60 @@ function SortableItemModal({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="flex items-center justify-between p-2.5 border border-slate-200 rounded-xl bg-white mb-2 shadow-sm"
+      className={cn(
+        "mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-raised px-2.5 py-2",
+        "shadow-sm transition-colors",
+        isDragging && "opacity-60 ring-2 ring-brand/30"
+      )}
     >
-      <span
+      <button
+        type="button"
         {...listeners}
-        className="cursor-grab text-slate-300 hover:text-slate-500 mr-2 select-none text-base"
+        className="cursor-grab touch-none text-content-subtle hover:text-content-muted active:cursor-grabbing"
+        aria-label="Drag to reorder"
       >
-        ⠿
-      </span>
-      <span className="flex-1 text-xs font-medium text-slate-800">
+        <GripVertical size={14} />
+      </button>
+      <span className="min-w-0 flex-1 truncate text-xs font-medium text-content">
         {v.name}
       </span>
-      <div className="flex items-center gap-2.5 text-slate-400">
-        <button
-          type="button"
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="xs"
+          iconOnly
+          icon={v.visible ? Eye : EyeOff}
           onClick={() => onToggleVisible(v)}
-          className="hover:text-slate-600 transition"
-        >
-          {v.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-        </button>
-
+          aria-label={v.visible ? "Hide variable" : "Show variable"}
+        />
         {v.type === "custom" && (
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="xs"
+              iconOnly
+              icon={Pencil}
               onClick={() => onRename(v)}
-              className="hover:text-blue-600 transition"
-            >
-              <Pencil size={15} />
-            </button>
+              aria-label="Rename"
+            />
             {v.varType === "calculated" && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="xs"
+                iconOnly
+                icon={FunctionSquare}
                 onClick={() => onEditFormula(v)}
-                className="hover:text-purple-600 font-bold text-xs transition"
-              >
-                ƒx
-              </button>
+                aria-label="Edit formula"
+              />
             )}
-            <button
-              type="button"
+            <Button
+              variant="danger-ghost"
+              size="xs"
+              iconOnly
+              icon={Trash2}
               onClick={() => onDelete(v)}
-              className="hover:text-red-600 transition"
-            >
-              <Trash2 size={15} />
-            </button>
+              aria-label="Delete"
+            />
           </>
         )}
       </div>
@@ -177,25 +187,44 @@ function SortableItemModal({
   );
 }
 
-/* ---------- Droppable Container voor Fase-kolommen ---------- */
-function DroppableSection({ id, title, children }) {
-  const { setNodeRef } = useDroppable({ id });
+function DroppableSection({ id, title, children, empty }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
-    <div className="flex flex-col bg-slate-50 p-3.5 rounded-2xl border border-slate-200 min-h-[260px]">
-      <h3 className="font-bold mb-3 text-xs text-slate-700 uppercase tracking-wider">
+    <div
+      className={cn(
+        "flex min-h-[260px] flex-col rounded-xl border border-line bg-surface-sunken p-3.5 transition-colors",
+        isOver && "border-brand/50 bg-brand-soft/40"
+      )}
+    >
+      <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-content-muted">
         {title}
       </h3>
-      <div ref={setNodeRef} className="flex-1 min-h-[200px]">
+      <div ref={setNodeRef} className="min-h-[200px] flex-1">
         {children}
+        {empty && (
+          <div className="rounded-lg border border-dashed border-line px-3 py-10 text-center text-xs italic text-content-subtle">
+            Drag variables here
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ---------- Modal ---------- */
+const VAR_TYPES = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "dropdown", label: "Dropdown" },
+  { value: "time", label: "Time" },
+  { value: "date", label: "Date" },
+  { value: "textarea", label: "Textarea" },
+  { value: "chart", label: "Chart" },
+  { value: "calculated", label: "Calculated" },
+];
+
 export default function ManageVariablesModal({
-  context,
+  open = true,
   variables,
   setVariables,
   onClose,
@@ -207,21 +236,33 @@ export default function ManageVariablesModal({
   const [newVarFormula, setNewVarFormula] = useState("");
   const [showConditional, setShowConditional] = useState(false);
   const [inConditionalFocus, setInConditionalFocus] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingFormula, setIsUpdatingFormula] = useState(false);
 
-  const handleRename = async (variable) => {
-    const newName = prompt("New name?", variable.name);
-    if (!newName || newName === variable.name) return;
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [formulaTarget, setFormulaTarget] = useState(null);
+  const [formulaValue, setFormulaValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [formError, setFormError] = useState(null);
+
+  const handleRenameSubmit = async () => {
+    if (!renameTarget) return;
+    const newName = renameValue.trim();
+    if (!newName || newName === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
 
     setIsRenaming(true);
     try {
       const { error: varError } = await supabase
         .from("variables")
         .update({ name: newName })
-        .eq("id", variable.id);
+        .eq("id", renameTarget.id);
       if (varError) throw varError;
 
       const { data: trades, error: tradeError } = await supabase
@@ -231,10 +272,10 @@ export default function ManageVariablesModal({
 
       const updatedTrades = trades
         .map((trade) => {
-          if (trade.data?.hasOwnProperty(variable.name)) {
+          if (trade.data?.hasOwnProperty(renameTarget.name)) {
             const newData = { ...trade.data };
-            newData[newName] = newData[variable.name];
-            delete newData[variable.name];
+            newData[newName] = newData[renameTarget.name];
+            delete newData[renameTarget.name];
             return { id: trade.id, data: newData };
           }
           return null;
@@ -249,19 +290,24 @@ export default function ManageVariablesModal({
       }
 
       setVariables((prev) =>
-        prev.map((x) => (x.id === variable.id ? { ...x, name: newName } : x))
+        prev.map((x) => (x.id === renameTarget.id ? { ...x, name: newName } : x))
       );
+      setRenameTarget(null);
     } catch (err) {
-      console.error("❌ Rename error:", err);
-      alert("Rename failed: " + err.message);
+      console.error("Rename error:", err);
+      setFormError("Rename failed: " + err.message);
     } finally {
       setIsRenaming(false);
     }
   };
 
-  const handleEditFormula = async (variable) => {
-    const newFormula = prompt("New formula?", variable.formula || "");
-    if (!newFormula || newFormula === variable.formula) return;
+  const handleEditFormulaSubmit = async () => {
+    if (!formulaTarget) return;
+    const newFormula = formulaValue.trim();
+    if (!newFormula || newFormula === formulaTarget.formula) {
+      setFormulaTarget(null);
+      return;
+    }
 
     setIsUpdatingFormula(true);
     try {
@@ -269,54 +315,50 @@ export default function ManageVariablesModal({
       parser.parse(newFormula);
     } catch (err) {
       setIsUpdatingFormula(false);
-      alert(`❌ Invalid formula: ${err.message}`);
+      setFormError(`Invalid formula: ${err.message}`);
       return;
     }
 
     const { error } = await supabase
       .from("variables")
       .update({ formula: newFormula })
-      .eq("id", variable.id);
+      .eq("id", formulaTarget.id);
 
     if (error) {
-      console.error("❌ Error updating formula:", error);
-      alert("Formula update failed: " + error.message);
+      console.error("Error updating formula:", error);
+      setFormError("Formula update failed: " + error.message);
     } else {
       setVariables((prev) =>
         prev.map((x) =>
-          x.id === variable.id ? { ...x, formula: newFormula } : x
+          x.id === formulaTarget.id ? { ...x, formula: newFormula } : x
         )
       );
-      await recalcAllTrades({ ...variable, formula: newFormula });
+      await recalcAllTrades({ ...formulaTarget, formula: newFormula });
+      setFormulaTarget(null);
     }
     setIsUpdatingFormula(false);
   };
 
-  const handleDelete = async (variable) => {
-    if (
-      !confirm(
-        `Delete variable "${variable.name}"? This will also remove it from all trades.`
-      )
-    )
-      return;
-
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     setIsDeleting(true);
     try {
       const { error: varError } = await supabase
         .from("variables")
         .delete()
-        .eq("id", variable.id);
+        .eq("id", deleteTarget.id);
       if (varError) throw varError;
 
       const { error: tradeError } = await supabase.rpc("remove_variable_key", {
-        key_name: variable.name,
+        key_name: deleteTarget.name,
       });
       if (tradeError) throw tradeError;
 
-      setVariables((prev) => prev.filter((x) => x.id !== variable.id));
+      setVariables((prev) => prev.filter((x) => x.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err) {
-      console.error("❌ Error deleting variable:", err);
-      alert("Delete failed: " + err.message);
+      console.error("Error deleting variable:", err);
+      setFormError("Delete failed: " + err.message);
     } finally {
       setIsDeleting(false);
     }
@@ -397,7 +439,12 @@ export default function ManageVariablesModal({
   };
 
   const handleAdd = async () => {
-    if (!newVarName.trim()) return;
+    if (!newVarName.trim()) {
+      setFormError("Enter a variable name.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
 
     const { data, error } = await supabase
       .from("variables")
@@ -415,8 +462,11 @@ export default function ManageVariablesModal({
       ])
       .select();
 
+    setSaving(false);
+
     if (error) {
-      console.error("❌ Insert error:", error);
+      console.error("Insert error:", error);
+      setFormError(error.message);
       return;
     }
 
@@ -427,7 +477,7 @@ export default function ManageVariablesModal({
       setNewVarType("text");
       setNewVarFormula("");
       setShowAddForm(false);
-
+      setShowConditional(false);
       await recalcAllTrades(variable);
     }
   };
@@ -436,7 +486,11 @@ export default function ManageVariablesModal({
     const varsInPhase = variables.filter((v) => v.phase === phase);
 
     return (
-      <DroppableSection id={dropzoneId} title={title}>
+      <DroppableSection
+        id={dropzoneId}
+        title={title}
+        empty={varsInPhase.length === 0}
+      >
         <SortableContext
           id={dropzoneId}
           items={varsInPhase.map((v) => v.id)}
@@ -446,18 +500,24 @@ export default function ManageVariablesModal({
             <SortableItemModal
               key={v.id}
               v={v}
-              onRename={handleRename}
-              onEditFormula={handleEditFormula}
-              onDelete={handleDelete}
+              onRename={(item) => {
+                setFormError(null);
+                setRenameTarget(item);
+                setRenameValue(item.name);
+              }}
+              onEditFormula={(item) => {
+                setFormError(null);
+                setFormulaTarget(item);
+                setFormulaValue(item.formula || "");
+              }}
+              onDelete={(item) => {
+                setFormError(null);
+                setDeleteTarget(item);
+              }}
               onToggleVisible={handleToggleVisible}
             />
           ))}
         </SortableContext>
-        {varsInPhase.length === 0 && (
-          <div className="text-xs text-slate-400 italic text-center py-10">
-            Sleep variabelen hierheen
-          </div>
-        )}
       </DroppableSection>
     );
   };
@@ -467,83 +527,90 @@ export default function ManageVariablesModal({
     (isDeleting && "Deleting…") ||
     (isUpdatingFormula && "Updating formula…");
 
+  const activeVar = activeId ? variables.find((x) => x.id === activeId) : null;
+
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-slate-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            Manage Variables
-            {currentAction && (
-              <span className="flex items-center gap-1.5 text-xs font-normal text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                <svg
-                  className="animate-spin h-3.5 w-3.5 text-slate-500"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                  />
-                </svg>
-                {currentAction}
-              </span>
-            )}
-          </h2>
-        </div>
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Manage variables"
+        description="Add fields, set visibility, and drag between pre- and post-trade."
+        size="lg"
+        footer={
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        }
+      >
+        {currentAction && (
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-surface-sunken px-2.5 py-1 text-xs text-content-muted">
+            <Spinner size={12} />
+            {currentAction}
+          </div>
+        )}
+
+        {formError && (
+          <div className="mb-4 rounded-lg border border-loss/30 bg-loss/10 px-3 py-2 text-xs text-loss">
+            {formError}
+          </div>
+        )}
 
         {!showAddForm ? (
-          <button
-            type="button"
-            onClick={() => setShowAddForm(true)}
-            className="mb-4 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-semibold transition"
+          <Button
+            variant="subtle"
+            size="sm"
+            icon={Plus}
+            className="mb-4"
+            onClick={() => {
+              setFormError(null);
+              setShowAddForm(true);
+            }}
           >
-            + Add new variable
-          </button>
+            Add new variable
+          </Button>
         ) : (
-          <div className="mb-5 flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Variable name"
-                value={newVarName}
-                onChange={(e) => setNewVarName(e.target.value)}
-                className="border border-slate-300 rounded-xl px-3 py-2 text-xs flex-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              />
-              <select
-                value={newVarType}
-                onChange={(e) => setNewVarType(e.target.value)}
-                className="border border-slate-300 rounded-xl px-3 py-2 text-xs outline-none bg-white"
-              >
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="dropdown">Dropdown</option>
-                <option value="time">Time</option>
-                <option value="date">Date</option>
-                <option value="textarea">Textarea</option>
-                <option value="chart">Chart</option>
-                <option value="calculated">Calculated</option>
-              </select>
+          <div className="mb-5 space-y-3 rounded-xl border border-line bg-surface-sunken p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <Field label="Name" className="flex-1" required>
+                {(id) => (
+                  <Input
+                    id={id}
+                    size="sm"
+                    placeholder="Variable name"
+                    value={newVarName}
+                    onChange={(e) => setNewVarName(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </Field>
+              <Field label="Type" className="sm:w-40">
+                {(id) => (
+                  <Select
+                    id={id}
+                    size="sm"
+                    value={newVarType}
+                    onChange={(e) => setNewVarType(e.target.value)}
+                  >
+                    {VAR_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
             </div>
 
             {newVarType === "calculated" && (
-              <div className="flex flex-col gap-3 pt-2 border-t border-slate-200">
+              <div className="space-y-3 border-t border-line pt-3">
                 {!showConditional && (
                   <div>
-                    <p className="text-xs font-medium text-slate-600 mb-1.5">
-                      Build formula:
+                    <p className="mb-1.5 text-xs font-medium text-content-muted">
+                      Build formula
                     </p>
                     {!inConditionalFocus && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
+                      <div className="mb-2 flex flex-wrap gap-1.5">
                         {variables
                           .filter((v) =>
                             ["number", "calculated"].includes(v.varType)
@@ -557,11 +624,9 @@ export default function ManageVariablesModal({
                                 key={varItem.id}
                                 type="button"
                                 onClick={() =>
-                                  setNewVarFormula(
-                                    (prev) => (prev || "") + token
-                                  )
+                                  setNewVarFormula((prev) => (prev || "") + token)
                                 }
-                                className="px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg hover:bg-slate-100 font-medium text-slate-700 transition"
+                                className="rounded-md border border-line bg-surface-raised px-2 py-1 text-xs font-medium text-content transition hover:border-line-strong hover:bg-surface-hover"
                               >
                                 {token}
                               </button>
@@ -575,7 +640,7 @@ export default function ManageVariablesModal({
                               onClick={() =>
                                 setNewVarFormula((prev) => (prev || "") + op)
                               }
-                              className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg hover:bg-slate-100 font-bold text-slate-700 transition"
+                              className="rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-semibold text-content transition hover:border-line-strong hover:bg-surface-hover"
                             >
                               {op}
                             </button>
@@ -583,64 +648,69 @@ export default function ManageVariablesModal({
                         )}
                       </div>
                     )}
-                    <input
-                      type="text"
+                    <Input
+                      size="sm"
                       placeholder="Formula"
                       value={newVarFormula}
                       onChange={(e) => setNewVarFormula(e.target.value)}
-                      className="border border-slate-300 rounded-xl px-3 py-2 text-xs w-full outline-none focus:ring-2 focus:ring-blue-500 bg-white font-mono"
+                      className="font-mono"
                     />
                   </div>
                 )}
 
                 {!showConditional ? (
-                  <button
-                    type="button"
+                  <Button
+                    variant="subtle"
+                    size="xs"
                     onClick={() => setShowConditional(true)}
-                    className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg w-fit font-semibold transition"
                   >
                     + Conditional
-                  </button>
+                  </Button>
                 ) : (
-                  <div className="mt-2 border-t pt-3">
-                    <p className="text-xs font-medium text-slate-600 mb-1.5">
-                      Conditional logic:
+                  <div className="space-y-3 border-t border-line pt-3">
+                    <p className="text-xs font-medium text-content-muted">
+                      Conditional logic
                     </p>
                     <ConditionalBuilder
                       variables={variables}
                       onChange={(condFormula) => setNewVarFormula(condFormula)}
                       setInFocus={setInConditionalFocus}
                     />
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger-ghost"
+                      size="xs"
                       onClick={() => {
                         setShowConditional(false);
                         setInConditionalFocus(false);
                       }}
-                      className="mt-3 px-3 py-1.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded-lg w-fit font-semibold transition"
                     >
-                      ✕ Remove conditional
-                    </button>
+                      Remove conditional
+                    </Button>
                   </div>
                 )}
               </div>
             )}
 
             <div className="flex gap-2 pt-1">
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
+                loading={saving}
                 onClick={handleAdd}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition"
               >
-                Save Variable
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition"
+                Save variable
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowAddForm(false);
+                  setShowConditional(false);
+                  setFormError(null);
+                }}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -650,35 +720,112 @@ export default function ManageVariablesModal({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-            {renderSection("pre", "Pre-Trade", "pre-dropzone")}
-            {renderSection("post", "Post-Trade", "post-dropzone")}
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+            {renderSection("pre", "Pre-trade", "pre-dropzone")}
+            {renderSection("post", "Post-trade", "post-dropzone")}
           </div>
 
           <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
-            {activeId ? (
+            {activeVar ? (
               <SortableItemModal
                 key={activeId}
-                v={variables.find((x) => x.id === activeId)}
-                onRename={handleRename}
-                onEditFormula={handleEditFormula}
-                onDelete={handleDelete}
-                onToggleVisible={handleToggleVisible}
+                v={activeVar}
+                onRename={() => {}}
+                onEditFormula={() => {}}
+                onDelete={() => {}}
+                onToggleVisible={() => {}}
               />
             ) : null}
           </DragOverlay>
         </DndContext>
+      </Modal>
 
-        <div className="flex justify-end mt-5 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+      <Modal
+        open={Boolean(renameTarget)}
+        onClose={() => setRenameTarget(null)}
+        title="Rename variable"
+        description="This updates the field name on every trade that uses it."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isRenaming}
+              onClick={handleRenameSubmit}
+            >
+              Save name
+            </Button>
+          </>
+        }
+      >
+        <Field label="Name" required>
+          {(id) => (
+            <Input
+              id={id}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRenameSubmit();
+              }}
+            />
+          )}
+        </Field>
+      </Modal>
+
+      <Modal
+        open={Boolean(formulaTarget)}
+        onClose={() => setFormulaTarget(null)}
+        title="Edit formula"
+        description={formulaTarget ? `Variable: ${formulaTarget.name}` : undefined}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setFormulaTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isUpdatingFormula}
+              onClick={handleEditFormulaSubmit}
+            >
+              Save formula
+            </Button>
+          </>
+        }
+      >
+        <Field label="Formula" required>
+          {(id) => (
+            <Input
+              id={id}
+              value={formulaValue}
+              onChange={(e) => setFormulaValue(e.target.value)}
+              className="font-mono"
+              autoFocus
+            />
+          )}
+        </Field>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete variable?"
+        description={
+          deleteTarget
+            ? `“${deleteTarget.name}” will be removed from all trades.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        tone="danger"
+        loading={isDeleting}
+      />
+    </>
   );
 }
