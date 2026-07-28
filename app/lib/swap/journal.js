@@ -119,11 +119,32 @@ export async function appendFillToPosition({
     fills: [],
   };
 
-  // Dedupe by signature+side
-  if (
-    signature &&
-    (fj.fills ?? []).some((f) => f.signature === signature && f.side === side)
-  ) {
+  // Dedupe by signature+side — still refresh ts from on-chain time if we have it
+  const existingIdx = signature
+    ? (fj.fills ?? []).findIndex((f) => f.signature === signature && f.side === side)
+    : -1;
+  if (existingIdx >= 0) {
+    const existing = fj.fills[existingIdx];
+    if (
+      executedAt &&
+      existing.ts &&
+      Math.abs(Date.parse(existing.ts) - Date.parse(executedAt)) > 60_000
+    ) {
+      const fills = [...fj.fills];
+      fills[existingIdx] = { ...existing, ts: executedAt };
+      fills.sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0));
+      const nextData = {
+        ...trade.data,
+        _fj: {
+          ...fj,
+          fills,
+          computed: computePosition(fills),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      await supabase.from("trades").update({ data: nextData }).eq("id", trade.id);
+      return { tradeId: trade.id, data: nextData, deduped: true, tsFixed: true };
+    }
     return { tradeId: trade.id, data: trade.data, deduped: true };
   }
 
