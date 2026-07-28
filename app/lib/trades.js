@@ -10,6 +10,64 @@
 
 import { dateKey, parseDate, toNumber } from "./format";
 
+const TRADE_NUMBER_KEYS = [
+  "Trade number",
+  "Trade Number",
+  "trade_number",
+  "tradeNumber",
+  "Trade #",
+  "Trade#",
+  "Number",
+  "number",
+  "#",
+];
+
+/**
+ * Resolve a trade index from either a top-level column or a value buried in
+ * `data`. Older databases never had `trades.trade_number`.
+ */
+export function extractTradeNumber(row) {
+  if (!row || typeof row !== "object") return null;
+
+  const top =
+    toNumber(row.trade_number) ??
+    toNumber(row.tradeNumber) ??
+    toNumber(row.number) ??
+    toNumber(row["Trade number"]) ??
+    toNumber(row["Trade Number"]);
+  if (top !== null) return top;
+
+  const data = row.data && typeof row.data === "object" ? row.data : null;
+  if (data) {
+    for (const key of TRADE_NUMBER_KEYS) {
+      const value = toNumber(data[key]);
+      if (value !== null) return value;
+    }
+    for (const [key, value] of Object.entries(data)) {
+      const normalized = String(key).toLowerCase().replace(/[\s_\-#.]/g, "");
+      if (
+        normalized === "tradenumber" ||
+        normalized === "tradenum" ||
+        normalized === "tradeno" ||
+        normalized === "number"
+      ) {
+        const n = toNumber(value);
+        if (n !== null) return n;
+      }
+    }
+  }
+
+  // Flattened row (trades page maps `...data` onto the row itself).
+  for (const key of TRADE_NUMBER_KEYS) {
+    if (key in row) {
+      const value = toNumber(row[key]);
+      if (value !== null) return value;
+    }
+  }
+
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Field detection                                                     */
 /* ------------------------------------------------------------------ */
@@ -147,7 +205,7 @@ export function normalizeTrades(rows = [], variables = [], fieldsOverride) {
 
     return {
       id: row?.id ?? null,
-      tradeNumber: row?.trade_number ?? toNumber(data["Trade Number"] ?? data["Trade number"]),
+      tradeNumber: extractTradeNumber(row) ?? extractTradeNumber({ data }) ?? null,
       raw: row,
       data,
       date,

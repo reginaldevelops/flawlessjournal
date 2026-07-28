@@ -36,7 +36,8 @@ import WalletFormModal from "./WalletFormModal";
 /* ------------------------------------------------------------------ */
 
 export default function WalletsPage() {
-  const { wallets, loading, error, add, update, remove, toggleInclude, reload } = useWallets();
+  const { wallets, loading, error, schemaMissing, add, update, remove, toggleInclude, reload } =
+    useWallets();
   const { balances, balancesLoading, refreshBalances } = usePortfolioBalances(wallets, loading);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -108,8 +109,12 @@ export default function WalletsPage() {
           </div>
         ) : error ? (
           <ErrorState
-            title="Could not load wallets"
-            description={error}
+            title={schemaMissing ? "Supabase schema update needed" : "Could not load wallets"}
+            description={
+              schemaMissing
+                ? "Run the SQL file supabase/migrations/20260728_aaa_compat.sql in the Supabase SQL Editor, then refresh this page."
+                : error
+            }
             onRetry={reload}
           />
         ) : wallets.length === 0 ? (

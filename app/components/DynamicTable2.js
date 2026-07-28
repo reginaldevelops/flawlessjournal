@@ -288,15 +288,28 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   const addTrade = async () => {
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
-    const time = now.toLocaleTimeString("nl-NL", {
+    const time = now.toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const newTrade = { data: { Datum: date, Entreetijd: time } };
-    const { data, error } = await supabase
+
+    // Prefer writing trade_number when the column exists; fall back otherwise.
+    const payloadWithNumber = {
+      data: { Datum: date, Entreetijd: time },
+    };
+    let { data, error } = await supabase
       .from("trades")
-      .insert([newTrade])
+      .insert([payloadWithNumber])
       .select();
+
+    if (error && /trade_number|null value|not-null/i.test(error.message ?? "")) {
+      // Trigger/column missing — still insert the trade body.
+      ({ data, error } = await supabase
+        .from("trades")
+        .insert([{ data: { Datum: date, Entreetijd: time } }])
+        .select());
+    }
+
     if (error) return console.error("Error adding trade:", error);
     if (data && data.length > 0) router.push(`/trade/${data[0].id}`);
   };

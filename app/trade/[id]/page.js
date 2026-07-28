@@ -585,11 +585,19 @@ export default function TradeViewPage() {
         .single();
 
       if (!error && data) {
+        const number =
+          data.trade_number ??
+          data.data?.["Trade number"] ??
+          data.data?.["Trade Number"] ??
+          null;
         const newState = {
           id: data.id,
-          "Trade number": data.trade_number,
+          "Trade number": number,
           ...data.data,
         };
+        if (newState["Trade number"] == null && number != null) {
+          newState["Trade number"] = number;
+        }
         setTrade(newState);
       } else {
         console.error("❌ Load trade error:", error);

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { groupByDay, normalizeTrades } from "../../lib/trades";
+import { fetchTrades } from "../../lib/supabaseTrades";
+import { groupByDay } from "../../lib/trades";
 import { keyOf } from "./helpers";
 
 /* ------------------------------------------------------------------ */
@@ -25,14 +26,13 @@ export function useJournal() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    const [entriesRes, tradesRes, variablesRes] = await Promise.all([
+    const [entriesRes, tradesBundle] = await Promise.all([
       supabase
         .from("journal_entries")
         .select("id, created_at, content")
         .order("created_at", { ascending: false })
         .limit(ENTRY_LIMIT),
-      supabase.from("trades").select("id, trade_number, data"),
-      supabase.from("variables").select("name, varType, phase, options"),
+      fetchTrades(supabase, { withVariables: true }),
     ]);
 
     if (entriesRes.error) {
@@ -44,11 +44,7 @@ export function useJournal() {
 
     setError(null);
     setEntries(entriesRes.data ?? []);
-    setTrades(
-      tradesRes.error
-        ? []
-        : normalizeTrades(tradesRes.data ?? [], variablesRes.error ? [] : (variablesRes.data ?? []))
-    );
+    setTrades(tradesBundle.error ? [] : tradesBundle.trades);
     setLoading(false);
   }, []);
 
