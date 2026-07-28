@@ -17,6 +17,20 @@ import {
   ChevronRight,
   Plus,
 } from "lucide-react";
+
+/** Position / system blobs stored in trades.data — never table columns. */
+function isInternalTradeKey(key) {
+  if (!key || typeof key !== "string") return true;
+  if (key === "id" || key === "data") return true;
+  if (key.startsWith("_")) return true; // e.g. _fj
+  return false;
+}
+
+function formatCellValue(val) {
+  if (val === null || val === undefined || val === "") return null;
+  if (typeof val === "object") return null; // never render raw objects/arrays (except tags)
+  return val;
+}
 import {
   DndContext,
   closestCenter,
@@ -189,14 +203,18 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     const variableNames = variables.map((v) => v?.name).filter(Boolean);
     const keysFromRows = new Set();
     (initialRows || []).forEach((row) => {
-      if (row.data) Object.keys(row.data).forEach((k) => keysFromRows.add(k));
+      if (row.data) {
+        Object.keys(row.data).forEach((k) => {
+          if (!isInternalTradeKey(k)) keysFromRows.add(k);
+        });
+      }
       Object.keys(row).forEach((k) => {
-        if (k !== "id" && k !== "data") keysFromRows.add(k);
+        if (!isInternalTradeKey(k)) keysFromRows.add(k);
       });
     });
     const combinedCols = [
       ...new Set([...variableNames, ...Array.from(keysFromRows)]),
-    ];
+    ].filter((c) => !isInternalTradeKey(c));
     setAllCols(combinedCols);
     loadVisibleCols(combinedCols);
   }, [variables, initialRows]);
@@ -213,10 +231,10 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .single();
 
     if (!error && data && data.visible_columns?.length > 0) {
-      const savedCols = data.visible_columns;
+      const savedCols = data.visible_columns.filter((c) => !isInternalTradeKey(c));
       const mergedCols = [
         ...savedCols,
-        ...allColumns.filter((c) => !savedCols.includes(c)),
+        ...allColumns.filter((c) => !savedCols.includes(c) && !isInternalTradeKey(c)),
       ];
       setVisibleCols(mergedCols);
       setAllCols(mergedCols);
@@ -645,8 +663,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                         onClick={() => router.push(`/trade/${row.id}`)}
                         className="px-4 py-3 text-content-muted whitespace-nowrap"
                       >
-                        {val !== null && val !== undefined && val !== "" ? (
-                          <span className="text-content">{val}</span>
+                        {formatCellValue(val) != null ? (
+                          <span className="text-content">{formatCellValue(val)}</span>
                         ) : (
                           <span className="text-content-subtle select-none">—</span>
                         )}
