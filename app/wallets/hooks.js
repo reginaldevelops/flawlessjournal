@@ -4,11 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useToast } from "../components/ui";
 import { nextWalletColor } from "../lib/chain/constants";
+import { isMissingSchemaError } from "../lib/supabaseTrades";
+
+const MISSING_TABLE_HINT =
+  "The wallets table is missing. Run supabase/migrations/20260728_aaa_compat.sql in the Supabase SQL Editor.";
 
 export function useWallets() {
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [schemaMissing, setSchemaMissing] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -20,8 +25,16 @@ export function useWallets() {
       .order("created_at", { ascending: true });
     setLoading(false);
     if (err) {
-      setError(err.message ?? "Could not load wallets");
+      if (isMissingSchemaError(err)) {
+        setSchemaMissing(true);
+        setError(MISSING_TABLE_HINT);
+        setWallets([]);
+      } else {
+        setSchemaMissing(false);
+        setError(err.message ?? "Could not load wallets");
+      }
     } else {
+      setSchemaMissing(false);
       setWallets(data ?? []);
     }
   }, []);
@@ -32,20 +45,36 @@ export function useWallets() {
 
   const add = useCallback(
     async (fields) => {
+      if (schemaMissing) {
+        toast.error("Wallets table missing", MISSING_TABLE_HINT);
+        return { ok: false };
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const color = fields.color || nextWalletColor(wallets.map((w) => w.color));
       const { data, error: err } = await supabase
         .from("wallets")
-        .insert([{ ...fields, color, include_in_balance: fields.include_in_balance ?? true }])
+        .insert([
+          {
+            ...fields,
+            color,
+            include_in_balance: fields.include_in_balance ?? true,
+            user_id: user?.id ?? null,
+          },
+        ])
         .select();
       if (err) {
-        toast.error("Could not add wallet", err.message);
+        toast.error("Could not add wallet", { description: err.message });
         return { ok: false };
       }
       toast.success("Wallet added");
       setWallets((prev) => [...prev, ...(data ?? [])]);
       return { ok: true, wallet: data?.[0] };
     },
-    [wallets, toast]
+    [wallets, toast, schemaMissing]
   );
 
   const update = useCallback(
@@ -56,11 +85,15 @@ export function useWallets() {
         .eq("id", id)
         .select();
       if (err) {
-        toast.error("Could not save changes", err.message);
+        toast.error("Could not save changes", { description: err.message });
         return { ok: false };
       }
       toast.success("Wallet updated");
-      setWallets((prev) => prev.map((w) => (String(w.id) === String(id) ? { ...w, ...(data?.[0] ?? fields) } : w)));
+      setWallets((prev) =>
+        prev.map((w) =>
+          String(w.id) === String(id) ? { ...w, ...(data?.[0] ?? fields) } : w
+        )
+      );
       return { ok: true };
     },
     [toast]
@@ -70,7 +103,7 @@ export function useWallets() {
     async (id) => {
       const { error: err } = await supabase.from("wallets").delete().eq("id", id);
       if (err) {
-        toast.error("Could not delete wallet", err.message);
+        toast.error("Could not delete wallet", { description: err.message });
         return { ok: false };
       }
       toast.success("Wallet removed");
@@ -81,9 +114,7 @@ export function useWallets() {
   );
 
   const toggleInclude = useCallback(
-    async (id, current) => {
-      return update(id, { include_in_balance: !current });
-    },
+    async (id, current) => update(id, { include_in_balance: !current }),
     [update]
   );
 
@@ -91,6 +122,7 @@ export function useWallets() {
     wallets,
     loading,
     error,
+    schemaMissing,
     add,
     update,
     remove,

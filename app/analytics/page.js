@@ -45,7 +45,8 @@ import {
 } from "../components/analytics/metrics-extra";
 import { useAnalyticsFilters, useDateWindow } from "../components/analytics/useAnalyticsFilters";
 import { supabase } from "../lib/supabaseClient";
-import { computeMetrics, normalizeTrades } from "../lib/trades";
+import { fetchTrades } from "../lib/supabaseTrades";
+import { computeMetrics } from "../lib/trades";
 import { formatCurrency, formatDate, pluralize } from "../lib/format";
 
 const TABS = [
@@ -85,26 +86,24 @@ function useAnalyticsData() {
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
 
-    const [tradesRes, variablesRes] = await Promise.all([
-      supabase.from("trades").select("id, trade_number, data").order("trade_number", { ascending: true }),
-      supabase.from("variables").select("name, varType, phase, options, visible, order"),
-    ]);
+    const { trades, variables, error } = await fetchTrades(supabase, {
+      withVariables: true,
+    });
 
-    if (tradesRes.error) {
+    if (error) {
       setState({
         loading: false,
-        error: tradesRes.error.message ?? "Could not load trades",
+        error: error.message ?? "Could not load trades",
         trades: [],
         variables: [],
       });
       return;
     }
 
-    const variables = variablesRes.error ? [] : (variablesRes.data ?? []);
     setState({
       loading: false,
       error: null,
-      trades: normalizeTrades(tradesRes.data ?? [], variables),
+      trades,
       variables,
     });
   }, []);

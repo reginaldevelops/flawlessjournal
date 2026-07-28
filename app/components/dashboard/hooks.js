@@ -8,9 +8,9 @@ import {
   computeMetrics,
   dateRangePreset,
   filterTrades,
-  normalizeTrades,
   previousRange,
 } from "../../lib/trades";
+import { fetchTrades, isMissingSchemaError } from "../../lib/supabaseTrades";
 
 /* ------------------------------------------------------------------ */
 /* localStorage-backed state                                           */
@@ -100,26 +100,24 @@ export function useTrades() {
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
 
-    const [tradesRes, variablesRes] = await Promise.all([
-      supabase.from("trades").select("id, trade_number, data").order("trade_number", { ascending: true }),
-      supabase.from("variables").select("name, varType, phase, options"),
-    ]);
+    const { trades, variables, error } = await fetchTrades(supabase, {
+      withVariables: true,
+    });
 
-    if (tradesRes.error) {
+    if (error) {
       setState({
         loading: false,
-        error: tradesRes.error.message ?? "Could not load trades",
+        error: error.message ?? "Could not load trades",
         trades: [],
         variables: [],
       });
       return;
     }
 
-    const variables = variablesRes.error ? [] : (variablesRes.data ?? []);
     setState({
       loading: false,
       error: null,
-      trades: normalizeTrades(tradesRes.data ?? [], variables),
+      trades,
       variables,
     });
   }, []);
@@ -365,6 +363,22 @@ export function usePortfolio() {
       .order("created_at", { ascending: true });
 
     if (error) {
+      // Missing wallets table → treat as empty, don't break the dashboard.
+      if (isMissingSchemaError(error)) {
+        setState({
+          loading: false,
+          error: null,
+          hasWallets: false,
+          wallets: [],
+          assets: [],
+          totalUSD: null,
+          change24hUSD: null,
+          change24hPct: null,
+          updatedAt: null,
+          errors: [],
+        });
+        return;
+      }
       setState((s) => ({
         ...s,
         loading: false,

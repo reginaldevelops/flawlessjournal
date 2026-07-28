@@ -7,6 +7,20 @@ import { LogoMark } from "./shell/Logo";
 
 const PUBLIC_ROUTES = ["/"];
 
+async function userHasVariables(userId) {
+  // Prefer scoped rows, but legacy databases often left user_id NULL.
+  const owned = await supabase.from("variables").select("id").eq("user_id", userId).limit(1);
+  if (!owned.error && (owned.data?.length ?? 0) > 0) return true;
+
+  if (owned.error && !/user_id|column|schema cache|42703/i.test(owned.error.message ?? "")) {
+    return { error: owned.error };
+  }
+
+  const any = await supabase.from("variables").select("id").limit(1);
+  if (any.error) return { error: any.error };
+  return (any.data?.length ?? 0) > 0;
+}
+
 export default function AuthWrapper({ children }) {
   const [state, setState] = useState("checking");
   const router = useRouter();
@@ -33,23 +47,16 @@ export default function AuthWrapper({ children }) {
         return;
       }
 
-      // A journal is only usable once variables exist, so unconfigured accounts
-      // are routed through onboarding first.
-      const { data: variables, error: varsError } = await supabase
-        .from("variables")
-        .select("id")
-        .eq("user_id", user.id);
-
+      const result = await userHasVariables(user.id);
       if (cancelled) return;
 
-      if (varsError) {
-        // Never hard-block the app on a schema/RLS hiccup.
-        console.error("Could not verify onboarding state:", varsError.message);
+      if (result && typeof result === "object" && result.error) {
+        console.error("Could not verify onboarding state:", result.error.message);
         setState("ready");
         return;
       }
 
-      const configured = (variables ?? []).length > 0;
+      const configured = result === true;
 
       if (!configured && pathname !== "/onboarding") {
         router.replace("/onboarding");

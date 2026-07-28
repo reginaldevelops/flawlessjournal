@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import DynamicTable2 from "../components/DynamicTable2";
 import { LoadingState, PageHeader, PageBody, Card } from "../components/ui";
-import { BarChart2 } from "lucide-react";
+import { extractTradeNumber } from "../lib/trades";
 
 export default function TradeDataPage() {
   const [rows, setRows] = useState([]);
@@ -19,6 +19,7 @@ export default function TradeDataPage() {
 
       if (tradesError) {
         console.error("Error loading trades:", tradesError);
+        setLoading(false);
         return;
       }
 
@@ -29,15 +30,23 @@ export default function TradeDataPage() {
 
       if (varsError) {
         console.error("Error loading variables:", varsError);
-        return;
       }
 
       setVariables(tradeVars || []);
 
-      const mapped = trades.map((d) => {
-        const base = { id: d.id, ...d.data };
+      const mapped = (trades || []).map((d, index) => {
+        const number = extractTradeNumber(d) ?? index + 1;
+        const base = {
+          id: d.id,
+          trade_number: number,
+          "Trade number": number,
+          ...d.data,
+        };
         if (base.PNL !== undefined && base.PnL === undefined) {
           base.PnL = base.PNL;
+        }
+        if (base["Trade number"] == null && base["Trade Number"] == null) {
+          base["Trade number"] = number;
         }
         return base;
       });
