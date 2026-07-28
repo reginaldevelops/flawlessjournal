@@ -9,8 +9,7 @@ import {
   RefreshCw,
   Trash2,
   Wallet,
-  TrendingUp,
-  CheckCircle2,
+  Download,
 } from "lucide-react";
 import {
   Badge,
@@ -25,11 +24,16 @@ import {
   Skeleton,
   Switch,
   Tooltip,
+  useToast,
 } from "../components/ui";
 import { chainMeta, explorerUrl } from "../lib/chain/constants";
-import { formatCurrency, truncateMiddle } from "../lib/format";
+import { formatCurrency, formatRelative, truncateMiddle } from "../lib/format";
 import { useWallets } from "./hooks";
 import WalletFormModal from "./WalletFormModal";
+import {
+  getWalletSyncMeta,
+  runWalletSync,
+} from "../lib/swap/importFills";
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
@@ -39,11 +43,45 @@ export default function WalletsPage() {
   const { wallets, loading, error, schemaMissing, add, update, remove, toggleInclude, reload } =
     useWallets();
   const { balances, balancesLoading, refreshBalances } = usePortfolioBalances(wallets, loading);
+  const toast = useToast();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [syncingId, setSyncingId] = useState(null);
+  const [syncTick, setSyncTick] = useState(0);
+
+  const handleSyncWallet = async (wallet) => {
+    if (wallet.chain !== "solana") return;
+    setSyncingId(wallet.id);
+    try {
+      const result = await runWalletSync(wallet.address, { limit: 40 });
+      setSyncTick((t) => t + 1);
+      const n = result.imported?.length ?? 0;
+      if (n > 0) {
+        toast.success(`Imported ${n} fill${n === 1 ? "" : "s"}`, {
+          description: `${result.deduped?.length ?? 0} already known · ${result.scanned} txs scanned`,
+          action: result.imported[0]?.tradeId
+            ? {
+                label: "Open trade",
+                onClick: () => {
+                  window.location.href = `/trade/${result.imported[0].tradeId}`;
+                },
+              }
+            : undefined,
+        });
+      } else {
+        toast.info("No new swaps", {
+          description: `Scanned ${result.scanned} txs · ${result.deduped?.length ?? 0} already journaled`,
+        });
+      }
+    } catch (err) {
+      toast.error("Wallet sync failed", { description: err.message });
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   const handleAdd = async (fields) => {
     const result = await add(fields);
@@ -76,7 +114,7 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track on-chain balances across Solana and Hyperliquid. Connected wallets feed your dashboard equity total."
+        description="Track on-chain balances across Solana and Hyperliquid. Sync Solana wallets to import external swaps into your journal (free RPC, runs slowly)."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -142,10 +180,12 @@ export default function WalletsPage() {
                 const bal = balances.get(String(wallet.id));
                 return (
                   <WalletCard
-                    key={wallet.id}
+                    key={`${wallet.id}-${syncTick}`}
                     wallet={wallet}
                     balanceData={bal}
                     balancesLoading={balancesLoading}
+                    syncing={syncingId === wallet.id}
+                    onSync={() => handleSyncWallet(wallet)}
                     onEdit={() => setEditTarget(wallet)}
                     onDelete={() => setDeleteTarget(wallet)}
                     onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
@@ -334,13 +374,24 @@ function usePortfolioBalances(wallets, walletsLoading) {
 /* WalletCard                                                          */
 /* ------------------------------------------------------------------ */
 
-function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, onToggle }) {
+function WalletCard({
+  wallet,
+  balanceData,
+  balancesLoading,
+  syncing,
+  onSync,
+  onEdit,
+  onDelete,
+  onToggle,
+}) {
   const chain = chainMeta(wallet.chain);
   const explorer = explorerUrl(wallet.chain, wallet.address);
   const usdValue = balanceData?.usdValue ?? null;
   const assets = (balanceData?.assets ?? []).filter((a) => (a.usdValue ?? 0) > 0 || a.amount > 0);
   const walletError = balanceData?.error;
   const showAssets = !balancesLoading && assets.length > 0;
+  const syncMeta =
+    wallet.chain === "solana" ? getWalletSyncMeta(wallet.address) : null;
 
   return (
     <Card>
@@ -367,7 +418,7 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
                 </Badge>
               )}
             </div>
-            <div className="mt-0.5 flex items-center gap-2">
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-content-muted">
                 {truncateMiddle(wallet.address, 8, 6)}
               </span>
@@ -382,6 +433,11 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
                   {chain.explorerName}
                   <ExternalLink size={10} aria-hidden />
                 </a>
+              )}
+              {syncMeta?.lastAt && (
+                <span className="text-2xs text-content-subtle">
+                  Journal synced {formatRelative(syncMeta.lastAt)}
+                </span>
               )}
             </div>
           </div>
@@ -412,6 +468,19 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
 
           {/* Actions */}
           <div className="flex shrink-0 items-center gap-1">
+            {wallet.chain === "solana" && (
+              <Tooltip content="Import external swaps into /trade (free RPC, may take a bit)">
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  icon={Download}
+                  loading={syncing}
+                  onClick={onSync}
+                >
+                  Sync
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip
               content={
                 wallet.include_in_balance ? "Exclude from balance" : "Include in balance"

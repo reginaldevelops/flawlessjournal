@@ -7,6 +7,7 @@ import AuthWrapper from "../AuthWrapper";
 import AppShell from "./AppShell";
 import ScrollToTop from "../ScrolToTop";
 import SolanaWalletProvider from "../swap/WalletProvider";
+import WalletSyncScheduler from "../swap/WalletSyncScheduler";
 
 /** Routes that render without the app chrome. */
 const BARE_ROUTES = ["/", "/onboarding"];
@@ -26,6 +27,7 @@ export default function RootProviders({ children }) {
               <AppShell>{children}</AppShell>
             )}
           </AuthWrapper>
+          {!bare && <WalletSyncScheduler />}
         </SolanaWalletProvider>
       </ToastProvider>
       <ScrollToTop />
