@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { Badge, Button, cn } from "../ui";
 import { formatCurrency, formatRelative, toneTextClass } from "../../lib/format";
 import SwapSheet from "./SwapSheet";
+import FillChartSnippet from "./FillChartSnippet";
 
 /**
  * Position summary + fill history for Solana journal trades created via Jupiter.
@@ -13,15 +14,29 @@ export default function PositionPanel({ trade, onRefresh }) {
   const fj = trade?._fj;
   const [swapOpen, setSwapOpen] = useState(false);
   const [swapSide, setSwapSide] = useState("buy");
+  const [openCharts, setOpenCharts] = useState(() => new Set());
 
   if (!fj || fj.kind !== "solana_position") return null;
 
   const c = fj.computed ?? {};
   const fills = [...(fj.fills ?? [])].reverse();
+  const autoOpenCharts = fills.length <= 4;
 
   const openSwap = (side) => {
     setSwapSide(side);
     setSwapOpen(true);
+  };
+
+  const isChartOpen = (fillId) =>
+    autoOpenCharts || openCharts.has(fillId);
+
+  const toggleChart = (fillId) => {
+    setOpenCharts((prev) => {
+      const next = new Set(prev);
+      if (next.has(fillId)) next.delete(fillId);
+      else next.add(fillId);
+      return next;
+    });
   };
 
   return (
@@ -113,48 +128,84 @@ export default function PositionPanel({ trade, onRefresh }) {
               Fill history
             </p>
             <ul className="divide-y divide-line/80">
-              {fills.map((f) => (
-                <li
-                  key={f.id}
-                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      tone={f.side === "buy" ? "profit" : "loss"}
-                      size="sm"
-                      className="capitalize"
-                    >
-                      {f.side}
-                    </Badge>
-                    <span className="font-mono tnum text-content">
-                      {Number(f.tokenAmount).toLocaleString(undefined, {
-                        maximumFractionDigits: 4,
-                      })}{" "}
-                      {fj.tokenSymbol}
-                    </span>
-                    <span className="text-content-subtle">
-                      via {f.quoteAmount?.toLocaleString?.(undefined, { maximumFractionDigits: 4 }) ?? f.quoteAmount}{" "}
-                      {f.quoteSymbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-content-muted">
-                    <span className="font-mono tnum">
-                      {formatCurrency(f.usdValue, { compact: true })}
-                    </span>
-                    <span className="text-2xs">{formatRelative(f.ts)}</span>
-                    {f.signature && (
-                      <a
-                        href={`https://solscan.io/tx/${f.signature}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover"
-                      >
-                        tx
-                      </a>
+              {fills.map((f) => {
+                const chartOpen = isChartOpen(f.id);
+                return (
+                  <li key={f.id} className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          tone={f.side === "buy" ? "profit" : "loss"}
+                          size="sm"
+                          className="capitalize"
+                        >
+                          {f.side}
+                        </Badge>
+                        <span className="font-mono tnum text-content">
+                          {Number(f.tokenAmount).toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          })}{" "}
+                          {fj.tokenSymbol}
+                        </span>
+                        <span className="text-content-subtle">
+                          via{" "}
+                          {f.quoteAmount?.toLocaleString?.(undefined, {
+                            maximumFractionDigits: 4,
+                          }) ?? f.quoteAmount}{" "}
+                          {f.quoteSymbol}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-content-muted">
+                        <span className="font-mono tnum">
+                          {formatCurrency(f.usdValue, { compact: true })}
+                        </span>
+                        <span className="text-2xs">{formatRelative(f.ts)}</span>
+                        {f.signature && (
+                          <a
+                            href={`https://solscan.io/tx/${f.signature}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand hover:text-brand-hover"
+                          >
+                            tx
+                          </a>
+                        )}
+                        {!autoOpenCharts && f.ts && (
+                          <button
+                            type="button"
+                            onClick={() => toggleChart(f.id)}
+                            className="inline-flex items-center gap-0.5 text-2xs text-content-subtle transition-colors hover:text-content"
+                            aria-expanded={chartOpen}
+                          >
+                            Chart
+                            <ChevronDown
+                              size={12}
+                              className={cn(
+                                "transition-transform",
+                                chartOpen && "rotate-180"
+                              )}
+                              aria-hidden
+                            />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {chartOpen && f.ts && (
+                      <FillChartSnippet
+                        className="mt-2.5"
+                        mint={fj.tokenMint}
+                        pairUrl={fj.pairUrl}
+                        aroundTs={f.ts}
+                        side={f.side}
+                        priceUsd={f.priceUsd}
+                        symbol={fj.tokenSymbol}
+                        windowMinutes={90}
+                      />
                     )}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
