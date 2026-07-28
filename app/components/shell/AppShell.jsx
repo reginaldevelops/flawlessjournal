@@ -25,6 +25,7 @@ import { cn } from "../ui/cn";
 import { LogoMark, Wordmark } from "./Logo";
 import { useTheme } from "./ThemeProvider";
 import CommandPalette from "./CommandPalette";
+import LivePositionsBar from "../swap/LivePositionsBar";
 
 const COLLAPSE_KEY = "flawless.sidebar.collapsed";
 
@@ -363,6 +364,8 @@ export default function AppShell({ children }) {
             )}
           </Popover>
         </header>
+
+        <LivePositionsBar />
 
         <main key={pathname} className="route-transition flex flex-1 flex-col">
           {children}

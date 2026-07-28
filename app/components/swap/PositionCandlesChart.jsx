@@ -67,6 +67,7 @@ export default function PositionCandlesChart({
         const params = new URLSearchParams({
           from: new Date(range.from).toISOString(),
           to: new Date(range.to).toISOString(),
+          minCandles: "100",
         });
         if (mint) params.set("mint", mint);
         if (pairUrl) params.set("pairUrl", pairUrl);
@@ -156,7 +157,7 @@ export default function PositionCandlesChart({
         )}
       </div>
 
-      <div className="relative h-64 w-full px-1 pb-2 sm:h-72">
+      <div className="relative h-[22rem] w-full px-1 pb-2 sm:h-[28rem]">
         {state.status === "loading" || state.status === "idle" ? (
           <div className="absolute inset-3 animate-pulse rounded-lg bg-surface-raised" />
         ) : state.status === "error" ? (

@@ -75,6 +75,19 @@ export function computePosition(fills = []) {
   };
 }
 
+/** Unrealized PnL for an open position at a live mark price. */
+export function unrealizedPnlUsd(computed, markPriceUsd) {
+  const tokens = n(computed?.tokensOpen);
+  const openCost = n(computed?.openCostUsd);
+  const px = n(markPriceUsd);
+  if (tokens <= 0 || !(px > 0)) return null;
+  return px * tokens - openCost;
+}
+
+export function isPositionLive(computed) {
+  return n(computed?.tokensOpen) > 1e-12;
+}
+
 /** Mirror computed stats into flat journal keys the rest of FJ already understands. */
 export function mirrorJournalFields({ symbol, computed, existing = {} }) {
   const pnlKey =
