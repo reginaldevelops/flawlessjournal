@@ -137,11 +137,11 @@ export default function JournalPage() {
               variant="ghost"
               size="sm"
               icon={RefreshCw}
+              iconOnly
+              aria-label="Refresh"
               onClick={reload}
               className={loading ? "pointer-events-none opacity-60" : undefined}
-            >
-              Refresh
-            </Button>
+            />
             <Button
               variant="secondary"
               size="sm"

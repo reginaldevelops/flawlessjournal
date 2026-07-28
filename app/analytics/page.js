@@ -294,8 +294,9 @@ export default function AnalyticsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Performance"
         title="Analytics"
-        description="A professional-grade trading review desk: performance, risk, timing, breakdowns, comparisons and an exportable edge report."
+        description="Equity curve, risk diagnostics, dimension breakdowns, time analysis and a full edge report."
         actions={
           <>
             <Badge tone="outline" size="sm" className="hidden sm:inline-flex">
@@ -305,11 +306,11 @@ export default function AnalyticsPage() {
               variant="ghost"
               size="sm"
               icon={RefreshCw}
+              iconOnly
+              aria-label="Refresh"
               onClick={reload}
               className={loading ? "pointer-events-none opacity-60" : undefined}
-            >
-              Refresh
-            </Button>
+            />
           </>
         }
         toolbar={toolbar}

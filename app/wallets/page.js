@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Trash2,
   Wallet,
+  TrendingUp,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Badge,
@@ -95,6 +97,11 @@ export default function WalletsPage() {
       <PageBody>
         {loading ? (
           <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-xl" />
+              ))}
+            </div>
             {[1, 2].map((i) => (
               <Skeleton key={i} className="h-20 w-full rounded-xl" />
             ))}
@@ -117,29 +124,36 @@ export default function WalletsPage() {
             }
           />
         ) : (
-          <div className="space-y-3">
-            {wallets.map((wallet) => {
-              const bal = balances.get(String(wallet.id));
-              return (
-                <WalletCard
-                  key={wallet.id}
-                  wallet={wallet}
-                  balanceData={bal}
-                  balancesLoading={balancesLoading}
-                  onEdit={() => setEditTarget(wallet)}
-                  onDelete={() => setDeleteTarget(wallet)}
-                  onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
-                />
-              );
-            })}
-          </div>
-        )}
+          <>
+            {/* Summary strip */}
+            <WalletSummary
+              wallets={wallets}
+              balances={balances}
+              balancesLoading={balancesLoading}
+            />
 
-        {wallets.length > 0 && !loading && (
-          <p className="mt-6 text-xs text-content-subtle">
-            {wallets.filter((w) => w.include_in_balance).length} of {wallets.length}{" "}
-            wallet{wallets.length !== 1 ? "s" : ""} included in balance
-          </p>
+            <div className="mt-4 space-y-2.5">
+              {wallets.map((wallet) => {
+                const bal = balances.get(String(wallet.id));
+                return (
+                  <WalletCard
+                    key={wallet.id}
+                    wallet={wallet}
+                    balanceData={bal}
+                    balancesLoading={balancesLoading}
+                    onEdit={() => setEditTarget(wallet)}
+                    onDelete={() => setDeleteTarget(wallet)}
+                    onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
+                  />
+                );
+              })}
+            </div>
+
+            <p className="mt-4 text-xs text-content-subtle">
+              {wallets.filter((w) => w.include_in_balance).length} of {wallets.length}{" "}
+              wallet{wallets.length !== 1 ? "s" : ""} included in balance total
+            </p>
+          </>
         )}
       </PageBody>
 
@@ -170,6 +184,74 @@ export default function WalletsPage() {
         loading={deleting}
       />
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary strip                                                       */
+/* ------------------------------------------------------------------ */
+
+function WalletSummary({ wallets, balances, balancesLoading }) {
+  const included = wallets.filter((w) => w.include_in_balance);
+  let totalUsd = null;
+  let hasAny = false;
+
+  for (const w of included) {
+    const bd = balances.get(String(w.id));
+    if (bd?.usdValue != null) {
+      totalUsd = (totalUsd ?? 0) + bd.usdValue;
+      hasAny = true;
+    }
+  }
+
+  const chainCounts = wallets.reduce((acc, w) => {
+    acc[w.chain] = (acc[w.chain] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <p className="text-xs font-medium text-content-muted">Total balance</p>
+        {balancesLoading && !hasAny ? (
+          <div className="mt-2 h-7 w-28 skeleton rounded" />
+        ) : (
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight text-content tnum">
+            {totalUsd != null ? formatCurrency(totalUsd, { decimals: 0 }) : "—"}
+          </p>
+        )}
+        <p className="mt-0.5 text-2xs text-content-subtle">
+          across {included.length} included wallet{included.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <p className="text-xs font-medium text-content-muted">Wallets connected</p>
+        <p className="mt-1.5 text-2xl font-semibold tracking-tight text-content tnum">
+          {wallets.length}
+        </p>
+        <p className="mt-0.5 text-2xs text-content-subtle">
+          {Object.entries(chainCounts)
+            .map(([chain, n]) => `${n} ${chain.toUpperCase()}`)
+            .join(" · ")}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm col-span-2 sm:col-span-1">
+        <p className="text-xs font-medium text-content-muted">In balance total</p>
+        <p className="mt-1.5 text-2xl font-semibold tracking-tight text-content tnum">
+          {included.length}
+          <span className="ml-1 text-base font-normal text-content-muted">
+            / {wallets.length}
+          </span>
+        </p>
+        <p className="mt-0.5 text-2xs text-content-subtle">
+          {wallets.length - included.length > 0
+            ? `${wallets.length - included.length} excluded from dashboard`
+            : "All wallets feeding dashboard"}
+        </p>
+      </div>
+    </div>
   );
 }
 

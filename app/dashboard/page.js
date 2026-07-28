@@ -162,19 +162,20 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Overview"
         title="Dashboard"
-        description="How you are performing, what the market is doing right now, and the highest-value thing to fix next."
+        description="Performance, market context, and the highest-value thing to fix next."
         actions={
           <>
             <Button
               variant="ghost"
               size="sm"
               icon={RefreshCw}
+              iconOnly
+              aria-label="Refresh"
               onClick={reload}
               className={loading ? "pointer-events-none opacity-60" : undefined}
-            >
-              Refresh
-            </Button>
+            />
             <Button as={Link} href="/analytics" variant="secondary" size="sm" icon={BarChart3}>
               Analytics
             </Button>

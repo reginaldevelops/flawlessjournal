@@ -9,6 +9,13 @@ import {
   AlertTriangle,
   CheckCircle,
   GripVertical,
+  Settings2,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
 } from "lucide-react";
 import {
   DndContext,
@@ -27,7 +34,33 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Klein hulpcomponent voor een versleepbaar item in de modal
+/* ------------------------------------------------------------------ */
+/* Column display-name overrides — keeps DB keys intact               */
+/* ------------------------------------------------------------------ */
+const COL_LABELS = {
+  Datum: "Date",
+  Entreetijd: "Entry time",
+  Exittijd: "Exit time",
+  Munt: "Coin",
+  Richting: "Direction",
+  Setup: "Setup",
+  Sessie: "Session",
+  Risico: "Risk",
+  Winst: "Profit",
+  Verlies: "Loss",
+  Notities: "Notes",
+  Opmerkingen: "Remarks",
+  Graad: "Grade",
+  Tijdframe: "Timeframe",
+};
+
+function colLabel(col) {
+  return COL_LABELS[col] ?? col;
+}
+
+/* ------------------------------------------------------------------ */
+/* Drag-sortable column item (dark-themed)                             */
+/* ------------------------------------------------------------------ */
 function SortableColumnItem({ col, visibleCols, toggleCol }) {
   const {
     attributes,
@@ -50,10 +83,10 @@ function SortableColumnItem({ col, visibleCols, toggleCol }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center justify-between p-2 rounded-xl border transition ${
+      className={`flex items-center justify-between p-2 rounded-lg border transition-colors ${
         isDragging
-          ? "bg-slate-100 border-slate-300 shadow-md"
-          : "bg-white border-slate-200 hover:border-slate-300"
+          ? "bg-surface-raised border-line-strong shadow-md"
+          : "bg-surface border-line hover:border-line-strong"
       }`}
     >
       <div className="flex items-center gap-2 overflow-hidden">
@@ -61,53 +94,71 @@ function SortableColumnItem({ col, visibleCols, toggleCol }) {
           type="button"
           {...attributes}
           {...listeners}
-          className="text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing p-0.5"
+          className="text-content-subtle hover:text-content-muted cursor-grab active:cursor-grabbing p-0.5"
         >
-          <GripVertical size={16} />
+          <GripVertical size={14} />
         </button>
-        <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 truncate select-none">
+        <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-content truncate select-none">
           <input
             type="checkbox"
             checked={isVisible}
             onChange={() => toggleCol(col)}
-            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+            className="rounded border-line-strong text-brand focus:ring-brand/50 w-3.5 h-3.5 bg-surface"
           />
-          <span className="truncate">{col}</span>
+          <span className="truncate">{colLabel(col)}</span>
         </label>
       </div>
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Status helpers                                                      */
+/* ------------------------------------------------------------------ */
+const STATUS_META = {
+  Incomplete: {
+    icon: XCircle,
+    className: "text-loss",
+    bg: "bg-loss/10",
+  },
+  Open: {
+    icon: Clock,
+    className: "text-content-muted",
+    bg: "bg-surface-raised",
+  },
+  "Needs Review": {
+    icon: AlertTriangle,
+    className: "text-warn-fg",
+    bg: "bg-warn-soft",
+  },
+  Completed: {
+    icon: CheckCircle,
+    className: "text-profit-fg",
+    bg: "bg-profit-soft",
+  },
+};
+
 function getTradeStatus(row, variables) {
   const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
   const postVars = variables.filter((v) => v.phase === "post" && v.visible);
-
   const isFilled = (v) => {
     const val = row[v.name];
     return val !== null && val !== undefined && val !== "";
   };
-
   const allPreFilled = preVars.every(isFilled);
   const allPostFilled = postVars.every(isFilled);
   const pnlFilled = isFilled({ name: "PnL" }) || isFilled({ name: "PNL" });
 
-  if (!allPreFilled)
-    return { icon: XCircle, color: "text-red-600", label: "Incomplete" };
-  if (allPreFilled && !allPostFilled && !pnlFilled)
-    return { icon: Clock, color: "text-gray-600", label: "Open" };
-  if (pnlFilled && !allPostFilled)
-    return {
-      icon: AlertTriangle,
-      color: "text-orange-500",
-      label: "Needs Review",
-    };
-  if (allPreFilled && allPostFilled)
-    return { icon: CheckCircle, color: "text-emerald-600", label: "Completed" };
-
-  return { icon: Clock, color: "text-gray-600", label: "Open" };
+  if (!allPreFilled) return "Incomplete";
+  if (allPreFilled && !allPostFilled && !pnlFilled) return "Open";
+  if (pnlFilled && !allPostFilled) return "Needs Review";
+  if (allPreFilled && allPostFilled) return "Completed";
+  return "Open";
 }
 
+/* ------------------------------------------------------------------ */
+/* Main component                                                      */
+/* ------------------------------------------------------------------ */
 export default function DynamicTable2({ rows: initialRows, variables }) {
   const [rows, setRows] = useState(initialRows || []);
   const [visibleCols, setVisibleCols] = useState([]);
@@ -116,10 +167,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   const [selectedRows, setSelectedRows] = useState([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState({
-    key: "",
-    direction: "desc",
-  });
+  const [sortConfig, setSortConfig] = useState({ key: "", direction: "desc" });
   const router = useRouter();
   const rowsPerPage = 10;
 
@@ -139,17 +187,13 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
 
   useEffect(() => {
     const variableNames = variables.map((v) => v?.name).filter(Boolean);
-
     const keysFromRows = new Set();
     (initialRows || []).forEach((row) => {
-      if (row.data) {
-        Object.keys(row.data).forEach((k) => keysFromRows.add(k));
-      }
+      if (row.data) Object.keys(row.data).forEach((k) => keysFromRows.add(k));
       Object.keys(row).forEach((k) => {
         if (k !== "id" && k !== "data") keysFromRows.add(k);
       });
     });
-
     const combinedCols = [
       ...new Set([...variableNames, ...Array.from(keysFromRows)]),
     ];
@@ -169,17 +213,13 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .single();
 
     if (!error && data && data.visible_columns?.length > 0) {
-      // Zorg ervoor dat eventuele nieuwe kolommen die nog niet in settings staan achteraan worden toegevoegd
       const savedCols = data.visible_columns;
       const mergedCols = [
         ...savedCols,
         ...allColumns.filter((c) => !savedCols.includes(c)),
       ];
       setVisibleCols(mergedCols);
-
-      // Update ook meteen de allCols volgorde als we opgeslagen volgorde hebben
       setAllCols(mergedCols);
-
       setSortConfig({
         key: data.sort_key || allColumns[0] || "",
         direction: data.sort_direction || "desc",
@@ -195,10 +235,9 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   };
 
   const toggleCol = (col) => {
-    const updated = visibleCols.includes(col)
-      ? visibleCols.filter((c) => c !== col)
-      : [...visibleCols, col];
-    setVisibleCols(updated);
+    setVisibleCols((prev) =>
+      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
+    );
   };
 
   const handleDragEnd = (event) => {
@@ -207,8 +246,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       setAllCols((items) => {
         const oldIndex = items.indexOf(active.id);
         const newIndex = items.indexOf(over.id);
-        const newCols = arrayMove(items, oldIndex, newIndex);
-        return newCols;
+        return arrayMove(items, oldIndex, newIndex);
       });
     }
   };
@@ -233,7 +271,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
         prev.key === col
           ? { key: col, direction: prev.direction === "asc" ? "desc" : "asc" }
           : { key: col, direction: "asc" };
-
       (async () => {
         await supabase
           .from("table_settings")
@@ -244,7 +281,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
           })
           .select();
       })();
-
       return newConfig;
     });
   };
@@ -256,19 +292,12 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       hour: "2-digit",
       minute: "2-digit",
     });
-
-    const newTrade = {
-      data: {
-        Datum: date,
-        Entreetijd: time,
-      },
-    };
-
+    const newTrade = { data: { Datum: date, Entreetijd: time } };
     const { data, error } = await supabase
       .from("trades")
       .insert([newTrade])
       .select();
-    if (error) return console.error("❌ Error adding trade:", error);
+    if (error) return console.error("Error adding trade:", error);
     if (data && data.length > 0) router.push(`/trade/${data[0].id}`);
   };
 
@@ -278,59 +307,68 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .from("trades")
       .delete()
       .in("id", selectedRows);
-    if (error) return console.error("❌ Bulk delete error:", error);
+    if (error) return console.error("Bulk delete error:", error);
     setRows((prev) => prev.filter((r) => !selectedRows.includes(r.id)));
     setSelectedRows([]);
     setBulkOpen(false);
   };
 
+  const allSelected = selectedRows.length === rows.length && rows.length > 0;
+
   return (
-    <div className="px-1 py-8 m-4 rounded-2xl bg-inherit">
+    <div>
       {/* Top controls */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <button
           onClick={addTrade}
-          className="mr-2 bg-green-600 hover:bg-green-700 text-white text-base px-3 py-1.5 rounded-xl font-semibold transition"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
         >
-          + Add Trade
+          <Plus size={14} aria-hidden />
+          Add Trade
         </button>
+
         <div className="flex items-center gap-2">
+          {/* Bulk actions */}
           <div className="relative">
             <button
               onClick={() => setBulkOpen(!bulkOpen)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+              className="h-8 px-3 rounded-md border border-line bg-surface text-content-muted text-xs font-medium hover:bg-surface-hover hover:text-content hover:border-line-strong transition-colors"
             >
               Bulk actions ▾
             </button>
             {bulkOpen && (
-              <div className="absolute right-0 top-10 bg-white border border-slate-200 shadow-xl rounded-2xl flex flex-col z-10 py-1 min-w-[140px]">
+              <div className="absolute right-0 top-10 bg-surface-overlay border border-line shadow-lg rounded-xl z-10 py-1 min-w-[140px]">
                 <button
                   onClick={bulkDelete}
-                  className="px-4 py-2 text-xs font-semibold text-red-600 hover:bg-slate-50 text-left transition"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-loss hover:bg-loss/10 transition-colors"
                 >
-                  🗑 Delete trades
+                  <Trash2 size={13} aria-hidden />
+                  Delete trades
                 </button>
               </div>
             )}
           </div>
+
+          {/* Column settings */}
           <button
             onClick={() => setShowModal(true)}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center justify-center text-lg"
+            className="h-8 w-8 flex items-center justify-center rounded-md border border-line bg-surface text-content-muted hover:bg-surface-hover hover:text-content hover:border-line-strong transition-colors"
+            aria-label="Column settings"
           >
-            ⚙️
+            <Settings2 size={15} aria-hidden />
           </button>
         </div>
       </div>
 
-      {/* Modern DND Modal */}
+      {/* Column settings modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl border border-slate-200 flex flex-col">
-            <h2 className="text-lg font-bold text-slate-900 mb-1">
-              Select columns
+        <div className="fixed inset-0 bg-canvas/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-raised rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto border border-line shadow-xl flex flex-col">
+            <h2 className="text-base font-semibold text-content mb-0.5">
+              Columns
             </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Sleep kolommen om de volgorde aan te passen.
+            <p className="text-xs text-content-subtle mb-4">
+              Drag to reorder. Toggle to show or hide.
             </p>
 
             <DndContext
@@ -342,7 +380,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                 items={allCols.filter(Boolean)}
                 strategy={rectSortingStrategy}
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-6">
                   {allCols.filter(Boolean).map((col) => (
                     <SortableColumnItem
                       key={col}
@@ -355,30 +393,28 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
               </SortableContext>
             </DndContext>
 
-            {/* Knoppen onderin */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
+            <div className="flex items-center justify-between pt-4 border-t border-line mt-auto">
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setVisibleCols(allCols)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                  className="px-2.5 py-1.5 rounded-md border border-line bg-surface text-content-muted text-xs font-medium hover:bg-surface-hover hover:text-content transition-colors"
                 >
                   All
                 </button>
                 <button
                   type="button"
                   onClick={() => setVisibleCols([])}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                  className="px-2.5 py-1.5 rounded-md border border-line bg-surface text-content-muted text-xs font-medium hover:bg-surface-hover hover:text-content transition-colors"
                 >
                   None
                 </button>
               </div>
-
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                  className="px-3.5 py-1.5 rounded-md border border-line bg-surface text-content-muted text-xs font-medium hover:bg-surface-hover hover:text-content transition-colors"
                 >
                   Cancel
                 </button>
@@ -391,9 +427,9 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       .select();
                     setShowModal(false);
                   }}
-                  className="px-4 py-2 bg-black hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition shadow-sm"
+                  className="px-3.5 py-1.5 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
                 >
-                  Update
+                  Save
                 </button>
               </div>
             </div>
@@ -402,165 +438,187 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       )}
 
       {/* Table */}
-      <div className="w-full overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
-        <table className="w-full text-sm text-slate-900">
-          <thead className="bg-slate-50 text-left border-b border-slate-200">
-            <tr>
-              <th className="px-5 py-3 w-10">
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line">
+              <th className="px-4 py-2.5 w-10">
                 <input
                   type="checkbox"
-                  checked={
-                    selectedRows.length === rows.length && rows.length > 0
-                  }
+                  checked={allSelected}
                   onChange={(e) =>
                     setSelectedRows(
                       e.target.checked ? rows.map((r) => r.id) : []
                     )
                   }
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  className="rounded border-line-strong bg-surface w-3.5 h-3.5 accent-brand"
                 />
               </th>
-              <th className="px-4 py-3 font-semibold text-xs text-slate-600 uppercase tracking-wider">
+              <th className="px-4 py-2.5 text-left font-medium text-2xs uppercase tracking-wider text-content-subtle whitespace-nowrap">
                 Status
               </th>
-
               {visibleCols.map((col) => (
                 <th
                   key={col}
                   onClick={() => handleSort(col)}
-                  className="px-4 py-3 font-semibold text-xs text-slate-600 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap"
+                  className="px-4 py-2.5 text-left font-medium text-2xs uppercase tracking-wider text-content-subtle cursor-pointer select-none whitespace-nowrap hover:text-content transition-colors group"
                 >
-                  {col}{" "}
-                  {sortConfig.key === col
-                    ? sortConfig.direction === "asc"
-                      ? "▲"
-                      : "▼"
-                    : ""}
+                  <span className="inline-flex items-center gap-1">
+                    {colLabel(col)}
+                    {sortConfig.key === col ? (
+                      sortConfig.direction === "asc" ? (
+                        <ChevronUp size={11} className="text-brand" />
+                      ) : (
+                        <ChevronDown size={11} className="text-brand" />
+                      )
+                    ) : (
+                      <ChevronDown size={11} className="opacity-0 group-hover:opacity-40 transition-opacity" />
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {currentRows.map((row) => (
-              <tr
-                key={row.id}
-                className="hover:bg-slate-50/80 transition-colors"
-              >
-                <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.includes(row.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedRows((prev) => [...prev, row.id]);
-                      } else {
-                        setSelectedRows((prev) =>
-                          prev.filter((id) => id !== row.id)
-                        );
-                      }
-                    }}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                  />
-                </td>
-                <td
-                  className="px-4 py-3 cursor-pointer"
-                  onClick={() => router.push(`/trade/${row.id}`)}
+          <tbody>
+            {currentRows.map((row, i) => {
+              const statusKey = getTradeStatus(row, variables);
+              const meta = STATUS_META[statusKey] ?? STATUS_META["Open"];
+              const StatusIcon = meta.icon;
+              const isSelected = selectedRows.includes(row.id);
+              return (
+                <tr
+                  key={row.id}
+                  className={`border-b border-line/60 transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-brand/5"
+                      : "hover:bg-surface-hover"
+                  }`}
                 >
-                  {(() => {
-                    const status = getTradeStatus(row, variables);
-                    const IconComponent = status.icon;
-                    return (
-                      <span
-                        className={`flex items-center gap-1.5 text-xs font-semibold ${status.color}`}
-                      >
-                        <IconComponent size={14} />
-                        {status.label}
-                      </span>
-                    );
-                  })()}
-                </td>
+                  <td
+                    className="px-4 py-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRows((prev) => [...prev, row.id]);
+                        } else {
+                          setSelectedRows((prev) =>
+                            prev.filter((id) => id !== row.id)
+                          );
+                        }
+                      }}
+                      className="rounded border-line-strong bg-surface w-3.5 h-3.5 accent-brand"
+                    />
+                  </td>
 
-                {visibleCols.map((col) => {
-                  const val = getCellValue(row, col);
+                  <td
+                    className="px-4 py-3"
+                    onClick={() => router.push(`/trade/${row.id}`)}
+                  >
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold ${meta.className}`}
+                    >
+                      <StatusIcon size={13} aria-hidden />
+                      {statusKey}
+                    </span>
+                  </td>
 
-                  if (col.toLowerCase() === "pnl") {
-                    return (
-                      <td
-                        key={col}
-                        onClick={() => router.push(`/trade/${row.id}`)}
-                        className={`px-4 py-3 cursor-pointer font-semibold ${
-                          Number(val) >= 0 ? "text-emerald-600" : "text-red-600"
-                        }`}
-                      >
-                        {val !== null && val !== undefined ? `${val}` : "—"}
-                      </td>
-                    );
-                  }
+                  {visibleCols.map((col) => {
+                    const val = getCellValue(row, col);
+                    const colLow = col.toLowerCase();
 
-                  if (col.toLowerCase() === "tags") {
-                    return (
-                      <td
-                        key={col}
-                        onClick={() => router.push(`/trade/${row.id}`)}
-                        className="px-4 py-3 cursor-pointer"
-                      >
-                        {Array.isArray(val) && val.length > 0
-                          ? val.map((t) => (
+                    if (colLow === "pnl") {
+                      const num = Number(val);
+                      return (
+                        <td
+                          key={col}
+                          onClick={() => router.push(`/trade/${row.id}`)}
+                          className={`px-4 py-3 font-semibold font-mono tnum text-sm ${
+                            num >= 0 ? "text-profit-fg" : "text-loss-fg"
+                          }`}
+                        >
+                          {val !== null && val !== undefined
+                            ? num >= 0
+                              ? `+${val}`
+                              : `${val}`
+                            : "—"}
+                        </td>
+                      );
+                    }
+
+                    if (colLow === "tags") {
+                      return (
+                        <td
+                          key={col}
+                          onClick={() => router.push(`/trade/${row.id}`)}
+                          className="px-4 py-3"
+                        >
+                          {Array.isArray(val) && val.length > 0 ? (
+                            val.map((t) => (
                               <span
                                 key={t}
-                                className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-md font-medium mr-1"
+                                className="inline-flex items-center bg-brand/10 text-brand text-2xs px-1.5 py-0.5 rounded font-medium mr-1"
                               >
                                 {t}
                               </span>
                             ))
-                          : "—"}
+                          ) : (
+                            <span className="text-content-subtle">—</span>
+                          )}
+                        </td>
+                      );
+                    }
+
+                    return (
+                      <td
+                        key={col}
+                        onClick={() => router.push(`/trade/${row.id}`)}
+                        className="px-4 py-3 text-content-muted whitespace-nowrap"
+                      >
+                        {val !== null && val !== undefined && val !== "" ? (
+                          <span className="text-content">{val}</span>
+                        ) : (
+                          <span className="text-content-subtle select-none">—</span>
+                        )}
                       </td>
                     );
-                  }
-
-                  return (
-                    <td
-                      key={col}
-                      onClick={() => router.push(`/trade/${row.id}`)}
-                      className="px-4 py-3 cursor-pointer truncate max-w-xs text-slate-700"
-                    >
-                      {val !== null && val !== undefined && val !== ""
-                        ? val
-                        : "—"}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      </div>
 
-        {/* Pagination */}
-        <div className="flex justify-between items-center p-4 text-xs font-medium text-slate-600 border-t border-slate-200 bg-slate-50/50">
-          <span>
-            {sortedRows.length > 0 ? startIndex + 1 : 0} –{" "}
-            {Math.min(endIndex, sortedRows.length)} of {sortedRows.length}{" "}
-            trades
+      {/* Pagination */}
+      <div className="flex items-center justify-between px-4 py-3 border-t border-line">
+        <span className="text-xs text-content-subtle">
+          {sortedRows.length > 0 ? startIndex + 1 : 0}–
+          {Math.min(endIndex, sortedRows.length)} of {sortedRows.length} trades
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-line text-content-muted hover:bg-surface-hover hover:text-content disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="px-2.5 py-1 text-xs font-medium text-content-muted">
+            {currentPage} of {totalPages}
           </span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => p - 1)}
-              className="px-2.5 py-1 border border-slate-200 bg-white rounded-lg disabled:text-slate-300 disabled:bg-slate-50 hover:bg-slate-100 transition"
-            >
-              ‹
-            </button>
-            <span className="font-semibold text-slate-700">
-              {currentPage} of {totalPages}
-            </span>
-            <button
-              disabled={currentPage === totalPages || totalPages === 0}
-              onClick={() => setCurrentPage((p) => p + 1)}
-              className="px-2.5 py-1 border border-slate-200 bg-white rounded-lg disabled:text-slate-300 disabled:bg-slate-50 hover:bg-slate-100 transition"
-            >
-              ›
-            </button>
-          </div>
+          <button
+            disabled={currentPage === totalPages || totalPages === 0}
+            onClick={() => setCurrentPage((p) => p + 1)}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-line text-content-muted hover:bg-surface-hover hover:text-content disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            aria-label="Next page"
+          >
+            <ChevronRight size={14} />
+          </button>
         </div>
       </div>
     </div>
