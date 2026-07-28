@@ -68,7 +68,9 @@ function DimensionSection({ dim, facet, selected, onToggle, onClear, query }) {
               >
                 {isOn && <Check size={10} strokeWidth={3} />}
               </span>
-              <span className="min-w-0 flex-1 truncate">{v.value}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {dim.id === "__tags" ? `#${v.value}` : v.value}
+              </span>
               <span className="shrink-0 font-mono text-2xs tnum text-content-subtle">{v.count}</span>
             </button>
           );
@@ -254,13 +256,13 @@ export function FilterBar({
           })}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <SearchInput
             value={filters.search}
             onChange={(e) => patch({ search: e.target.value })}
             onClear={() => patch({ search: "" })}
             placeholder="Search trades…"
-            className="w-40 [&_input]:h-8 [&_input]:text-xs"
+            className="w-full min-w-[10rem] sm:w-40 [&_input]:h-8 [&_input]:text-xs"
           />
           {actions}
         </div>
@@ -326,7 +328,7 @@ export function FilterChips({
           <Chip
             key={`${field}-${v}`}
             label={labelFor(field)}
-            value={v}
+            value={field === "__tags" ? `#${v}` : v}
             onRemove={() => onToggleDimension(field, v)}
           />
         ))

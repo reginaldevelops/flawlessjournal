@@ -5,6 +5,7 @@ import {
   makeFill,
   mirrorJournalFields,
 } from "./position";
+import { captureFillOhlcSnapshot } from "./ohlcSnapshot";
 
 /**
  * Find an existing Solana position trade for a mint, or create a new one.
@@ -160,6 +161,14 @@ export async function appendFillToPosition({
     wallet,
     ts: executedAt,
   });
+
+  // Persist OHLC around the fill so entry charts survive API history loss
+  const ohlcSnapshot = await captureFillOhlcSnapshot({
+    mint: tokenMint,
+    pairUrl: pairUrl || fj.pairUrl || null,
+    aroundTs: fill.ts,
+  });
+  if (ohlcSnapshot) fill.ohlcSnapshot = ohlcSnapshot;
 
   const fills = [...(fj.fills ?? []), fill].sort(
     (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)

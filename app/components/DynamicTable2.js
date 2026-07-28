@@ -47,6 +47,7 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getJournalCompletionStatus } from "../lib/tradeCompletion";
 
 /* ------------------------------------------------------------------ */
 /* Column display-name overrides — keeps DB keys intact               */
@@ -153,21 +154,14 @@ const STATUS_META = {
 };
 
 function getTradeStatus(row, variables) {
-  const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
-  const postVars = variables.filter((v) => v.phase === "post" && v.visible);
-  const isFilled = (v) => {
-    const val = row[v.name];
-    return val !== null && val !== undefined && val !== "";
+  const status = getJournalCompletionStatus(row, variables);
+  const map = {
+    incomplete: "Incomplete",
+    open: "Open",
+    in_progress: "Needs Review",
+    completed: "Completed",
   };
-  const allPreFilled = preVars.every(isFilled);
-  const allPostFilled = postVars.every(isFilled);
-  const pnlFilled = isFilled({ name: "PnL" }) || isFilled({ name: "PNL" });
-
-  if (!allPreFilled) return "Incomplete";
-  if (allPreFilled && !allPostFilled && !pnlFilled) return "Open";
-  if (pnlFilled && !allPostFilled) return "Needs Review";
-  if (allPreFilled && allPostFilled) return "Completed";
-  return "Open";
+  return map[status.key] || "Open";
 }
 
 /* ------------------------------------------------------------------ */
@@ -213,7 +207,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       });
     });
     const combinedCols = [
-      ...new Set([...variableNames, ...Array.from(keysFromRows)]),
+      ...new Set(["Tags", ...variableNames, ...Array.from(keysFromRows)]),
     ].filter((c) => !isInternalTradeKey(c));
     setAllCols(combinedCols);
     loadVisibleCols(combinedCols);

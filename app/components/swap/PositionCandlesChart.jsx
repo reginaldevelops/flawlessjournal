@@ -30,8 +30,56 @@ const INTERVAL_OPTIONS = [
   })),
 ];
 
+function normalizeCandle(c) {
+  const tSec = Number(c?.t ?? c?.ts ?? 0);
+  if (!tSec) return null;
+  const o = Number(c?.o ?? c?.open);
+  const h = Number(c?.h ?? c?.high);
+  const l = Number(c?.l ?? c?.low);
+  const close = Number(c?.c ?? c?.close);
+  if (![o, h, l, close].every(Number.isFinite)) return null;
+  return { t: tSec, o, h, l, c: close, v: c?.v };
+}
+
+function mergeFillSnapshots(fills = []) {
+  const byT = new Map();
+  let pairUrl = null;
+  let pairAddress = null;
+  let interval = null;
+  let timeframe = null;
+
+  for (const f of fills) {
+    const snap = f?.ohlcSnapshot;
+    if (!snap?.candles?.length) continue;
+    if (!pairUrl && snap.pairUrl) pairUrl = snap.pairUrl;
+    if (!pairAddress && snap.pairAddress) pairAddress = snap.pairAddress;
+    if (!interval && snap.interval) interval = snap.interval;
+    if (!timeframe && (snap.timeframe || snap.interval)) {
+      timeframe = snap.timeframe || snap.interval;
+    }
+    for (const raw of snap.candles) {
+      const c = normalizeCandle(raw);
+      if (!c) continue;
+      byT.set(c.t, c);
+    }
+  }
+
+  const candles = [...byT.values()].sort((a, b) => a.t - b.t);
+  if (candles.length < 2) return null;
+  return {
+    source: "snapshot",
+    pairUrl,
+    pairAddress,
+    interval,
+    timeframe: timeframe || interval,
+    candles,
+    fromSnapshot: true,
+  };
+}
+
 /**
  * Single candlestick chart for a Solana position with all fills marked.
+ * Live Gecko candles preferred; fill OHLC snapshots as fallback.
  */
 export default function PositionCandlesChart({
   mint,
@@ -43,6 +91,8 @@ export default function PositionCandlesChart({
   const colors = useChartColors();
   const [interval, setIntervalMode] = useState("auto");
   const [state, setState] = useState({ status: "idle", data: null, error: null });
+
+  const snapshot = useMemo(() => mergeFillSnapshots(fills), [fills]);
 
   const fillMarks = useMemo(() => {
     return (fills || [])
@@ -75,12 +125,19 @@ export default function PositionCandlesChart({
   }, [range]);
 
   useEffect(() => {
-    if (!range || (!mint && !pairUrl)) return;
+    if (!range || (!mint && !pairUrl)) {
+      setState({ status: "idle", data: null, error: null });
+      return undefined;
+    }
     let cancelled = false;
     const ctrl = new AbortController();
 
     (async () => {
-      setState({ status: "loading", data: null, error: null });
+      setState((prev) => ({
+        status: "loading",
+        data: prev.data,
+        error: null,
+      }));
       try {
         const params = new URLSearchParams({
           from: new Date(range.from).toISOString(),
@@ -96,7 +153,14 @@ export default function PositionCandlesChart({
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || `Chart failed (${res.status})`);
-        if (!cancelled) setState({ status: "ready", data: json, error: null });
+        const candles = (json.candles || []).map(normalizeCandle).filter(Boolean);
+        if (!cancelled) {
+          setState({
+            status: "ready",
+            data: { ...json, candles },
+            error: null,
+          });
+        }
       } catch (err) {
         if (cancelled || err?.name === "AbortError") return;
         setState({
@@ -113,8 +177,12 @@ export default function PositionCandlesChart({
     };
   }, [mint, pairUrl, range?.from, range?.to, interval]);
 
+  const liveReady = Boolean(state.data?.candles?.length >= 2);
+  const chartSource = liveReady ? state.data : snapshot;
+  const usingSnapshot = Boolean(snapshot) && !liveReady;
+
   const chartData = useMemo(() => {
-    const candles = state.data?.candles ?? [];
+    const candles = chartSource?.candles ?? [];
     return candles.map((c) => ({
       t: c.t * 1000,
       o: c.o,
@@ -123,10 +191,9 @@ export default function PositionCandlesChart({
       c: c.c,
       v: c.v,
       up: c.c >= c.o,
-      // invisible series so Tooltip / axes have a numeric y
       mid: (c.h + c.l) / 2,
     }));
-  }, [state.data]);
+  }, [chartSource]);
 
   const yDomain = useMemo(() => {
     const prices = [];
@@ -142,9 +209,14 @@ export default function PositionCandlesChart({
     return [min - pad, max + pad];
   }, [chartData, fillMarks]);
 
-  const pairLink = state.data?.pairUrl || pairUrl || null;
+  const pairLink = chartSource?.pairUrl || pairUrl || null;
   const activeTf =
-    state.data?.timeframe || (interval === "auto" ? suggested : interval);
+    chartSource?.timeframe ||
+    chartSource?.interval ||
+    (interval === "auto" ? suggested : interval);
+
+  const showLoading = (state.status === "loading" || state.status === "idle") && !chartData.length;
+  const showError = state.status === "error" && !chartData.length;
 
   return (
     <div className={cn("border-b border-line", className)}>
@@ -153,9 +225,8 @@ export default function PositionCandlesChart({
           <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
             Price chart
             {activeTf ? ` · ${activeTf}` : ""}
-            {state.data?.candles?.length
-              ? ` · ${state.data.candles.length} candles`
-              : ""}
+            {chartData.length ? ` · ${chartData.length} candles` : ""}
+            {usingSnapshot ? " · snapshot" : ""}
             {fillMarks.length
               ? ` · ${fillMarks.length} fill${fillMarks.length === 1 ? "" : "s"}`
               : ""}
@@ -172,7 +243,7 @@ export default function PositionCandlesChart({
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex max-w-full flex-wrap items-center gap-2 overflow-x-auto">
           <Segmented
             size="sm"
             value={interval}
@@ -192,10 +263,10 @@ export default function PositionCandlesChart({
         </div>
       </div>
 
-      <div className="relative h-[22rem] w-full px-1 pb-2 sm:h-[28rem]">
-        {state.status === "loading" || state.status === "idle" ? (
+      <div className="relative h-[18rem] w-full px-1 pb-2 sm:h-[28rem]">
+        {showLoading ? (
           <div className="absolute inset-3 animate-pulse rounded-lg bg-surface-raised" />
-        ) : state.status === "error" ? (
+        ) : showError ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-2xs text-content-subtle">
             {state.error}
           </div>
@@ -237,7 +308,6 @@ export default function PositionCandlesChart({
                 content={<CandleTooltip symbol={symbol} fillMarks={fillMarks} />}
               />
 
-              {/* Invisible series so hover/tooltip still works over candles */}
               <Line
                 type="monotone"
                 dataKey="mid"
@@ -291,6 +361,9 @@ export default function PositionCandlesChart({
           </ResponsiveContainer>
         )}
       </div>
+      {state.status === "loading" && chartData.length >= 2 ? (
+        <p className="px-4 pb-2 text-2xs text-content-subtle">Refreshing live candles…</p>
+      ) : null}
     </div>
   );
 }

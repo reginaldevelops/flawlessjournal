@@ -483,7 +483,7 @@ export default function ScannerPage() {
         {!loading && hits.length > 0 && (
           <div className="overflow-hidden rounded-2xl border border-line bg-surface">
             <div className="overflow-x-auto thin-scrollbar">
-              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[640px] sm:min-w-[920px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-line bg-surface-sunken/80">
                     {[
