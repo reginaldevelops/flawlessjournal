@@ -79,6 +79,7 @@ export async function runWalletSync(address, { limit = 40, quiet = false } = {})
         priceUsd: swap.priceUsd,
         usdValue: swap.usdValue,
         wallet: address,
+        blockTime: swap.blockTime,
       });
       if (result.deduped) deduped.push(swap);
       else imported.push({ ...swap, tradeId: result.tradeId });

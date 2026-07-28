@@ -15,6 +15,7 @@ export async function findOrCreatePositionTrade({
   tokenName,
   pairUrl,
   imageUrl,
+  executedAt,
 }) {
   const { data: rows, error } = await supabase
     .from("trades")
@@ -38,11 +39,12 @@ export async function findOrCreatePositionTrade({
     };
   }
 
-  const now = new Date();
+  const when = executedAt ? new Date(executedAt) : new Date();
+  const safeWhen = Number.isNaN(when.getTime()) ? new Date() : when;
   const pad = (n) => String(n).padStart(2, "0");
   const seed = {
-    Datum: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-    Entreetijd: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+    Datum: `${safeWhen.getFullYear()}-${pad(safeWhen.getMonth() + 1)}-${pad(safeWhen.getDate())}`,
+    Entreetijd: `${pad(safeWhen.getHours())}:${pad(safeWhen.getMinutes())}`,
     Coin: tokenSymbol,
     Coins: tokenSymbol,
     Direction: "Long",
@@ -91,13 +93,22 @@ export async function appendFillToPosition({
   priceUsd,
   usdValue,
   wallet,
+  ts,
+  blockTime,
 }) {
+  const executedAt =
+    ts ??
+    (blockTime != null
+      ? new Date(blockTime > 1e12 ? blockTime : blockTime * 1000).toISOString()
+      : undefined);
+
   const trade = await findOrCreatePositionTrade({
     tokenMint,
     tokenSymbol,
     tokenName,
     pairUrl,
     imageUrl,
+    executedAt,
   });
 
   const fj = trade.data._fj ?? {
@@ -126,9 +137,12 @@ export async function appendFillToPosition({
     priceUsd,
     usdValue,
     wallet,
+    ts: executedAt,
   });
 
-  const fills = [...(fj.fills ?? []), fill];
+  const fills = [...(fj.fills ?? []), fill].sort(
+    (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)
+  );
   const computed = computePosition(fills);
   const mirrored = mirrorJournalFields({
     symbol: tokenSymbol,
