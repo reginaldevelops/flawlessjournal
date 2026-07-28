@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
+import PositionPanel from "../../components/swap/PositionPanel";
 import { Parser } from "expr-eval";
 import {
   XCircle,
@@ -575,35 +576,37 @@ export default function TradeViewPage() {
   const [variables, setVariables] = useState([]);
   const [showManageModal, setShowManageModal] = useState(false);
 
+  const loadTrade = async () => {
+    const { data, error } = await supabase
+      .from("trades")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (!error && data) {
+      const number =
+        data.trade_number ??
+        data.data?.["Trade number"] ??
+        data.data?.["Trade Number"] ??
+        null;
+      const newState = {
+        id: data.id,
+        "Trade number": number,
+        ...data.data,
+      };
+      if (newState["Trade number"] == null && number != null) {
+        newState["Trade number"] = number;
+      }
+      setTrade(newState);
+    } else {
+      console.error("❌ Load trade error:", error);
+    }
+  };
+
   // Load trade
   useEffect(() => {
-    const loadTrade = async () => {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (!error && data) {
-        const number =
-          data.trade_number ??
-          data.data?.["Trade number"] ??
-          data.data?.["Trade Number"] ??
-          null;
-        const newState = {
-          id: data.id,
-          "Trade number": number,
-          ...data.data,
-        };
-        if (newState["Trade number"] == null && number != null) {
-          newState["Trade number"] = number;
-        }
-        setTrade(newState);
-      } else {
-        console.error("❌ Load trade error:", error);
-      }
-    };
     if (id) loadTrade();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Load variables
@@ -711,6 +714,8 @@ export default function TradeViewPage() {
           </button>
         </div>
       </div>
+
+      <PositionPanel trade={trade} onRefresh={loadTrade} />
 
       <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-3">
         {/* Sidebar */}

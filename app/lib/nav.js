@@ -3,6 +3,7 @@ import {
   ChartNoAxesCombined,
   LayoutDashboard,
   NotebookPen,
+  Radar,
   Table2,
   Wallet,
 } from "lucide-react";
@@ -19,6 +20,12 @@ export const NAV_ITEMS = [
     label: "Trades",
     icon: Table2,
     description: "Every logged trade with custom columns",
+  },
+  {
+    href: "/scanner",
+    label: "Scanner",
+    icon: Radar,
+    description: "Volume breakouts across DexScreener pairs",
   },
   {
     href: "/journal",
