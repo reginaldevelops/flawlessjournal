@@ -328,7 +328,7 @@ export function FilterChips({
           <Chip
             key={`${field}-${v}`}
             label={labelFor(field)}
-            value={v}
+            value={field === "__tags" ? `#${v}` : v}
             onRemove={() => onToggleDimension(field, v)}
           />
         ))

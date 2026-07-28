@@ -159,15 +159,12 @@ export default function PositionPanel({ trade, onRefresh }) {
               </Button>
             </div>
             {showChart && (
-              <div className="pb-1">
-                <PositionCandlesChart
-                  mint={fj.tokenMint}
-                  pairUrl={fj.pairUrl}
-                  fills={fillsChrono}
-                  symbol={fj.tokenSymbol}
-                  height={280}
-                />
-              </div>
+              <PositionCandlesChart
+                mint={fj.tokenMint}
+                pairUrl={fj.pairUrl}
+                fills={fillsChrono}
+                symbol={fj.tokenSymbol}
+              />
             )}
           </div>
         )}
