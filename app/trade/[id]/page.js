@@ -551,18 +551,9 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // Link / Chart — URL or pasted/uploaded image
+  // Chart / link fields are edited in the main chart panels (paste image or URL).
   if (v.varType === "chart" || v.varType === "link") {
-    return (
-      <div className="py-1">
-        <ChartField
-          label={colLabel(v.name)}
-          value={value}
-          compact
-          onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
-        />
-      </div>
-    );
+    return null;
   }
 
   return null;
