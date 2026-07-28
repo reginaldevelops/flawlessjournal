@@ -6,6 +6,7 @@ import {
   runWalletSync,
   shouldAutoSync,
 } from "../../lib/swap/importFills";
+import { SYNC_BATCH_DEFAULT } from "../../lib/swap/constants";
 
 /**
  * On app load: quietly sync Solana wallets that haven't synced in 24h.
@@ -32,7 +33,7 @@ export default function WalletSyncScheduler() {
       setStatus(`Auto-syncing ${due.length} wallet${due.length > 1 ? "s" : ""}…`);
       for (const w of due) {
         try {
-          await runWalletSync(w.address, { limit: 30, quiet: true });
+          await runWalletSync(w.address, { limit: SYNC_BATCH_DEFAULT, quiet: true });
         } catch (err) {
           console.warn("[wallet-auto-sync]", w.address, err.message);
         }
