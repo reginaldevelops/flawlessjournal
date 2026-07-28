@@ -1,6 +1,6 @@
 /**
- * Historical price snippets around a fill timestamp.
- * Pair discovery: DexScreener. Candles: GeckoTerminal OHLCV (free, no key).
+ * Historical OHLCV for Solana positions.
+ * Pair discovery: DexScreener. Candles: GeckoTerminal (free, no key).
  */
 
 import { fetchJson } from "../chain/http";
@@ -15,7 +15,7 @@ function num(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function toUnixSeconds(value) {
+export function toUnixSeconds(value) {
   if (value == null || value === "") return null;
   if (typeof value === "number" && Number.isFinite(value)) {
     return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
@@ -36,7 +36,6 @@ export function pairAddressFromUrl(url) {
 
 /**
  * Pick the highest-liquidity Solana pair for a mint.
- * @returns {Promise<{ pairAddress: string, pairUrl: string|null, dexId: string|null, priceUsd: number|null }|null>}
  */
 export async function resolveSolanaPair({ mint, pairAddress, pairUrl } = {}) {
   const fromUrl = pairAddressFromUrl(pairUrl);
@@ -78,65 +77,21 @@ export async function resolveSolanaPair({ mint, pairAddress, pairUrl } = {}) {
 }
 
 /**
- * Choose candle size so a window still has a readable number of points.
+ * Choose candle size so a window still has a readable number of points (~40–120).
  */
 export function pickTimeframe(windowMinutes) {
   const w = Math.max(15, Number(windowMinutes) || 60);
   if (w <= 45) return { timeframe: "minute", aggregate: 1, label: "1m", seconds: 60 };
   if (w <= 180) return { timeframe: "minute", aggregate: 5, label: "5m", seconds: 300 };
   if (w <= 720) return { timeframe: "minute", aggregate: 15, label: "15m", seconds: 900 };
-  return { timeframe: "hour", aggregate: 1, label: "1h", seconds: 3600 };
+  if (w <= 60 * 48) return { timeframe: "hour", aggregate: 1, label: "1h", seconds: 3600 };
+  if (w <= 60 * 24 * 14) return { timeframe: "hour", aggregate: 4, label: "4h", seconds: 14400 };
+  return { timeframe: "day", aggregate: 1, label: "1d", seconds: 86400 };
 }
 
-/**
- * Fetch OHLCV candles centered on `aroundTs`.
- * Gecko only returns candles *before* a timestamp — we request past the right
- * edge, then keep the window around the fill.
- */
-export async function fetchFillChartWindow({
-  mint,
-  pairAddress,
-  pairUrl,
-  aroundTs,
-  windowMinutes = 60,
-} = {}) {
-  const around = toUnixSeconds(aroundTs);
-  if (!around) throw new Error("around timestamp required");
-
-  const pair = await resolveSolanaPair({ mint, pairAddress, pairUrl });
-  if (!pair?.pairAddress) {
-    throw new Error("No Solana pool found for this token");
-  }
-
-  const half = Math.max(10, Math.round(Number(windowMinutes) || 60) / 2);
-  const tf = pickTimeframe(half * 2);
-  const nowSec = Math.floor(Date.now() / 1000);
-  const rightEdge = Math.min(nowSec, around + Math.round(half * 60));
-  const leftEdge = around - Math.round(half * 60);
-  // If the fill is near "now", bias the window to the left so we still get history
-  const effectiveLeft =
-    rightEdge - leftEdge < half * 60
-      ? rightEdge - Math.round(half * 2 * 60)
-      : leftEdge;
-  const spanSeconds = Math.max(tf.seconds * 12, rightEdge - effectiveLeft);
-  const limit = Math.min(1000, Math.max(12, Math.ceil(spanSeconds / tf.seconds) + 8));
-
-  const url =
-    `${GECKO_API}/networks/${NETWORK}/pools/${encodeURIComponent(pair.pairAddress)}` +
-    `/ohlcv/${tf.timeframe}?aggregate=${tf.aggregate}` +
-    `&before_timestamp=${rightEdge}&limit=${limit}&currency=usd&token=base`;
-
-  const json = await fetchJson(url, {
-    label: "gecko-ohlcv",
-    timeout: 15_000,
-    retries: 1,
-  });
-
-  const raw = json?.data?.attributes?.ohlcv_list;
+function parseCandles(raw) {
   const list = Array.isArray(raw) ? raw : [];
-
-  // API returns newest-first: [ts, o, h, l, c, vol]
-  const candles = list
+  return list
     .map((row) => {
       const t = num(row?.[0], NaN);
       const o = num(row?.[1], NaN);
@@ -147,21 +102,115 @@ export async function fetchFillChartWindow({
       if (![t, o, h, l, c].every(Number.isFinite)) return null;
       return { t, o, h, l, c, v };
     })
-    .filter(Boolean)
-    .filter(
-      (c) =>
-        c.t >= effectiveLeft - tf.seconds && c.t <= rightEdge + tf.seconds
-    )
+    .filter(Boolean);
+}
+
+async function fetchGeckoOhlcv({ pairAddress, timeframe, aggregate, before, limit }) {
+  const url =
+    `${GECKO_API}/networks/${NETWORK}/pools/${encodeURIComponent(pairAddress)}` +
+    `/ohlcv/${timeframe}?aggregate=${aggregate}` +
+    `&before_timestamp=${before}&limit=${limit}&currency=usd&token=base`;
+
+  const json = await fetchJson(url, {
+    label: "gecko-ohlcv",
+    timeout: 15_000,
+    retries: 1,
+  });
+  return parseCandles(json?.data?.attributes?.ohlcv_list);
+}
+
+/**
+ * Fetch OHLCV candles for [fromTs, toTs] (unix or ISO), with padding.
+ */
+export async function fetchPositionChartWindow({
+  mint,
+  pairAddress,
+  pairUrl,
+  fromTs,
+  toTs,
+  padMinutes,
+} = {}) {
+  let from = toUnixSeconds(fromTs);
+  let to = toUnixSeconds(toTs);
+  if (!from && !to) throw new Error("from/to timestamp required");
+  if (!from) from = to;
+  if (!to) to = from;
+  if (to < from) [from, to] = [to, from];
+
+  const pair = await resolveSolanaPair({ mint, pairAddress, pairUrl });
+  if (!pair?.pairAddress) {
+    throw new Error("No Solana pool found for this token");
+  }
+
+  const spanMin = Math.max(1, (to - from) / 60);
+  const pad = Math.max(
+    20,
+    padMinutes != null && Number.isFinite(Number(padMinutes))
+      ? Number(padMinutes)
+      : Math.max(30, Math.round(spanMin * 0.2))
+  );
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const rightEdge = Math.min(nowSec, to + pad * 60);
+  let leftEdge = from - pad * 60;
+  // Near "now": still show enough left history
+  if (rightEdge - leftEdge < pad * 60) {
+    leftEdge = rightEdge - Math.max(pad * 2, 60) * 60;
+  }
+
+  const windowMinutes = Math.max(15, (rightEdge - leftEdge) / 60);
+  const tf = pickTimeframe(windowMinutes);
+  const spanSeconds = rightEdge - leftEdge;
+  const limit = Math.min(
+    1000,
+    Math.max(24, Math.ceil(spanSeconds / tf.seconds) + 12)
+  );
+
+  const raw = await fetchGeckoOhlcv({
+    pairAddress: pair.pairAddress,
+    timeframe: tf.timeframe,
+    aggregate: tf.aggregate,
+    before: rightEdge,
+    limit,
+  });
+
+  const candles = raw
+    .filter((c) => c.t >= leftEdge - tf.seconds && c.t <= rightEdge + tf.seconds)
     .sort((a, b) => a.t - b.t);
 
   return {
     mint: mint || null,
     pairAddress: pair.pairAddress,
     pairUrl: pair.pairUrl,
-    aroundTs: around,
-    windowMinutes: Math.round((rightEdge - effectiveLeft) / 60) || half * 2,
+    fromTs: leftEdge,
+    toTs: rightEdge,
+    windowMinutes: Math.round((rightEdge - leftEdge) / 60),
     timeframe: tf.label,
+    candleSeconds: tf.seconds,
     candles,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Back-compat: single fill centered window.
+ */
+export async function fetchFillChartWindow({
+  mint,
+  pairAddress,
+  pairUrl,
+  aroundTs,
+  windowMinutes = 60,
+} = {}) {
+  const around = toUnixSeconds(aroundTs);
+  if (!around) throw new Error("around timestamp required");
+  const half = Math.max(10, Math.round(Number(windowMinutes) || 60) / 2);
+  return fetchPositionChartWindow({
+    mint,
+    pairAddress,
+    pairUrl,
+    fromTs: around - half * 60,
+    toTs: around + half * 60,
+    padMinutes: 0,
+  });
 }
