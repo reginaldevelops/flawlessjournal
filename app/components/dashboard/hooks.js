@@ -174,28 +174,46 @@ export function usePeriodMetrics(trades, period, referenceDay) {
 /* Economic calendar                                                  */
 /* ------------------------------------------------------------------ */
 
+const CALENDAR_RANGE = {
+  this: "thisweek",
+  next: "nextweek",
+  thisweek: "thisweek",
+  nextweek: "nextweek",
+  lastweek: "lastweek",
+  both: "both",
+};
+
 export function useEconomicCalendar(range = "thisweek") {
+  const apiRange = CALENDAR_RANGE[range] ?? "thisweek";
+
   const [state, setState] = useState({
     loading: true,
     events: [],
     fetchedAt: null,
     stale: false,
     error: null,
+    source: null,
   });
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
     try {
-      const res = await fetch(`/api/economic-calendar?range=${encodeURIComponent(range)}`, {
+      const res = await fetch(`/api/economic-calendar?range=${encodeURIComponent(apiRange)}`, {
         cache: "no-store",
       });
       const payload = await res.json();
+      const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+      const source =
+        sources.length && sources.every((entry) => entry.source === "unavailable")
+          ? "unavailable"
+          : sources.find((entry) => entry.source !== "unavailable")?.source ?? sources[0]?.source ?? null;
       setState({
         loading: false,
         events: Array.isArray(payload?.events) ? payload.events : [],
         fetchedAt: payload?.fetchedAt ?? null,
         stale: Boolean(payload?.stale),
         error: payload?.error ?? null,
+        source,
       });
     } catch (err) {
       setState({
@@ -204,9 +222,10 @@ export function useEconomicCalendar(range = "thisweek") {
         fetchedAt: null,
         stale: false,
         error: err?.message ?? "Request failed",
+        source: null,
       });
     }
-  }, [range]);
+  }, [apiRange]);
 
   useEffect(() => {
     load();

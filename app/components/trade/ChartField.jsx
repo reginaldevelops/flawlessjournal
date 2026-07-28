@@ -240,9 +240,6 @@ export default function ChartField({
         </Button>
       </div>
 
-      {isImageDataUrl(value) && (
-        <p className="text-2xs text-content-subtle">Saved as compressed image in this trade.</p>
-      )}
       {error && <p className="text-2xs text-loss">{error}</p>}
 
       <input

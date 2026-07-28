@@ -46,7 +46,7 @@ export async function GET(request) {
   } catch (error) {
     console.error("[chain-analysis]", error);
     return NextResponse.json(
-      { error: error?.message || "Chain analysis failed" },
+      { error: "Chain analysis temporarily unavailable. Try again shortly." },
       { status: 502 }
     );
   }

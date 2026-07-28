@@ -229,6 +229,7 @@ export default function AnalyticsPage() {
     () => trades.filter((t) => t.hasResult).length,
     [trades]
   );
+  const allTradesMetrics = useMemo(() => computeMetrics(trades), [trades]);
   const noTrades = !loading && !error && trades.length === 0;
   const noFilteredTrades = !loading && !error && trades.length > 0 && metrics.totalTrades === 0;
 
@@ -254,41 +255,65 @@ export default function AnalyticsPage() {
       />
     ) : null;
 
-  const tabContent = {
-    overview: (
-      <OverviewTab
-        metrics={metrics}
-        deltas={deltas}
-        comparing={comparing}
-        tradeSeries={tradeSeries}
-        daySeries={daySeries}
-        rSeries={rSeries}
-        rolling={rolling}
-        hasR={hasR}
-        trades={filteredTrades}
-      />
-    ),
-    calendar: <CalendarTab metrics={metrics} bounds={dateWindow.bounds} />,
-    breakdown: (
-      <BreakdownTab
-        dims={dims}
-        trades={filteredTrades}
-        onDrillDown={toggleDimensionValue}
-      />
-    ),
-    time: <TimeTab trades={filteredTrades} dims={dims} />,
-    compare: <CompareTab dims={dims} trades={filteredTrades} plannedRisk={plannedRisk} />,
-    report: (
-      <ReportTab
-        metrics={metrics}
-        trades={filteredTrades}
-        dims={dims}
-        plannedRisk={plannedRisk}
-        variables={variables}
-        window={dateWindow}
-      />
-    ),
-  };
+  const activeTabContent = useMemo(() => {
+    switch (activeTab) {
+      case "calendar":
+        return <CalendarTab metrics={metrics} bounds={dateWindow.bounds} />;
+      case "breakdown":
+        return (
+          <BreakdownTab
+            dims={dims}
+            trades={filteredTrades}
+            onDrillDown={toggleDimensionValue}
+          />
+        );
+      case "time":
+        return <TimeTab trades={filteredTrades} dims={dims} />;
+      case "compare":
+        return <CompareTab dims={dims} trades={filteredTrades} plannedRisk={plannedRisk} />;
+      case "report":
+        return (
+          <ReportTab
+            metrics={metrics}
+            trades={filteredTrades}
+            dims={dims}
+            plannedRisk={plannedRisk}
+            variables={variables}
+            window={dateWindow}
+          />
+        );
+      default:
+        return (
+          <OverviewTab
+            metrics={metrics}
+            deltas={deltas}
+            comparing={comparing}
+            tradeSeries={tradeSeries}
+            daySeries={daySeries}
+            rSeries={rSeries}
+            rolling={rolling}
+            hasR={hasR}
+            trades={filteredTrades}
+          />
+        );
+    }
+  }, [
+    activeTab,
+    comparing,
+    dateWindow,
+    deltas,
+    dims,
+    filteredTrades,
+    hasR,
+    metrics,
+    plannedRisk,
+    rSeries,
+    rolling,
+    toggleDimensionValue,
+    tradeSeries,
+    daySeries,
+    variables,
+  ]);
 
   return (
     <>
@@ -361,7 +386,7 @@ export default function AnalyticsPage() {
               >
                 <p className="mt-3 text-2xs text-content-subtle">
                   {pluralize(trades.length, "logged trade")} loaded ·{" "}
-                  {formatCurrency(computeMetrics(trades).netPnl, { decimals: 0, signed: true })} all-time net
+                  {formatCurrency(allTradesMetrics.netPnl, { decimals: 0, signed: true })} all-time net
                 </p>
               </EmptyState>
             </CardBody>
@@ -389,7 +414,7 @@ export default function AnalyticsPage() {
 
             <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
 
-            <section>{tabContent[activeTab] ?? tabContent.overview}</section>
+            <section>{activeTabContent}</section>
           </>
         )}
       </PageBody>

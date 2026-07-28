@@ -378,10 +378,11 @@ export default function JournalCalendar({
       <CardFooter className="flex-col items-stretch gap-2 bg-surface-sunken/40 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-2xs text-content-subtle">
-            <span className="flex h-[13px] min-w-[13px] items-center justify-center rounded-[4px] bg-brand/85 px-[3px] font-mono text-[9px] font-bold leading-none text-white">
-              2
-            </span>
-            entries
+            <span
+              className="h-[13px] w-[13px] rounded-[4px] bg-brand/85"
+              aria-hidden
+            />
+            journal entry
           </span>
           <span className="flex items-center gap-1.5" aria-hidden>
             <span className="text-2xs text-content-subtle">Loss</span>

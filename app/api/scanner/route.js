@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicApiError } from "../../lib/api/publicError";
 import { parseScannerFilters, runScanner } from "../../lib/scanner/dexscreener";
 
 export const runtime = "nodejs";
@@ -29,7 +30,7 @@ export async function GET(request) {
       {
         hits: [],
         meta: {
-          error: error?.message ?? "Scanner failed",
+          error: publicApiError("Scanner failed").error,
           fetchedAt: new Date().toISOString(),
         },
       },

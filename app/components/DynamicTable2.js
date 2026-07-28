@@ -16,7 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  ListOrdered,
 } from "lucide-react";
+import { EmptyState } from "./ui";
 
 /** Position / system blobs stored in trades.data — never table columns. */
 function isInternalTradeKey(key) {
@@ -463,6 +465,25 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       )}
 
       {/* Table */}
+      {sortedRows.length === 0 ? (
+        <EmptyState
+          icon={ListOrdered}
+          title="No trades yet"
+          description="Add your first trade to start building your journal."
+          compact
+          action={
+            <button
+              type="button"
+              onClick={addTrade}
+              className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
+            >
+              <Plus size={14} aria-hidden />
+              Add Trade
+            </button>
+          }
+        />
+      ) : (
+      <>
       <div className="w-full overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -513,6 +534,16 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
               return (
                 <tr
                   key={row.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open trade ${row["Trade number"] ?? row.id}`}
+                  onClick={() => router.push(`/trade/${row.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/trade/${row.id}`);
+                    }
+                  }}
                   className={`border-b border-line/60 transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-brand/5"
@@ -539,15 +570,14 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     />
                   </td>
 
-                  <td
-                    className="px-4 py-3"
-                    onClick={() => router.push(`/trade/${row.id}`)}
-                  >
+                  <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 text-xs font-semibold ${meta.className}`}
+                      title={statusKey}
                     >
                       <StatusIcon size={13} aria-hidden />
-                      {statusKey}
+                      <span className="hidden sm:inline">{statusKey}</span>
+                      <span className="sr-only sm:hidden">{statusKey}</span>
                     </span>
                   </td>
 
@@ -561,7 +591,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       return (
                         <td
                           key={col}
-                          onClick={() => router.push(`/trade/${row.id}`)}
                           className={`px-4 py-3 font-semibold font-mono tnum text-sm ${
                             !hasVal
                               ? "text-content-subtle"
@@ -585,7 +614,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       return (
                         <td
                           key={col}
-                          onClick={() => router.push(`/trade/${row.id}`)}
                           className={`px-4 py-3 font-mono tnum text-sm ${
                             !hasVal
                               ? "text-content-subtle"
@@ -614,7 +642,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       return (
                         <td
                           key={col}
-                          onClick={() => router.push(`/trade/${row.id}`)}
                           className="px-4 py-3"
                         >
                           {grade ? (
@@ -632,7 +659,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                       return (
                         <td
                           key={col}
-                          onClick={() => router.push(`/trade/${row.id}`)}
                           className="px-4 py-3"
                         >
                           {Array.isArray(val) && val.length > 0 ? (
@@ -654,7 +680,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     return (
                       <td
                         key={col}
-                        onClick={() => router.push(`/trade/${row.id}`)}
                         className="px-4 py-3 text-content-muted whitespace-nowrap"
                       >
                         {formatCellValue(val) != null ? (
@@ -675,7 +700,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       {/* Pagination */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-line">
         <span className="text-xs text-content-subtle">
-          {sortedRows.length > 0 ? startIndex + 1 : 0}–
+          {startIndex + 1}–
           {Math.min(endIndex, sortedRows.length)} of {sortedRows.length} trades
         </span>
         <div className="flex items-center gap-1">
@@ -700,6 +725,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
           </button>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

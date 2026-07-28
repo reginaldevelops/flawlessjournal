@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchJson } from "../../../lib/chain/http";
+import { isValidSolanaAddress } from "../../../lib/chain/validate";
+import { publicApiError } from "../../../lib/api/publicError";
 import { DEFAULT_RPC, JUPITER_SWAP_API } from "../../../lib/swap/constants";
 import { estimateSwapFees } from "../../../lib/swap/fees";
 
@@ -23,6 +25,10 @@ export async function POST(request) {
         { error: "quoteResponse and userPublicKey are required" },
         { status: 400 }
       );
+    }
+
+    if (!isValidSolanaAddress(userPublicKey)) {
+      return NextResponse.json({ error: "Invalid userPublicKey" }, { status: 400 });
     }
 
     const feeMode = settings.feeMode === "jito" ? "jito" : "priority";
@@ -62,9 +68,6 @@ export async function POST(request) {
     );
   } catch (error) {
     console.error("[swap/build]", error);
-    return NextResponse.json(
-      { error: error?.message ?? "Build failed" },
-      { status: 502 }
-    );
+    return NextResponse.json(publicApiError("Build failed"), { status: 502 });
   }
 }

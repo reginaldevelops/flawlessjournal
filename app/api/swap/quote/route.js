@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchJson } from "../../../lib/chain/http";
+import { isValidSolanaAddress } from "../../../lib/chain/validate";
+import { publicApiError } from "../../../lib/api/publicError";
 import { JUPITER_SWAP_API } from "../../../lib/swap/constants";
 
 export const runtime = "nodejs";
@@ -27,6 +29,25 @@ export async function GET(request) {
       );
     }
 
+    if (!isValidSolanaAddress(inputMint) || !isValidSolanaAddress(outputMint)) {
+      return NextResponse.json({ error: "Invalid mint address" }, { status: 400 });
+    }
+
+    if (!/^\d+$/.test(String(amount)) || BigInt(amount) <= 0n) {
+      return NextResponse.json(
+        { error: "amount must be a positive integer (raw token units)" },
+        { status: 400 }
+      );
+    }
+
+    const slippage = Number(slippageBps);
+    if (!Number.isFinite(slippage) || slippage < 1 || slippage > 5000) {
+      return NextResponse.json(
+        { error: "slippageBps must be between 1 and 5000" },
+        { status: 400 }
+      );
+    }
+
     const url = new URL(`${JUPITER_SWAP_API}/quote`);
     url.searchParams.set("inputMint", inputMint);
     url.searchParams.set("outputMint", outputMint);
@@ -44,9 +65,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("[swap/quote]", error);
-    return NextResponse.json(
-      { error: error?.message ?? "Quote failed" },
-      { status: 502 }
-    );
+    return NextResponse.json(publicApiError("Quote failed"), { status: 502 });
   }
 }

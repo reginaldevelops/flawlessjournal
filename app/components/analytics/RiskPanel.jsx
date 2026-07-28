@@ -1,7 +1,8 @@
 "use client";
 
-import { Card, CardBody, CardHeader, StatRow } from "../ui";
-import { ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { Card, CardBody, CardHeader, StatRow, cn } from "../ui";
+import { ChevronDown, ShieldAlert } from "lucide-react";
 import {
   formatCurrency,
   formatDuration,
@@ -16,6 +17,7 @@ import {
  * one-sentence explanation — knowing what SQN means is half the value.
  */
 export function RiskPanel({ metrics }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   if (!metrics) return null;
 
   const streakLabel =
@@ -145,27 +147,47 @@ export function RiskPanel({ metrics }) {
     <Card className="print:break-inside-avoid">
       <CardHeader
         title="Risk & consistency"
-        subtitle="Hover any metric for a plain-English explanation"
+        subtitle={
+          mobileOpen
+            ? "Hover any metric for a plain-English explanation"
+            : `${groups.reduce((n, g) => n + g.rows.length, 0)} metrics · tap to expand on mobile`
+        }
         icon={ShieldAlert}
+        actions={
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-expanded={mobileOpen}
+            aria-label={mobileOpen ? "Collapse risk panel" : "Expand risk panel"}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-content-subtle transition hover:bg-surface-hover hover:text-content lg:hidden"
+          >
+            <ChevronDown size={15} className={cn("transition-transform", mobileOpen && "rotate-180")} aria-hidden />
+          </button>
+        }
       />
-      <CardBody className="grid gap-x-8 gap-y-1 p-4 sm:grid-cols-2 xl:grid-cols-3">
-        {groups.map((group) => (
-          <div key={group.title}>
-            <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-              {group.title}
-            </p>
-            {group.rows.map((row) => (
-              <StatRow
-                key={row.label}
-                label={row.label}
-                value={row.value}
-                tone={row.tone}
-                hint={row.hint}
-              />
-            ))}
-          </div>
-        ))}
-      </CardBody>
+      {!mobileOpen && (
+        <p className="border-b border-line px-4 py-2 text-xs text-content-muted lg:hidden">
+          {groups.reduce((n, g) => n + g.rows.length, 0)} risk metrics · tap to expand
+        </p>
+      )}
+      <CardBody className={cn("grid gap-x-8 gap-y-1 p-4 sm:grid-cols-2 xl:grid-cols-3", !mobileOpen && "hidden lg:grid")}>
+          {groups.map((group) => (
+            <div key={group.title}>
+              <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                {group.title}
+              </p>
+              {group.rows.map((row) => (
+                <StatRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  tone={row.tone}
+                  hint={row.hint}
+                />
+              ))}
+            </div>
+          ))}
+        </CardBody>
     </Card>
   );
 }

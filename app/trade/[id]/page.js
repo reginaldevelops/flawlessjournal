@@ -16,6 +16,7 @@ import {
   markFieldCheckedEmpty,
 } from "../../lib/tradeCompletion";
 import { Parser } from "expr-eval";
+import { LoadingState, ErrorState, Button } from "../../components/ui";
 import {
   XCircle,
   Clock,
@@ -566,10 +567,15 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
 export default function TradeViewPage() {
   const { id } = useParams();
   const [trade, setTrade] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [variables, setVariables] = useState([]);
   const [showManageModal, setShowManageModal] = useState(false);
 
   const loadTrade = async () => {
+    setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase
       .from("trades")
       .select("*")
@@ -591,9 +597,19 @@ export default function TradeViewPage() {
         newState["Trade number"] = number;
       }
       setTrade(newState);
+      setNotFound(false);
+      setLoadError(null);
+    } else if (error?.code === "PGRST116" || (!error && !data)) {
+      setTrade(null);
+      setNotFound(true);
+      setLoadError(null);
     } else {
+      setTrade(null);
+      setNotFound(false);
+      setLoadError(error?.message || "Could not load this trade. Check your connection and try again.");
       console.error("❌ Load trade error:", error);
     }
+    setLoading(false);
   };
 
   // Load trade
@@ -638,17 +654,46 @@ export default function TradeViewPage() {
     window.location.href = "/trades";
   };
 
-  if (!trade) return (
-    <div className="flex items-center justify-center h-[calc(100vh-var(--topbar-h))]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="relative flex h-9 w-9 items-center justify-center">
-          <span className="absolute inset-0 rounded-full border-2 border-line" />
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-brand" />
-        </div>
-        <p className="text-xs text-content-subtle">Loading trade…</p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-var(--topbar-h))]">
+        <LoadingState label="Loading trade…" />
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 h-[calc(100vh-var(--topbar-h))] px-4">
+        <ErrorState
+          title="Could not load trade"
+          description={loadError}
+        />
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={() => loadTrade()}>
+            Retry
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { window.location.href = "/trades"; }}>
+            Back to trades
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !trade) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 h-[calc(100vh-var(--topbar-h))] px-4">
+        <ErrorState
+          title="Trade not found"
+          description="This trade may have been deleted or the link is invalid."
+        />
+        <Button variant="secondary" size="sm" onClick={() => { window.location.href = "/trades"; }}>
+          Back to trades
+        </Button>
+      </div>
+    );
+  }
 
   const status = getTradeStatus(trade, variables);
   const pnlValue = getPnlValue(trade, variables);

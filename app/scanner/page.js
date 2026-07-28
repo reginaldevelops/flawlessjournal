@@ -90,7 +90,7 @@ function Money({ value, compact = true }) {
 export default function ScannerPage() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [draft, setDraft] = useState(DEFAULT_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [hits, setHits] = useState([]);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -260,10 +260,15 @@ export default function ScannerPage() {
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-content">Scan filters</h2>
-                <p className="mt-0.5 text-xs text-content-muted">
-                  DexScreener has no native 4h bucket — use <span className="text-content">6h</span> as
-                  the closest window. Spike mode flags pairs whose volume jumped since the last poll.
-                </p>
+                <details className="mt-0.5 text-xs text-content-muted group">
+                  <summary className="cursor-pointer select-none text-content-subtle hover:text-content">
+                    Window & spike notes
+                  </summary>
+                  <p className="mt-1.5 leading-relaxed">
+                    DexScreener has no native 4h bucket — use <span className="text-content">6h</span> as
+                    the closest window. Spike mode flags pairs whose volume jumped since the last poll.
+                  </p>
+                </details>
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" onClick={resetFilters}>

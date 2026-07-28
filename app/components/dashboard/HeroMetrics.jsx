@@ -181,7 +181,7 @@ export default function HeroMetrics({
 
         <p className="mt-1 text-2xs text-content-subtle">
           {metrics.totalTrades
-            ? `${pluralize(metrics.totalTrades, "closed trade")} across ${pluralize(metrics.tradingDays, "session")}`
+            ? pluralize(metrics.tradingDays, "trading day")
             : "No closed trades in this period"}
           {previousMetrics
             ? ` · ${formatCurrency(previousMetrics.netPnl, { decimals: 0, signed: true })} previously`
