@@ -1,417 +1,214 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { BookOpen, CalendarCheck, Flame, RefreshCw } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import styled from "styled-components";
+import {
+  Badge,
+  Button,
+  ErrorState,
+  PageBody,
+  PageHeader,
+  Toolbar,
+  ToolbarDivider,
+  useToast,
+} from "../components/ui";
+import { parseDate, pluralize } from "../lib/format";
+import JournalCalendar from "../components/journal/JournalCalendar";
+import StreakCard from "../components/journal/StreakCard";
+import DayJournal from "../components/journal/DayJournal";
+import { useJournal, useMounted } from "../components/journal/hooks";
+import { journalCoverage, keyOf, monthOf } from "../components/journal/helpers";
+import { serializeEntry } from "../components/journal/frontmatter";
+
+/** A saved entry inherits the selected day but keeps the current wall-clock time. */
+function timestampForDay(dayKey) {
+  const now = new Date();
+  const base = parseDate(dayKey) ?? now;
+  base.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  return base.toISOString();
+}
 
 export default function JournalPage() {
-  const [entriesByDay, setEntriesByDay] = useState({});
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toLocaleDateString("en-CA") // intern altijd YYYY-MM-DD
+  const mounted = useMounted();
+  const toast = useToast();
+  const { entries, setEntries, dayStats, entryCountByDay, loading, error, reload } = useJournal();
+
+  const todayKey = useMemo(() => keyOf(new Date()), []);
+  const [selectedKey, setSelectedKey] = useState(todayKey);
+  const [view, setView] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const selectDay = (key) => {
+    setSelectedKey(key);
+    const d = parseDate(key);
+    if (d && (d.getFullYear() !== view.year || d.getMonth() !== view.month)) {
+      setView({ year: d.getFullYear(), month: d.getMonth() });
+    }
+  };
+
+  const lastSessionKey = useMemo(() => {
+    const keys = Object.keys(dayStats).sort();
+    return keys.length ? keys[keys.length - 1] : null;
+  }, [dayStats]);
+
+  const coverage = useMemo(
+    () => journalCoverage(dayStats, entryCountByDay, 20),
+    [dayStats, entryCountByDay]
   );
 
-  const [entries, setEntries] = useState([]);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [expandedIds, setExpandedIds] = useState([]);
-
-  const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-11
-
-  const toggleExpand = (id) => {
-    setExpandedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  const monthEntries = useMemo(() => {
+    const prefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
+    return Object.entries(entryCountByDay).reduce(
+      (sum, [key, count]) => (monthOf(key) === prefix ? sum + count : sum),
+      0
     );
-  };
+  }, [entryCountByDay, view]);
 
-  // ✏️ start edit
-  const handleStartEdit = (entry) => {
-    setEditingId(entry.id);
-    setEditText(entry.content);
-  };
+  const createEntry = async (dayKey, draft) => {
+    const content = serializeEntry({ mood: draft.mood, tags: draft.tags, body: draft.text });
+    if (!content.trim()) return false;
 
-  // 💾 save edit
-  const handleSaveEdit = async (id) => {
-    if (!editText.trim()) return;
-    const { error } = await supabase
+    const created_at = timestampForDay(dayKey);
+    const tempId = `temp-${Date.now()}`;
+    const snapshot = entries;
+
+    setEntries((prev) => [{ id: tempId, created_at, content }, ...prev]);
+
+    const { data, error: insertError } = await supabase
       .from("journal_entries")
-      .update({ content: editText })
-      .eq("id", id);
-    if (!error) {
-      setEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, content: editText } : e))
-      );
-      setEditingId(null);
-      setEditText("");
-    }
-  };
-
-  // ❌ cancel edit
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setEditText("");
-  };
-
-  // 🗑️ delete
-  const handleDelete = async (id) => {
-    const { error } = await supabase
-      .from("journal_entries")
-      .delete()
-      .eq("id", id);
-    if (!error) {
-      setEntries((prev) => prev.filter((e) => e.id !== id));
-      setEntriesByDay((prev) => {
-        const updated = { ...prev };
-        if (updated[selectedDate]) {
-          updated[selectedDate] = updated[selectedDate] - 1;
-          if (updated[selectedDate] <= 0) delete updated[selectedDate];
-        }
-        return updated;
-      });
-    }
-  };
-
-  // ➕ nieuwe entry vandaag
-  const [newEntryToday, setNewEntryToday] = useState("");
-
-  const addEntryToday = async () => {
-    if (!newEntryToday.trim()) return;
-
-    const timestamp = new Date(); // lokaal nu
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .insert([{ content: newEntryToday, created_at: timestamp }])
+      .insert([{ content, created_at }])
       .select();
 
-    if (!error && data?.length) {
-      const inserted = data[0];
-      if (
-        new Date(inserted.created_at).toLocaleDateString("en-CA") ===
-        new Date().toLocaleDateString("en-CA")
-      ) {
-        setEntries((prev) => [...prev, inserted]);
-      }
-      setEntriesByDay((prev) => {
-        const updated = { ...prev };
-        const d = new Date(inserted.created_at).toLocaleDateString("en-CA");
-        updated[d] = (updated[d] || 0) + 1;
-        return updated;
-      });
-      setNewEntryToday("");
-    }
-  };
-
-  // ➕ nieuwe entry voor geselecteerde dag
-  const [newEntrySelected, setNewEntrySelected] = useState("");
-
-  const addEntryForSelected = async () => {
-    if (!newEntrySelected.trim()) return;
-
-    const now = new Date();
-    const timestamp = new Date(
-      `${selectedDate}T${now.toTimeString().slice(0, 5)}`
-    );
-
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .insert([{ content: newEntrySelected, created_at: timestamp }])
-      .select();
-
-    if (!error && data?.length) {
-      const inserted = data[0];
-      if (
-        new Date(inserted.created_at).toLocaleDateString("en-CA") ===
-        selectedDate
-      ) {
-        setEntries((prev) => [...prev, inserted]);
-      }
-      setEntriesByDay((prev) => {
-        const updated = { ...prev };
-        const d = new Date(inserted.created_at).toLocaleDateString("en-CA");
-        updated[d] = (updated[d] || 0) + 1;
-        return updated;
-      });
-      setNewEntrySelected("");
-    }
-  };
-
-  // 📥 entries voor geselecteerde dag
-  const loadEntries = async (date) => {
-    const start = new Date(`${date}T00:00:00`);
-    const end = new Date(`${date}T23:59:59`);
-
-    const { data } = await supabase
-      .from("journal_entries")
-      .select("id, created_at, content")
-      .gte("created_at", start.toISOString())
-      .lt("created_at", end.toISOString())
-      .order("created_at", { ascending: true });
-
-    setEntries(data || []);
-  };
-
-  // 📥 kalender data
-  const loadCalendar = async (y = viewYear, m = viewMonth) => {
-    const firstDay = new Date(y, m, 1);
-    const lastDay = new Date(y, m + 1, 0);
-
-    const { data } = await supabase
-      .from("journal_entries")
-      .select("id, created_at")
-      .gte("created_at", firstDay.toISOString())
-      .lte("created_at", lastDay.toISOString());
-
-    const grouped = (data || []).reduce((acc, e) => {
-      const d = new Date(e.created_at).toLocaleDateString("en-CA");
-      acc[d] = (acc[d] || 0) + 1;
-      return acc;
-    }, {});
-    setEntriesByDay(grouped);
-  };
-
-  // 🔄 init load
-  useEffect(() => {
-    loadCalendar();
-  }, [viewYear, viewMonth]);
-
-  useEffect(() => {
-    loadEntries(selectedDate);
-  }, [selectedDate]);
-
-  // 🔀 maand wisselen
-  const changeMonth = (offset) => {
-    let newMonth = viewMonth + offset;
-    let newYear = viewYear;
-
-    if (newMonth < 0) {
-      newMonth = 11;
-      newYear--;
-    } else if (newMonth > 11) {
-      newMonth = 0;
-      newYear++;
+    if (insertError || !data?.length) {
+      setEntries(snapshot);
+      toast.error("Could not save entry", { description: insertError?.message });
+      return false;
     }
 
-    setViewMonth(newMonth);
-    setViewYear(newYear);
+    setEntries((prev) => prev.map((e) => (e.id === tempId ? data[0] : e)));
+    toast.success("Entry saved");
+    return true;
   };
 
-  // kalender helpers
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
-  const blanks = Array(firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1).fill("");
+  const updateEntry = async (id, content) => {
+    const snapshot = entries;
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, content } : e)));
+
+    const { error: updateError } = await supabase
+      .from("journal_entries")
+      .update({ content })
+      .eq("id", id);
+
+    if (updateError) {
+      setEntries(snapshot);
+      toast.error("Could not update entry", { description: updateError.message });
+      return false;
+    }
+    toast.success("Entry updated");
+    return true;
+  };
+
+  const deleteEntry = async (id) => {
+    const snapshot = entries;
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+
+    const { error: deleteError } = await supabase.from("journal_entries").delete().eq("id", id);
+
+    if (deleteError) {
+      setEntries(snapshot);
+      toast.error("Could not delete entry", { description: deleteError.message });
+      return;
+    }
+    toast.success("Entry deleted");
+  };
 
   return (
-    <div className="flex flex-col flex-1 bg-transparent">
-      <section className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[300px,1fr] md:gap-8 md:p-8 text-gray-900 overflow-auto max-w-7xl mx-auto w-full rounded-lg min-h-0">
-        {/* 📅 Kalender */}
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200"
-            >
-              ←
-            </button>
-            <h3 className="font-semibold text-gray-800 px-3">
-              {new Date(viewYear, viewMonth).toLocaleString("nl-NL", {
-                month: "long",
-              })}{" "}
-              {viewYear}
-            </h3>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => changeMonth(1)}
-                className="bg-slate-100 border border-gray-300 px-2 py-1 rounded text-sm hover:bg-slate-200"
-              >
-                →
-              </button>
-              <button
-                onClick={() => {
-                  const today = new Date();
-                  setViewMonth(today.getMonth());
-                  setViewYear(today.getFullYear());
-                  setSelectedDate(today.toLocaleDateString("en-CA"));
-                }}
-                className="bg-white border border-gray-300 text-black font-medium px-3 py-1 rounded text-sm hover:bg-blue-50 hover:border-blue-600"
-              >
-                Vandaag
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((d) => (
-              <div
-                key={d}
-                className="text-center text-xs font-semibold text-gray-500"
-              >
-                {d}
-              </div>
-            ))}
-
-            {blanks.map((_, i) => (
-              <div
-                key={`b-${i}`}
-                className="min-h-[55px] border border-gray-200 rounded"
-              ></div>
-            ))}
-
-            {Array.from({ length: daysInMonth }, (_, i) => {
-              const day = i + 1;
-              const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(
-                2,
-                "0"
-              )}-${String(day).padStart(2, "0")}`;
-              const count = entriesByDay[dateStr] || 0;
-              const isSelected = selectedDate === dateStr;
-
-              return (
-                <div
-                  key={day}
-                  onClick={() => {
-                    setSelectedDate(dateStr);
-                    loadEntries(dateStr);
-                  }}
-                  className={`min-h-[55px] border border-gray-200 rounded p-1 cursor-pointer flex flex-col justify-between transition
-            ${
-              isSelected
-                ? "bg-black text-white"
-                : count > 0
-                  ? "bg-white hover:bg-[#ece9e6]"
-                  : "bg-white hover:bg-[#ece9e6]"
-            }`}
-                >
-                  <span className="text-sm font-medium">{day}</span>
-                  {count > 0 && (
-                    <span
-                      className={`text-[0.7rem] self-end rounded-full px-1
-                ${isSelected ? "text-white" : "bg-black text-white"}`}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 📝 Entries */}
-        <div>
-          <h2 className="mb-4 text-xl font-bold text-gray-900">
-            {new Date(selectedDate).toLocaleDateString("nl-NL", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </h2>
-
-          {/* Nieuwe entry */}
-          <div className="flex flex-col gap-2 mb-4">
-            <textarea
-              placeholder={`Add a note for ${selectedDate}`}
-              value={newEntrySelected}
-              onChange={(e) => setNewEntrySelected(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                (e.preventDefault(), addEntryForSelected())
-              }
-              rows={3}
-              className="w-full p-3 border h-[250px] border-gray-300 rounded-lg text-sm bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+    <>
+      <PageHeader
+        eyebrow="Journal"
+        title="Daily journal"
+        description="Plan before the open, review after the close, and build the written record that turns experience into an edge."
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RefreshCw}
+              iconOnly
+              aria-label="Refresh"
+              onClick={reload}
+              className={loading ? "pointer-events-none opacity-60" : undefined}
             />
-            <button
-              onClick={addEntryForSelected}
-              className="self-end bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-900"
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={CalendarCheck}
+              onClick={() => selectDay(todayKey)}
+              disabled={selectedKey === todayKey}
             >
-              Add
-            </button>
+              Today
+            </Button>
+          </>
+        }
+        toolbar={
+          <Toolbar>
+            <Badge tone="outline" size="sm" icon={BookOpen}>
+              {pluralize(entries.length, "entry", "entries")} all time
+            </Badge>
+            <ToolbarDivider />
+            <Badge tone={coverage.streak > 0 ? "brand" : "neutral"} size="sm" icon={Flame}>
+              {pluralize(coverage.streak, "session")} streak
+            </Badge>
+            <div className="ml-auto font-mono text-2xs tnum text-content-subtle">
+              {pluralize(monthEntries, "entry", "entries")} this month
+            </div>
+          </Toolbar>
+        }
+      />
+
+      <PageBody className="space-y-4">
+        {error && (
+          <ErrorState title="Could not load your journal" description={error} onRetry={reload} />
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(300px,340px)_1fr] xl:grid-cols-[360px_1fr]">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+            <JournalCalendar
+              year={view.year}
+              month={view.month}
+              onMonthChange={(year, month) => setView({ year, month })}
+              selected={selectedKey}
+              onSelect={selectDay}
+              today={todayKey}
+              entryCountByDay={entryCountByDay}
+              dayStats={dayStats}
+              lastSessionKey={lastSessionKey}
+              loading={loading && !mounted}
+            />
+            <StreakCard
+              coverage={coverage}
+              monthEntries={monthEntries}
+              totalEntries={entries.length}
+              loading={loading && entries.length === 0}
+            />
           </div>
 
-          {entries.length === 0 ? (
-            <p>No entries.</p>
-          ) : (
-            <ul className="space-y-2">
-              {entries.map((e) => {
-                const isEditing = editingId === e.id;
-                const isExpanded = expandedIds.includes(e.id);
-
-                const displayContent =
-                  !isExpanded && (e.content || "").length > 1000
-                    ? (e.content || "").slice(0, 1000) + "..."
-                    : e.content || "";
-
-                return (
-                  <li
-                    key={e.id}
-                    className="bg-slate-50 border border-gray-200 rounded p-3 flex flex-col gap-2 h-auto"
-                  >
-                    <div className="text-xs font-semibold text-gray-800">
-                      {new Date(e.created_at).toLocaleTimeString("nl-NL", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {isEditing ? (
-                        <>
-                          <textarea
-                            value={editText}
-                            onChange={(ev) => setEditText(ev.target.value)}
-                            rows={4}
-                            className="w-full p-2 border border-gray-300 rounded text-sm"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSaveEdit(e.id)}
-                              className="text-black text-sm hover:underline"
-                            >
-                              💾 Save
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="text-red-600 text-sm hover:underline"
-                            >
-                              ✖ Cancel
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-sm">{displayContent}</span>
-                          <div className="flex gap-4 flex-wrap text-sm">
-                            {(e.content || "").length > 1000 && (
-                              <button
-                                onClick={() => toggleExpand(e.id)}
-                                className="text-gray-400 hover:underline"
-                              >
-                                {isExpanded ? "Show less" : "Show more"}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleStartEdit(e)}
-                              className="text-gray-400 hover:underline"
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(e.id)}
-                              className="text-red-600 hover:underline"
-                            >
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <DayJournal
+            dayKey={selectedKey}
+            todayKey={todayKey}
+            entries={entries}
+            dayStat={dayStats[selectedKey] ?? null}
+            onSelectDay={selectDay}
+            onCreate={createEntry}
+            onUpdate={updateEntry}
+            onDelete={deleteEntry}
+            loading={loading}
+          />
         </div>
-      </section>
-    </div>
+      </PageBody>
+    </>
   );
 }

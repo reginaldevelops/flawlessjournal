@@ -1,499 +1,307 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "../lib/supabaseClient";
-import AccountValue from "../components/AccountValue";
-import NotesArea from "../components/NotesArea";
+import { BarChart3, RefreshCw, Rocket } from "lucide-react";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ReferenceLine,
-  Tooltip,
-} from "recharts";
-import BalanceCard from "../components/BalanceCard";
-import GoalsArea from "../components/GoalsArea";
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  EmptyState,
+  ErrorState,
+  PageBody,
+  PageHeader,
+  Toolbar,
+  ToolbarDivider,
+} from "../components/ui";
+import {
+  BalancesCard,
+  EconomicCalendarCard,
+  EquityCurveCard,
+  GoalsCard,
+  HeroMetrics,
+  InsightsCard,
+  NotesCard,
+  PeriodSelector,
+  PnlCalendarCard,
+  RecentTradesCard,
+  TodayPanel,
+} from "../components/dashboard";
+import {
+  PERIOD_LABELS,
+  PERIOD_OPTIONS,
+  useBalances,
+  useEconomicCalendar,
+  useGoals,
+  useNow,
+  usePeriodMetrics,
+  usePersistentJson,
+  usePersistentState,
+  useScratchpad,
+  useTrades,
+} from "../components/dashboard/hooks";
+import {
+  cleanSessionStreak,
+  eventTimestamp,
+  matchSessionKey,
+  MARKET_SESSIONS,
+} from "../components/dashboard/helpers";
+import { closedTrades, computeMetrics, generateInsights, groupByDay, groupStats } from "../lib/trades";
+import { dateKey, formatDate, pluralize } from "../lib/format";
 
-// 📊 Percent van dag
-const getPercentOfDay = (date) => {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  return ((hours * 60 + minutes) / (24 * 60)) * 100;
-};
+const PERIOD_KEY = "flawless.dashboard.period";
+const LIMIT_KEY = "flawless.dashboard.dailyLossLimit";
+const VALID_PERIODS = new Set(PERIOD_OPTIONS.map((p) => p.value));
 
-// 📅 Weeknummer in lokale tijd
-function getWeekNumber(d = new Date()) {
-  d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dayNum = d.getDay() || 7;
-  d.setDate(d.getDate() + 4 - dayNum);
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
+/** A sane default daily loss limit: three average risk units. */
+function suggestLossLimit(closed) {
+  const risks = closed
+    .slice(-40)
+    .map((t) => t.risk)
+    .filter((r) => r != null && r > 0);
+  if (!risks.length) return 500;
+  const sorted = [...risks].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const typical = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return Math.max(50, Math.round((typical * 3) / 50) * 50);
 }
 
-function getMonthLabel(d = new Date()) {
-  return d.toLocaleString("nl-NL", { month: "long" });
-}
+export default function DashboardPage() {
+  const { trades, loading, error, reload } = useTrades();
+  const [storedPeriod, setPeriod] = usePersistentState(PERIOD_KEY, "month");
+  const period = VALID_PERIODS.has(storedPeriod) ? storedPeriod : "month";
 
-// ⏱ Formatter voor NL-tijd
-function formatLocal(dateString) {
-  if (!dateString) return "";
+  const now = useNow(60_000);
+  const todayKey = useMemo(() => (now ? dateKey(now) : null), [now]);
 
-  const d = new Date(dateString);
+  const { range, prevRange, trades: rangeTrades, metrics, previousMetrics, deltas } = usePeriodMetrics(
+    trades,
+    period,
+    todayKey
+  );
 
-  // Safari fix: als d invalid is, probeer timestamp of parse handmatig
-  if (isNaN(d.getTime())) {
-    try {
-      // Als cachedAt al een timestamp was
-      return new Date(Number(dateString)).toLocaleString("nl-NL", {
-        timeZone: "Europe/Amsterdam",
-        hour: "2-digit",
-        minute: "2-digit",
-        day: "2-digit",
-        month: "2-digit",
-      });
-    } catch {
-      return "";
+  const allClosed = useMemo(() => closedTrades(trades), [trades]);
+  const allTimeMetrics = useMemo(() => computeMetrics(trades), [trades]);
+  const allDays = useMemo(() => groupByDay(allClosed), [allClosed]);
+
+  const insights = useMemo(() => generateInsights(rangeTrades, metrics), [rangeTrades, metrics]);
+
+  const recentTrades = useMemo(
+    () =>
+      [...trades].sort(
+        (a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0) || (b.tradeNumber ?? 0) - (a.tradeNumber ?? 0)
+      ),
+    [trades]
+  );
+
+  const sessionEdge = useMemo(() => {
+    const groups = groupStats(allClosed, "session", { minCount: 1 });
+    const out = {};
+    for (const session of MARKET_SESSIONS) {
+      const matched = groups.filter((group) => matchSessionKey(group.key, session));
+      if (!matched.length) continue;
+      const count = matched.reduce((sum, g) => sum + g.count, 0);
+      const wins = matched.reduce((sum, g) => sum + g.wins, 0);
+      out[session.name] = {
+        count,
+        pnl: matched.reduce((sum, g) => sum + g.pnl, 0),
+        winRate: count ? (wins / count) * 100 : 0,
+      };
     }
-  }
+    return out;
+  }, [allClosed]);
 
-  return d.toLocaleString("nl-NL", {
-    timeZone: "Europe/Amsterdam",
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
+  const today = todayKey ? allDays[todayKey] : null;
 
-function utcHourToLocal(utcHour) {
-  const d = new Date();
-  d.setUTCHours(utcHour, 0, 0, 0);
-  return d.getHours();
-}
+  const [week, setWeek] = useState("this");
+  const calendar = useEconomicCalendar(week);
+  const balances = useBalances();
+  const goals = useGoals();
+  const scratchpad = useScratchpad();
 
-// 🌍 Sessies
-const sessionsUTC = [
-  { name: "Tokyo", start: 0, end: 5, color: "#aec6cf" },
-  { name: "London", start: 6, end: 10, color: "#991b1b" },
-  { name: "New York", start: 12, end: 19, color: "#ffb347" },
-  { name: "PH", start: 19, end: 20, color: "#ffb347" },
-];
+  const upcomingEvents = useMemo(() => {
+    if (!now) return [];
+    const from = now.getTime();
+    return calendar.events
+      .filter((event) => {
+        if (!["high", "medium"].includes(event.impact)) return false;
+        const ts = eventTimestamp(event);
+        return ts != null && ts >= from;
+      })
+      .sort((a, b) => eventTimestamp(a) - eventTimestamp(b))
+      .slice(0, 3);
+  }, [calendar.events, now]);
 
-const sessions = sessionsUTC.map((s) => ({
-  ...s,
-  start: utcHourToLocal(s.start),
-  end: utcHourToLocal(s.end),
-}));
+  const limitSuggestion = useMemo(() => suggestLossLimit(allClosed), [allClosed]);
+  const [storedLimit, setStoredLimit] = usePersistentJson(LIMIT_KEY, null);
+  const lossLimit = storedLimit ?? limitSuggestion;
 
-export default function Dashboard() {
-  const [now, setNow] = useState(new Date());
-  const [news, setNews] = useState([]);
-  const [weeklyPNL, setWeeklyPNL] = useState(null);
-  const [trades, setTrades] = useState(0);
-  const [winRate, setWinRate] = useState(0);
-  const [avgWinner, setAvgWinner] = useState(0);
-  const [avgLoser, setAvgLoser] = useState(0);
-  const [p2g, setP2G] = useState(0);
+  const goalContext = useMemo(
+    () => ({
+      netPnl: allTimeMetrics.netPnl,
+      equity: balances.totalUSD,
+      maxDrawdownPct: allTimeMetrics.maxDrawdownPct,
+      cleanStreakDays: cleanSessionStreak(allDays),
+    }),
+    [allTimeMetrics, balances.totalUSD, allDays]
+  );
 
-  const [winners, setWinners] = useState([]);
-  const [losers, setLosers] = useState([]);
+  const periodLabel = PERIOD_LABELS[period] ?? "This month";
+  const rangeLabel = range.start
+    ? `${formatDate(range.start, "short")} – ${formatDate(range.end, "short")}`
+    : allClosed.length
+      ? `${formatDate(allClosed[0].dateKey, "short")} – ${formatDate(allClosed[allClosed.length - 1].dateKey, "short")}`
+      : "No trades yet";
+  const comparisonLabel = prevRange.start
+    ? `${formatDate(prevRange.start, "short")} – ${formatDate(prevRange.end, "short")}`
+    : "the preceding period";
 
-  const [phantom, setPhantom] = useState(0);
-  const [hyper, setHyper] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60 * 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    async function fetchBalances() {
-      try {
-        const resPhantom = await fetch("/api/portfolio", { cache: "no-store" });
-        const dataPhantom = await resPhantom.json();
-        setPhantom(dataPhantom?.totalUSD ?? 0);
-        setLastUpdated(
-          dataPhantom?.cachedAt
-            ? new Date(dataPhantom.cachedAt).toISOString()
-            : new Date().toISOString()
-        );
-
-        const resHyper = await fetch("/api/hyperliquid", { cache: "no-store" });
-        const dataHyper = await resHyper.json();
-        setHyper(dataHyper?.totalUSD ?? 0);
-      } catch (err) {
-        console.error("Balance fetch error:", err);
-      }
-    }
-    fetchBalances();
-  }, []);
-
-  useEffect(() => {
-    async function loadMonthlyStats() {
-      const now = new Date();
-
-      // 🔹 eerste dag van de maand
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      firstDay.setHours(0, 0, 0, 0);
-
-      // 🔹 laatste dag van de maand
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      lastDay.setHours(23, 59, 59, 999);
-
-      function toLocalISO(date) {
-        const tzDate = new Date(
-          date.getTime() - date.getTimezoneOffset() * 60000
-        );
-        return tzDate.toISOString().split("T")[0];
-      }
-
-      const startISO = toLocalISO(firstDay);
-      const endISO = toLocalISO(lastDay);
-
-      console.log("Deze maand loopt van:", startISO, "t/m", endISO);
-
-      const { data, error } = await supabase
-        .from("trades")
-        .select("data")
-        .gte("data->>Datum", startISO)
-        .lte("data->>Datum", endISO);
-
-      if (error) {
-        console.error("Monthly stats error:", error);
-        return;
-      }
-
-      let totalPNL = 0;
-      let totalTrades = 0;
-      let wins = 0;
-      let winsArr = [];
-      let lossArr = [];
-      let chartRows = [];
-
-      data.forEach((row) => {
-        const pnlRaw = row.data?.PnL;
-        if (pnlRaw && pnlRaw !== "-") {
-          const pnl = parseFloat(pnlRaw);
-          if (!isNaN(pnl)) {
-            totalTrades++;
-            totalPNL += pnl;
-            if (pnl > 0) {
-              wins++;
-              winsArr.push(pnl);
-            } else if (pnl < 0) {
-              lossArr.push(pnl);
-            }
-          }
-        }
-      });
-
-      const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-      const avgWinner =
-        winsArr.length > 0
-          ? winsArr.reduce((a, b) => a + b, 0) / winsArr.length
-          : 0;
-      const avgLoser =
-        lossArr.length > 0
-          ? Math.abs(lossArr.reduce((a, b) => a + b, 0)) / lossArr.length
-          : 0;
-      const p2gRatio = avgLoser > 0 ? avgWinner / avgLoser : 0;
-
-      setWeeklyPNL(totalPNL); // eventueel hernoemen naar setMonthlyPNL
-      setTrades(totalTrades);
-      setWinRate(winRate);
-      setAvgWinner(avgWinner);
-      setAvgLoser(avgLoser);
-      setP2G(p2gRatio);
-      setWinners(winsArr);
-      setLosers(lossArr);
-    }
-
-    loadMonthlyStats();
-  }, []);
-
-  const currentPercent = getPercentOfDay(now);
-  const totalBalance = phantom + hyper;
-  const targetUSD = 10000;
-  const progress = totalBalance > 0 ? (weeklyPNL / targetUSD) * 100 : 0;
-
-  useEffect(() => {
-    async function loadNews() {
-      try {
-        const res = await fetch("/api/ff-calendar");
-        const data = await res.json();
-        setNews(data);
-      } catch (err) {
-        console.error("Error fetching news:", err);
-      }
-    }
-    loadNews();
-  }, []);
+  const noTrades = !loading && !error && trades.length === 0;
 
   return (
-    <div className="px-2 py-6 sm:py-8 font-inter text-gray-700 w-full max-w-7xl mx-auto rounded-lg">
-      <h2 className="text-lg sm:text-xl font-semibold text-slate-800 mb-3">
-        Maand {getMonthLabel(now)}
-      </h2>
-
-      {/* 📅 Calendar */}
-      <div className="flex justify-between gap-2 sm:gap-3 mb-4">
-        {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day, idx) => {
-          const today = new Date().getDay();
-          const isToday = idx === (today + 6) % 7;
-
-          const monday = new Date(now);
-          monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-          const thisDay = new Date(monday);
-          thisDay.setDate(monday.getDate() + idx);
-          const isoDate = thisDay.toISOString().split("T")[0];
-
-          const dayEvents = news.filter((ev) => ev.date === isoDate);
-
-          return (
-            <div
-              key={idx}
-              className={`flex-1 text-center p-2 sm:p-3 rounded-lg flex flex-col items-center min-h-[90px] max-h-[140px] overflow-y-auto no-scrollbar shadow-sm ${
-                isToday
-                  ? "border border-blue-300 bg-blue-100 text-blue-900 shadow-md"
-                  : "border border-gray-200 bg-white text-gray-500"
-              }`}
-            >
-              <div className="mb-1 text-xs sm:text-sm">
-                {day} {thisDay.getDate()}
-              </div>
-              {dayEvents.length > 0 && (
-                <div className="text-[0.7rem] sm:text-xs text-left w-full">
-                  {dayEvents.map((ev, i) => (
-                    <div
-                      key={i}
-                      className="mt-1 px-2 py-1 rounded bg-slate-100 flex flex-col items-start"
-                    >
-                      <span className="font-semibold text-green-600 text-[0.65rem] sm:text-[0.7rem]">
-                        {ev.datetime
-                          ? new Date(ev.datetime).toLocaleTimeString("nl-NL", {
-                              timeZone: "Europe/Amsterdam",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : ev.time}
-                      </span>
-                      <span className="text-[0.6rem] sm:text-[0.75rem] leading-tight text-gray-800 break-all">
-                        {ev.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+    <>
+      <PageHeader
+        eyebrow="Overview"
+        title="Dashboard"
+        description="Performance, market context, and the highest-value thing to fix next."
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RefreshCw}
+              iconOnly
+              aria-label="Refresh"
+              onClick={reload}
+              className={loading ? "pointer-events-none opacity-60" : undefined}
+            />
+            <Button as={Link} href="/analytics" variant="secondary" size="sm" icon={BarChart3}>
+              Analytics
+            </Button>
+          </>
+        }
+        toolbar={
+          <Toolbar>
+            <PeriodSelector value={period} onChange={setPeriod} />
+            <ToolbarDivider />
+            <span className="font-mono text-2xs tnum text-content-subtle">{rangeLabel}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <Badge tone="outline" size="sm">
+                {pluralize(metrics.totalTrades, "closed trade")}
+              </Badge>
+              {metrics.openTrades > 0 && (
+                <Badge tone="info" size="sm" dot>
+                  {pluralize(metrics.openTrades, "open")}
+                </Badge>
               )}
             </div>
-          );
-        })}
-      </div>
+          </Toolbar>
+        }
+      />
 
-      {/* 📊 Sessions bar */}
-      <div className="mb-4">
-        <h2 className="mb-2 text-base sm:text-lg text-slate-800">Sessies</h2>
-        <div className="w-full mx-auto relative h-12 bg-white rounded-lg">
-          {sessions.map((s, idx) => {
-            let start = s.start * 60;
-            let end = s.end * 60;
-            if (end <= start) end += 24 * 60;
-
-            const left = (start / (24 * 60)) * 100;
-            const width = ((end - start) / (24 * 60)) * 100;
-
-            return (
-              <div
-                key={idx}
-                className="absolute top-2 h-[30px] sm:h-[34px] rounded-md flex items-center justify-center text-[0.65rem] sm:text-xs font-semibold text-gray-800"
-                style={{
-                  left: `${left}%`,
-                  width: `${width}%`,
-                  background: `${s.color}aa`,
-                }}
-              >
-                {s.name}
-              </div>
-            );
-          })}
-          <div
-            className="absolute top-0 bottom-0 w-[2px] bg-amber-500"
-            style={{ left: `${currentPercent}%` }}
+      <PageBody className="space-y-4">
+        {error && (
+          <ErrorState
+            title="Could not load your trades"
+            description={error}
+            onRetry={reload}
           />
-        </div>
-      </div>
+        )}
 
-      {/* 📈 Stats + Cards */}
-      <div className="grid gap-4">
-        {/* Weekly Stats + Balance */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Statistieken
-            </h3>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
-                <span>💰</span>
-                <span className="text-[0.65rem] sm:text-xs text-gray-500">
-                  PnL
-                </span>
-                <span className="font-semibold text-xs sm:text-sm">
-                  {weeklyPNL !== null ? weeklyPNL.toFixed(0) : "--"}
-                </span>
-              </div>
-              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
-                <span>📊</span>
-                <span className="text-[0.65rem] sm:text-xs text-gray-500">
-                  Trades
-                </span>
-                <span className="font-semibold text-xs sm:text-sm">
-                  {trades}
-                </span>
-              </div>
-              <div className="flex flex-col items-center p-1 bg-slate-50 rounded-lg border border-gray-200">
-                <span>✅</span>
-                <span className="text-[0.65rem] sm:text-xs text-gray-500">
-                  WR
-                </span>
-                <span className="font-semibold text-xs sm:text-sm">
-                  {winRate.toFixed(0)}%
-                </span>
-              </div>
-            </div>
-
-            {/* P2G bar */}
-            <div className="mt-4">
-              <h3 className="mb-1 text-slate-800 font-semibold text-sm sm:text-base">
-                P2G Ratio
-              </h3>
-              <div className="relative h-10 mt-2">
-                <div className="absolute top-1/2 left-0 right-0 h-[6px] rounded bg-gradient-to-r from-red-500 via-amber-500 to-green-500" />
-                {[0.0, 0.5, 1.0].map((mark, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-7 text-[0.65rem] sm:text-xs text-gray-700"
-                    style={{
-                      left: `${mark * 100}%`,
-                      transform: "translateX(-50%)",
-                    }}
-                  >
-                    {mark.toFixed(1)}
+        {noTrades ? (
+          <Card>
+            <CardBody>
+              <EmptyState
+                icon={Rocket}
+                title="Your dashboard is ready and waiting"
+                description="Log your first trade to unlock the equity curve, the daily P&L calendar, streaks, expectancy and automatic insights about what is working."
+                action={
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <Button as={Link} href="/trades" variant="primary" size="sm">
+                      Log your first trade
+                    </Button>
+                    <Button as={Link} href="/onboarding" variant="secondary" size="sm">
+                      Set up your journal
+                    </Button>
                   </div>
-                ))}
-                <div
-                  className="absolute top-1/2 w-[2px] h-5 bg-gray-900"
-                  style={{
-                    left: `${Math.min(Math.max((p2g / 1) * 100, 0), 100)}%`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Balans
-            </h3>
-            <BalanceCard
-              phantom={phantom}
-              hyper={hyper}
-              lastUpdated={formatLocal(lastUpdated ?? undefined)}
-            />
-          </div>
-        </div>
-
-        {/* Winners + Losers */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Winsten
-            </h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={winners.map((val, i) => ({ trade: i + 1, value: val }))}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#00ca7d" radius={[4, 4, 0, 0]} />
-                <ReferenceLine
-                  y={avgWinner}
-                  stroke="#000"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: `Avg: ${avgWinner.toFixed(0)}`,
-                    position: "top",
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Verliezen
-            </h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={losers.map((val, i) => ({
-                  trade: i + 1,
-                  value: Math.abs(val),
-                }))}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="trade" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#d4154b" radius={[4, 4, 0, 0]} />
-                <ReferenceLine
-                  y={avgLoser}
-                  stroke="#000"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: `Avg: ${avgLoser.toFixed(0)}`,
-                    position: "top",
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Goals + Notes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <h3 className="mb-2 text-slate-800 font-semibold text-sm sm:text-base">
-              Target (10.000$)
-            </h3>
-            <div className="relative w-full h-[26px] sm:h-[30px] bg-gray-200 rounded-xl mt-2">
-              <div
-                className="h-full rounded-xl bg-gradient-to-r from-blue-900 to-green-400 transition-all"
-                style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+                }
               />
-              <div
-                className="absolute top-[6px] sm:top-[7px] text-[0.65rem] sm:text-xs font-semibold text-gray-900"
-                style={{
-                  left: `${Math.min(Math.max(progress, 0), 100)}%`,
-                  transform: "translateX(-50%)",
-                }}
-              >
-                {progress.toFixed(0)}%
-              </div>
-            </div>
-            <GoalsArea />
-          </div>
+            </CardBody>
+          </Card>
+        ) : (
+          <>
+            <HeroMetrics
+              metrics={metrics}
+              previousMetrics={previousMetrics}
+              deltas={deltas}
+              periodLabel={periodLabel}
+              comparisonLabel={comparisonLabel}
+              loading={loading}
+            />
 
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow">
-            <NotesArea />
-          </div>
-        </div>
-      </div>
-    </div>
+            <section className="grid gap-4 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <EquityCurveCard metrics={metrics} loading={loading} periodLabel={periodLabel} />
+              </div>
+              <TodayPanel
+                now={now}
+                todayPnl={today?.pnl ?? 0}
+                todayCount={today?.count ?? 0}
+                sessionEdge={sessionEdge}
+                limit={lossLimit}
+                onChangeLimit={setStoredLimit}
+                limitSuggestion={limitSuggestion}
+                upcomingEvents={upcomingEvents}
+                eventsLoading={calendar.loading}
+              />
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <PnlCalendarCard days={allDays} loading={loading} />
+              </div>
+              <InsightsCard insights={insights} loading={loading} tradeCount={metrics.totalTrades} />
+            </section>
+          </>
+        )}
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <EconomicCalendarCard calendar={calendar} week={week} onWeekChange={setWeek} now={now} />
+          {noTrades ? (
+            <NotesCard
+              value={scratchpad.value}
+              onChange={scratchpad.change}
+              onBlur={scratchpad.flush}
+              status={scratchpad.status}
+              savedAt={scratchpad.savedAt}
+            />
+          ) : (
+            <RecentTradesCard trades={recentTrades} loading={loading} />
+          )}
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <BalancesCard balances={balances} />
+          <GoalsCard
+            goals={goals.goals}
+            loading={goals.loading}
+            context={goalContext}
+            onAdd={goals.add}
+            onUpdate={goals.update}
+            onDelete={goals.remove}
+          />
+          {!noTrades && (
+            <NotesCard
+              value={scratchpad.value}
+              onChange={scratchpad.change}
+              onBlur={scratchpad.flush}
+              status={scratchpad.status}
+              savedAt={scratchpad.savedAt}
+            />
+          )}
+        </section>
+      </PageBody>
+    </>
   );
 }

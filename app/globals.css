@@ -2,30 +2,724 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 🔹 Tailwind base overrides */
+/* ============================================================
+   Design tokens
+   All colors are space-separated RGB triplets so Tailwind can
+   apply opacity modifiers, e.g. bg-brand/10.
+   ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: 9 10 14;
+  --canvas-inset: 12 13 18;
+
+  --surface: 17 18 24;
+  --surface-raised: 23 25 32;
+  --surface-overlay: 27 29 37;
+  --surface-sunken: 13 14 19;
+  --surface-hover: 31 33 42;
+
+  --line: 33 36 46;
+  --line-strong: 48 52 65;
+  --line-subtle: 25 27 34;
+
+  --content: 236 238 244;
+  --content-muted: 151 158 173;
+  --content-subtle: 106 113 129;
+  --content-inverse: 9 10 14;
+
+  --brand: 124 108 255;
+  --brand-accent: 79 209 255;
+  --brand-hover: 143 130 255;
+  --brand-soft: 31 30 62;
+  --brand-fg: 255 255 255;
+
+  --profit: 34 211 138;
+  --profit-soft: 13 43 34;
+  --profit-fg: 76 226 163;
+
+  --loss: 255 92 110;
+  --loss-soft: 52 22 29;
+  --loss-fg: 255 133 147;
+
+  --warn: 250 183 62;
+  --warn-soft: 51 37 12;
+  --warn-fg: 252 200 106;
+
+  --info: 96 165 250;
+  --info-soft: 20 33 56;
+  --info-fg: 137 190 255;
+
+  --neutralish: 148 163 184;
+  --neutralish-soft: 30 33 42;
+
+  --focus: 124 108 255;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.32);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.55), 0 4px 10px -4px rgb(0 0 0 / 0.4);
+  --shadow-xl: 0 24px 60px -12px rgb(0 0 0 / 0.7), 0 8px 20px -8px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 16px 48px -12px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(var(--line));
+  --shadow-glow: 0 0 0 1px rgb(var(--brand) / 0.4), 0 8px 32px -8px rgb(var(--brand) / 0.35);
+
+  --sidebar-w: 15rem;
+  --sidebar-w-collapsed: 4.25rem;
+  --topbar-h: 3.5rem;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --canvas: 247 248 251;
+  --canvas-inset: 242 243 247;
+
+  --surface: 255 255 255;
+  --surface-raised: 255 255 255;
+  --surface-overlay: 255 255 255;
+  --surface-sunken: 246 247 250;
+  --surface-hover: 243 245 249;
+
+  --line: 228 231 238;
+  --line-strong: 206 211 221;
+  --line-subtle: 238 240 245;
+
+  --content: 15 18 26;
+  --content-muted: 90 98 115;
+  --content-subtle: 132 140 157;
+  --content-inverse: 255 255 255;
+
+  --brand: 94 76 250;
+  --brand-accent: 22 165 226;
+  --brand-hover: 78 58 240;
+  --brand-soft: 238 236 254;
+  --brand-fg: 255 255 255;
+
+  --profit: 6 160 103;
+  --profit-soft: 224 249 239;
+  --profit-fg: 4 122 79;
+
+  --loss: 224 49 71;
+  --loss-soft: 255 233 236;
+  --loss-fg: 185 28 47;
+
+  --warn: 202 138 4;
+  --warn-soft: 254 246 219;
+  --warn-fg: 146 100 4;
+
+  --info: 37 118 226;
+  --info-soft: 231 240 254;
+  --info-fg: 29 89 176;
+
+  --neutralish: 100 116 139;
+  --neutralish-soft: 241 243 247;
+
+  --focus: 94 76 250;
+
+  --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 12px 28px -8px rgb(15 23 42 / 0.12), 0 4px 10px -4px rgb(15 23 42 / 0.08);
+  --shadow-xl: 0 24px 56px -12px rgb(15 23 42 / 0.18), 0 8px 20px -8px rgb(15 23 42 / 0.1);
+  --shadow-pop: 0 16px 40px -12px rgb(15 23 42 / 0.18), 0 0 0 1px rgb(var(--line));
+  --shadow-glow: 0 0 0 1px rgb(var(--brand) / 0.3), 0 8px 28px -8px rgb(var(--brand) / 0.25);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
 @layer base {
-  body {
-    @apply text-zinc-900;
+  * {
+    border-color: rgb(var(--line));
   }
 
-  h1,
-  h2 {
-    @apply text-zinc-900;
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-content font-sans antialiased;
+    font-feature-settings:
+      "cv02" 1,
+      "cv03" 1,
+      "cv04" 1,
+      "ss01" 1;
+    text-rendering: optimizeLegibility;
   }
 
   h1 {
-    @apply text-3xl font-bold;
+    @apply text-2xl font-semibold tracking-tight text-content;
   }
 
   h2 {
-    @apply text-2xl font-semibold;
+    @apply text-xl font-semibold tracking-tight text-content;
+  }
+
+  h3 {
+    @apply text-base font-semibold text-content;
+  }
+
+  ::selection {
+    background-color: rgb(var(--brand) / 0.28);
+    color: rgb(var(--content));
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 2px;
+  }
+
+  /* Inputs inherit the theme by default so pages stay consistent. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Any un-styled checkbox/radio still picks up the brand color. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: rgb(var(--brand));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--content-subtle));
+  }
+
+  /* Native pickers should not blast white in dark mode. */
+  [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+  [data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+  [data-theme="dark"] input[type="month"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.6);
+    opacity: 0.55;
+    cursor: pointer;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  /* Autofill */
+  input:-webkit-autofill,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--content));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface-raised)) inset;
+    caret-color: rgb(var(--content));
+  }
+
+  /* Global scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--content-subtle));
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-.ProseMirror:focus {
+/* ============================================================
+   Reusable component classes
+   ============================================================ */
+
+@layer components {
+  .stat-number {
+    @apply font-mono tnum font-semibold tracking-tight;
+  }
+
+  .hairline-top {
+    box-shadow: inset 0 1px 0 0 rgb(var(--line-subtle));
+  }
+
+  /* Frosted panel used by modals, popovers, command palette */
+  .glass {
+    background-color: rgb(var(--surface-overlay) / 0.88);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .grid-noise {
+    background-image:
+      linear-gradient(to right, rgb(var(--line) / 0.55) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--line) / 0.55) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* Main column offset for the fixed sidebar */
+  .app-main {
+    padding-left: 0;
+    transition: padding-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @media (min-width: 768px) {
+    .app-main {
+      padding-left: var(--shell-pad, var(--sidebar-w));
+    }
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-hover;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-sheen animate-shimmer;
+  }
+}
+
+/* ============================================================
+   Recharts theming
+   ============================================================ */
+
+.recharts-surface:focus,
+.recharts-wrapper:focus {
+  outline: none;
+}
+
+.recharts-cartesian-axis-tick text {
+  fill: rgb(var(--content-subtle));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recharts-cartesian-grid line {
+  stroke: rgb(var(--line));
+}
+
+.recharts-cartesian-axis line,
+.recharts-cartesian-axis-line {
+  stroke: rgb(var(--line));
+}
+
+.recharts-legend-item-text {
+  color: rgb(var(--content-muted)) !important;
+  font-size: 12px;
+}
+
+.recharts-tooltip-cursor {
+  fill: rgb(var(--content) / 0.05);
+  stroke: rgb(var(--line-strong));
+}
+
+.recharts-active-dot circle {
+  stroke: rgb(var(--surface));
+}
+
+.recharts-reference-line line {
+  stroke: rgb(var(--line-strong));
+}
+
+.recharts-brush rect.recharts-brush-slide {
+  fill: rgb(var(--brand) / 0.14);
+  stroke: rgb(var(--brand) / 0.4);
+}
+
+.recharts-brush rect:first-of-type {
+  fill: rgb(var(--surface-sunken));
+  stroke: rgb(var(--line));
+}
+
+.recharts-brush-traveller rect {
+  fill: rgb(var(--brand));
+  stroke: none;
+  rx: 2;
+}
+
+.recharts-brush text {
+  fill: rgb(var(--content-subtle));
+}
+
+/* ============================================================
+   react-select theming (used by trade detail / filters)
+   ============================================================ */
+
+.rs__control {
+  background-color: rgb(var(--surface-raised)) !important;
+  border-color: rgb(var(--line)) !important;
+  border-radius: 0.5rem !important;
+  min-height: 2.25rem !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease;
+}
+
+.rs__control:hover {
+  border-color: rgb(var(--line-strong)) !important;
+}
+
+.rs__control--is-focused {
+  border-color: rgb(var(--brand)) !important;
+  box-shadow: 0 0 0 3px rgb(var(--brand) / 0.18) !important;
+}
+
+.rs__single-value,
+.rs__input-container,
+.rs__input {
+  color: rgb(var(--content)) !important;
+}
+
+.rs__placeholder {
+  color: rgb(var(--content-subtle)) !important;
+}
+
+.rs__menu {
+  background-color: rgb(var(--surface-overlay)) !important;
+  border: 1px solid rgb(var(--line)) !important;
+  border-radius: 0.625rem !important;
+  box-shadow: var(--shadow-lg) !important;
+  overflow: hidden;
+  z-index: 80 !important;
+}
+
+.rs__option {
+  background-color: transparent !important;
+  color: rgb(var(--content)) !important;
+  font-size: 0.8125rem !important;
+  cursor: pointer !important;
+}
+
+.rs__option--is-focused {
+  background-color: rgb(var(--surface-hover)) !important;
+}
+
+.rs__option--is-selected {
+  background-color: rgb(var(--brand) / 0.16) !important;
+  color: rgb(var(--content)) !important;
+  font-weight: 500;
+}
+
+.rs__multi-value {
+  background-color: rgb(var(--brand) / 0.14) !important;
+  border-radius: 0.375rem !important;
+}
+
+.rs__multi-value__label {
+  color: rgb(var(--content)) !important;
+  font-size: 0.75rem !important;
+}
+
+.rs__multi-value__remove:hover {
+  background-color: rgb(var(--loss) / 0.2) !important;
+  color: rgb(var(--loss)) !important;
+}
+
+.rs__indicator-separator {
+  background-color: rgb(var(--line)) !important;
+}
+
+.rs__indicator {
+  color: rgb(var(--content-subtle)) !important;
+}
+
+.rs__indicator:hover {
+  color: rgb(var(--content-muted)) !important;
+}
+
+.rs__group-heading {
+  color: rgb(var(--content-subtle)) !important;
+  font-size: 0.6875rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ============================================================
+   TipTap / ProseMirror editor
+   ============================================================ */
+
+.ProseMirror {
   outline: none !important;
+  min-height: 100%;
+  color: rgb(var(--content));
+  caret-color: rgb(var(--brand));
 }
 
 .ProseMirror *::selection {
-  background-color: #dbeafe; /* Tailwind's blue-100 */
+  background-color: rgb(var(--brand) / 0.26);
+}
+
+.ProseMirror .selection,
+.ProseMirror-selectednode {
+  background-color: rgb(var(--brand) / 0.16);
+  border-radius: 0.25rem;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before,
+.ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgb(var(--content-subtle));
+}
+
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.28rem;
+  user-select: none;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div > p {
+  margin: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: rgb(var(--content-subtle));
+  text-decoration: line-through;
+}
+
+.ProseMirror input[type="checkbox"] {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid rgb(var(--line-strong));
+  border-radius: 0.25rem;
+  background: rgb(var(--surface-raised));
+  cursor: pointer;
+  position: relative;
+  flex: none;
+  transition: all 0.15s ease;
+}
+
+.ProseMirror input[type="checkbox"]:checked {
+  background: rgb(var(--brand));
+  border-color: rgb(var(--brand));
+}
+
+.ProseMirror input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  background-size: contain;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  overflow: hidden;
+  table-layout: fixed;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+  border: 1px solid rgb(var(--line));
+  padding: 0.4rem 0.6rem;
+  vertical-align: top;
+  position: relative;
+}
+
+.ProseMirror table th {
+  background: rgb(var(--surface-sunken));
+  font-weight: 600;
+  text-align: left;
+}
+
+.ProseMirror table .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--brand) / 0.12);
+  pointer-events: none;
+}
+
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: rgb(var(--brand));
+  pointer-events: none;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid rgb(var(--line));
+  margin: 1.75rem 0;
+}
+
+.ProseMirror pre {
+  background: rgb(var(--surface-sunken));
+  border: 1px solid rgb(var(--line));
+  border-radius: 0.625rem;
+  padding: 0.85rem 1rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.ProseMirror code {
+  background: rgb(var(--brand) / 0.12);
+  color: rgb(var(--content));
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.32rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85em;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid rgb(var(--brand));
+  padding-left: 1rem;
+  margin-left: 0;
+  color: rgb(var(--content-muted));
+  font-style: normal;
+}
+
+.ProseMirror mark {
+  background: rgb(var(--warn) / 0.35);
+  color: inherit;
+  border-radius: 0.2rem;
+  padding: 0.05em 0.15em;
+}
+
+.ProseMirror img {
+  border-radius: 0.625rem;
+  max-width: 100%;
+  height: auto;
+}
+
+.ProseMirror a {
+  color: rgb(var(--brand));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgb(var(--brand) / 0.4);
+}
+
+.ProseMirror a:hover {
+  text-decoration-color: rgb(var(--brand));
+}
+
+/* Syntax highlighting (lowlight / highlight.js class names) */
+.hljs-comment,
+.hljs-quote {
+  color: rgb(var(--content-subtle));
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-name {
+  color: rgb(var(--brand));
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-addition {
+  color: rgb(var(--profit));
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: rgb(var(--warn));
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-attribute {
+  color: rgb(var(--info));
+}
+
+.hljs-deletion {
+  color: rgb(var(--loss));
+}
+
+/* Typography plugin bridged to our tokens */
+.prose {
+  --tw-prose-body: rgb(var(--content));
+  --tw-prose-headings: rgb(var(--content));
+  --tw-prose-lead: rgb(var(--content-muted));
+  --tw-prose-links: rgb(var(--brand));
+  --tw-prose-bold: rgb(var(--content));
+  --tw-prose-counters: rgb(var(--content-subtle));
+  --tw-prose-bullets: rgb(var(--line-strong));
+  --tw-prose-hr: rgb(var(--line));
+  --tw-prose-quotes: rgb(var(--content-muted));
+  --tw-prose-quote-borders: rgb(var(--brand));
+  --tw-prose-captions: rgb(var(--content-subtle));
+  --tw-prose-code: rgb(var(--content));
+  --tw-prose-pre-code: rgb(var(--content));
+  --tw-prose-pre-bg: rgb(var(--surface-sunken));
+  --tw-prose-th-borders: rgb(var(--line-strong));
+  --tw-prose-td-borders: rgb(var(--line));
+}
+
+/* ============================================================
+   View transitions between routes
+   ============================================================ */
+
+@keyframes route-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.route-transition {
+  animation: route-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
