@@ -15,8 +15,20 @@ import {
   usePlotArea,
 } from "recharts";
 import { ExternalLink } from "lucide-react";
-import { cn, useChartColors } from "../ui";
+import { Segmented, cn, useChartColors } from "../ui";
 import { formatCurrency } from "../../lib/format";
+import {
+  CHART_TIMEFRAMES,
+  suggestIntervalFromTradeDuration,
+} from "../../lib/swap/chartIntervals";
+
+const INTERVAL_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  ...CHART_TIMEFRAMES.map((t) => ({
+    value: t.id,
+    label: t.id === "1d" ? "D" : t.label,
+  })),
+];
 
 /**
  * Single candlestick chart for a Solana position with all fills marked.
@@ -29,6 +41,7 @@ export default function PositionCandlesChart({
   className,
 }) {
   const colors = useChartColors();
+  const [interval, setIntervalMode] = useState("auto");
   const [state, setState] = useState({ status: "idle", data: null, error: null });
 
   const fillMarks = useMemo(() => {
@@ -56,6 +69,11 @@ export default function PositionCandlesChart({
     };
   }, [fillMarks]);
 
+  const suggested = useMemo(() => {
+    if (!range) return "5m";
+    return suggestIntervalFromTradeDuration((range.to - range.from) / 1000);
+  }, [range]);
+
   useEffect(() => {
     if (!range || (!mint && !pairUrl)) return;
     let cancelled = false;
@@ -71,6 +89,7 @@ export default function PositionCandlesChart({
         });
         if (mint) params.set("mint", mint);
         if (pairUrl) params.set("pairUrl", pairUrl);
+        if (interval && interval !== "auto") params.set("interval", interval);
 
         const res = await fetch(`/api/trade/chart?${params}`, {
           signal: ctrl.signal,
@@ -92,7 +111,7 @@ export default function PositionCandlesChart({
       cancelled = true;
       ctrl.abort();
     };
-  }, [mint, pairUrl, range?.from, range?.to]);
+  }, [mint, pairUrl, range?.from, range?.to, interval]);
 
   const chartData = useMemo(() => {
     const candles = state.data?.candles ?? [];
@@ -124,37 +143,53 @@ export default function PositionCandlesChart({
   }, [chartData, fillMarks]);
 
   const pairLink = state.data?.pairUrl || pairUrl || null;
+  const activeTf =
+    state.data?.timeframe || (interval === "auto" ? suggested : interval);
 
   return (
     <div className={cn("border-b border-line", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
             Price chart
-            {state.data?.timeframe ? ` · ${state.data.timeframe}` : ""}
+            {activeTf ? ` · ${activeTf}` : ""}
+            {state.data?.candles?.length
+              ? ` · ${state.data.candles.length} candles`
+              : ""}
             {fillMarks.length
               ? ` · ${fillMarks.length} fill${fillMarks.length === 1 ? "" : "s"}`
               : ""}
           </p>
-          <div className="mt-1 flex items-center gap-3 text-2xs text-content-subtle">
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-2xs text-content-subtle">
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-profit" aria-hidden /> Buy
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-loss" aria-hidden /> Sell
             </span>
+            {interval === "auto" && (
+              <span>Auto ≈ {suggested} from trade length</span>
+            )}
           </div>
         </div>
-        {pairLink && (
-          <a
-            href={pairLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover"
-          >
-            DexScreener <ExternalLink size={10} aria-hidden />
-          </a>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            size="sm"
+            value={interval}
+            onChange={setIntervalMode}
+            options={INTERVAL_OPTIONS}
+          />
+          {pairLink && (
+            <a
+              href={pairLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover"
+            >
+              DexScreener <ExternalLink size={10} aria-hidden />
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="relative h-[22rem] w-full px-1 pb-2 sm:h-[28rem]">
