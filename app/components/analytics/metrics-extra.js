@@ -187,6 +187,19 @@ export function buildDimensions(variables = [], trades = [], { plannedRisk } = {
     if (hasData) dims.push({ ...d, filterable: false });
   }
 
+  // Tags live on normalized trades (array) — filterable in analytics.
+  const hasTags = trades.some((t) => Array.isArray(t.tags) && t.tags.length > 0);
+  if (hasTags) {
+    dims.unshift({
+      id: "__tags",
+      label: "Tags",
+      field: "__tags",
+      filterable: true,
+      multi: true,
+      accessor: (t) => (Array.isArray(t.tags) && t.tags.length ? t.tags : null),
+    });
+  }
+
   return dims;
 }
 
@@ -197,6 +210,14 @@ export function dimensionValues(trades = [], dim) {
   for (const t of trades) {
     const v = dim.accessor(t);
     if (v === null || v === undefined || v === "") continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item === null || item === undefined || item === "") continue;
+        const key = String(item);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      continue;
+    }
     counts.set(v, (counts.get(v) ?? 0) + 1);
   }
   const list = [...counts.entries()].map(([value, count]) => ({ value, count }));
@@ -269,6 +290,11 @@ export function applyFilters(trades = [], filters = {}, { plannedRisk } = {}) {
       if (!t.dateKey || t.dateKey > end) return false;
     }
     for (const [key, values] of customEntries) {
+      if (key === "__tags" || key === "Tags" || key === "tags") {
+        const tags = Array.isArray(t.tags) ? t.tags.map(String) : [];
+        if (!values.some((tag) => tags.includes(String(tag)))) return false;
+        continue;
+      }
       const v = fieldValue(t, key);
       if (v === null || !values.includes(v)) return false;
     }

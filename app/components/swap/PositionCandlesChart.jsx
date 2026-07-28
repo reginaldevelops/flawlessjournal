@@ -2,357 +2,111 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  CartesianGrid,
   ComposedChart,
-  Customized,
-  Line,
-  ReferenceDot,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Scatter,
+  Customized,
   usePlotArea,
 } from "recharts";
-import { ExternalLink } from "lucide-react";
-import { Segmented, cn, useChartColors } from "../ui";
-import { formatCurrency } from "../../lib/format";
+import { Segmented, Spin, Typography, theme } from "antd";
 import {
-  CHART_TIMEFRAMES,
+  CHART_INTERVAL_OPTIONS,
   suggestIntervalFromTradeDuration,
-} from "../../lib/swap/chartIntervals";
+} from "@/app/lib/swap/chartIntervals";
 
-const INTERVAL_OPTIONS = [
-  { value: "auto", label: "Auto" },
-  ...CHART_TIMEFRAMES.map((t) => ({
-    value: t.id,
-    label: t.id === "1d" ? "D" : t.label,
-  })),
-];
+const { Text } = Typography;
 
-/**
- * Single candlestick chart for a Solana position with all fills marked.
- */
-export default function PositionCandlesChart({
-  mint,
-  pairUrl,
-  fills = [],
-  symbol,
-  className,
-}) {
-  const colors = useChartColors();
-  const [interval, setIntervalMode] = useState("auto");
-  const [state, setState] = useState({ status: "idle", data: null, error: null });
-
-  const fillMarks = useMemo(() => {
-    return (fills || [])
-      .map((f) => {
-        const ms = toMs(f.ts);
-        if (ms == null) return null;
-        const price = Number(f.priceUsd);
-        return {
-          id: f.id,
-          side: f.side === "sell" ? "sell" : "buy",
-          t: ms,
-          price: Number.isFinite(price) && price > 0 ? price : null,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.t - b.t);
-  }, [fills]);
-
-  const range = useMemo(() => {
-    if (!fillMarks.length) return null;
-    return {
-      from: fillMarks[0].t,
-      to: fillMarks[fillMarks.length - 1].t,
-    };
-  }, [fillMarks]);
-
-  const suggested = useMemo(() => {
-    if (!range) return "5m";
-    return suggestIntervalFromTradeDuration((range.to - range.from) / 1000);
-  }, [range]);
-
-  useEffect(() => {
-    if (!range || (!mint && !pairUrl)) return;
-    let cancelled = false;
-    const ctrl = new AbortController();
-
-    (async () => {
-      setState({ status: "loading", data: null, error: null });
-      try {
-        const params = new URLSearchParams({
-          from: new Date(range.from).toISOString(),
-          to: new Date(range.to).toISOString(),
-          minCandles: "100",
-        });
-        if (mint) params.set("mint", mint);
-        if (pairUrl) params.set("pairUrl", pairUrl);
-        if (interval && interval !== "auto") params.set("interval", interval);
-
-        const res = await fetch(`/api/trade/chart?${params}`, {
-          signal: ctrl.signal,
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || `Chart failed (${res.status})`);
-        if (!cancelled) setState({ status: "ready", data: json, error: null });
-      } catch (err) {
-        if (cancelled || err?.name === "AbortError") return;
-        setState({
-          status: "error",
-          data: null,
-          error: err?.message || "Chart unavailable",
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-    };
-  }, [mint, pairUrl, range?.from, range?.to, interval]);
-
-  const chartData = useMemo(() => {
-    const candles = state.data?.candles ?? [];
-    return candles.map((c) => ({
-      t: c.t * 1000,
-      o: c.o,
-      h: c.h,
-      l: c.l,
-      c: c.c,
-      v: c.v,
-      up: c.c >= c.o,
-      // invisible series so Tooltip / axes have a numeric y
-      mid: (c.h + c.l) / 2,
-    }));
-  }, [state.data]);
-
-  const yDomain = useMemo(() => {
-    const prices = [];
-    for (const c of chartData) prices.push(c.l, c.h);
-    for (const f of fillMarks) {
-      if (f.price != null) prices.push(f.price);
-    }
-    if (!prices.length) return ["auto", "auto"];
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    if (!(max > min)) return [min * 0.98, max * 1.02 || 1];
-    const pad = (max - min) * 0.08;
-    return [min - pad, max + pad];
-  }, [chartData, fillMarks]);
-
-  const pairLink = state.data?.pairUrl || pairUrl || null;
-  const activeTf =
-    state.data?.timeframe || (interval === "auto" ? suggested : interval);
-
-  return (
-    <div className={cn("border-b border-line", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-        <div className="min-w-0">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-            Price chart
-            {activeTf ? ` · ${activeTf}` : ""}
-            {state.data?.candles?.length
-              ? ` · ${state.data.candles.length} candles`
-              : ""}
-            {fillMarks.length
-              ? ` · ${fillMarks.length} fill${fillMarks.length === 1 ? "" : "s"}`
-              : ""}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-2xs text-content-subtle">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-sm bg-profit" aria-hidden /> Buy
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-sm bg-loss" aria-hidden /> Sell
-            </span>
-            {interval === "auto" && (
-              <span>Auto ≈ {suggested} from trade length</span>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented
-            size="sm"
-            value={interval}
-            onChange={setIntervalMode}
-            options={INTERVAL_OPTIONS}
-          />
-          {pairLink && (
-            <a
-              href={pairLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover"
-            >
-              DexScreener <ExternalLink size={10} aria-hidden />
-            </a>
-          )}
-        </div>
-      </div>
-
-      <div className="relative h-[22rem] w-full px-1 pb-2 sm:h-[28rem]">
-        {state.status === "loading" || state.status === "idle" ? (
-          <div className="absolute inset-3 animate-pulse rounded-lg bg-surface-raised" />
-        ) : state.status === "error" ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-2xs text-content-subtle">
-            {state.error}
-          </div>
-        ) : chartData.length < 2 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-2xs text-content-subtle">
-            Not enough candle data for this position window
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={chartData}
-              margin={{ top: 14, right: 10, left: 0, bottom: 4 }}
-            >
-              <CartesianGrid
-                stroke={colors.line}
-                strokeDasharray="3 3"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="t"
-                type="number"
-                domain={["dataMin", "dataMax"]}
-                tickFormatter={formatTickTime}
-                tick={{ fill: colors["content-subtle"], fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-                minTickGap={36}
-              />
-              <YAxis
-                domain={yDomain}
-                width={56}
-                tickFormatter={formatAxisPrice}
-                tick={{ fill: colors["content-subtle"], fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                cursor={{ stroke: colors["line-strong"], strokeDasharray: "3 3" }}
-                content={<CandleTooltip symbol={symbol} fillMarks={fillMarks} />}
-              />
-
-              {/* Invisible series so hover/tooltip still works over candles */}
-              <Line
-                type="monotone"
-                dataKey="mid"
-                stroke="transparent"
-                dot={false}
-                activeDot={false}
-                legendType="none"
-                isAnimationActive={false}
-              />
-
-              <Customized
-                component={() => (
-                  <CandlesLayer
-                    candles={chartData}
-                    yDomain={yDomain}
-                    upColor={colors.profit}
-                    downColor={colors.loss}
-                  />
-                )}
-              />
-
-              {fillMarks.map((f) => (
-                <ReferenceLine
-                  key={`line-${f.id}`}
-                  x={f.t}
-                  stroke={f.side === "sell" ? colors.loss : colors.profit}
-                  strokeDasharray="3 3"
-                  strokeOpacity={0.45}
-                />
-              ))}
-
-              {fillMarks
-                .filter((f) => f.price != null)
-                .map((f) => (
-                  <ReferenceDot
-                    key={`dot-${f.id}`}
-                    x={f.t}
-                    y={f.price}
-                    isFront
-                    shape={(dotProps) => (
-                      <FillMarkerShape
-                        {...dotProps}
-                        side={f.side}
-                        fill={f.side === "sell" ? colors.loss : colors.profit}
-                        stroke={colors.surface}
-                      />
-                    )}
-                  />
-                ))}
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-    </div>
-  );
+function fillUnix(fill) {
+  const raw = fill?.ts;
+  if (raw == null || raw === "") return 0;
+  if (typeof raw === "number") {
+    return raw > 1e12 ? Math.floor(raw / 1000) : Math.floor(raw);
+  }
+  const ms = Date.parse(String(raw));
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
 }
 
-/** Draw OHLC candles using the plot area (Recharts 3.1 has usePlotArea, not useXAxis). */
-function CandlesLayer({ candles, yDomain, upColor, downColor }) {
-  const plot = usePlotArea();
-  if (
-    !plot ||
-    !Array.isArray(candles) ||
-    candles.length < 2 ||
-    !Array.isArray(yDomain) ||
-    !Number.isFinite(yDomain[0]) ||
-    !Number.isFinite(yDomain[1]) ||
-    !(yDomain[1] > yDomain[0])
-  ) {
-    return null;
+function normalizeCandle(c) {
+  const ts = Number(c?.ts ?? c?.t ?? 0);
+  if (!ts) return null;
+  const open = Number(c?.open ?? c?.o);
+  const high = Number(c?.high ?? c?.h);
+  const low = Number(c?.low ?? c?.l);
+  const close = Number(c?.close ?? c?.c);
+  if (![open, high, low, close].every(Number.isFinite)) return null;
+  return { ts, open, high, low, close };
+}
+
+function mergeFillSnapshots(fills = []) {
+  const byTs = new Map();
+  let interval = null;
+  let pairAddress = null;
+  let pairUrl = null;
+  let source = null;
+  for (const fill of fills) {
+    const snap = fill?.ohlcSnapshot;
+    if (!snap?.candles?.length) continue;
+    if (!interval && snap.interval) interval = snap.interval;
+    if (!pairAddress && snap.pairAddress) pairAddress = snap.pairAddress;
+    if (!pairUrl && snap.pairUrl) pairUrl = snap.pairUrl;
+    if (!source && snap.source) source = snap.source;
+    for (const raw of snap.candles) {
+      const c = normalizeCandle(raw);
+      if (!c) continue;
+      if (!byTs.has(c.ts)) byTs.set(c.ts, c);
+    }
   }
+  if (!byTs.size) return null;
+  const candles = [...byTs.values()].sort((a, b) => a.ts - b.ts);
+  return {
+    source: source || "snapshot",
+    pairAddress,
+    pairUrl,
+    interval: interval || "auto",
+    candles,
+    fromSnapshot: true,
+  };
+}
 
-  const xMin = candles[0].t;
-  const xMax = candles[candles.length - 1].t;
-  const xSpan = xMax - xMin || 1;
-  const yMin = yDomain[0];
-  const yMax = yDomain[1];
-  const ySpan = yMax - yMin || 1;
-
-  const xScale = (t) => plot.x + ((t - xMin) / xSpan) * plot.width;
-  const yScale = (p) => plot.y + ((yMax - p) / ySpan) * plot.height;
-
-  const band =
-    candles.length > 1
-      ? Math.abs(xScale(candles[1].t) - xScale(candles[0].t))
-      : 8;
-  const bodyW = Math.max(2.5, Math.min(band * 0.65, 16));
+function CandlestickLayer({ data, colors }) {
+  const plotArea = usePlotArea();
+  if (!plotArea || !data?.length) return null;
+  const { x, y, width, height } = plotArea;
+  const n = data.length;
+  const slot = width / Math.max(n, 1);
+  const bodyW = Math.max(3, Math.min(14, slot * 0.55));
+  const xs = data.map((_, i) => x + slot * i + slot / 2);
+  const ys = data.map((d) => {
+    const vals = [d.high, d.low, d.open, d.close].filter((v) => Number.isFinite(v));
+    return { min: Math.min(...vals), max: Math.max(...vals) };
+  });
+  const ymin = Math.min(...ys.map((v) => v.min));
+  const ymax = Math.max(...ys.map((v) => v.max));
+  const span = ymax - ymin || 1;
+  const yOf = (v) => y + height - ((v - ymin) / span) * height;
 
   return (
-    <g className="recharts-candles">
-      {candles.map((row) => {
-        const { t, o, h, l, c, up } = row;
-        if (![t, o, h, l, c].every(Number.isFinite)) return null;
-        const cx = xScale(t);
-        const yHigh = yScale(h);
-        const yLow = yScale(l);
-        const yOpen = yScale(o);
-        const yClose = yScale(c);
-        if (![cx, yHigh, yLow, yOpen, yClose].every(Number.isFinite)) return null;
-        const color = up ? upColor : downColor;
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyH = Math.max(1.5, Math.abs(yClose - yOpen));
+    <g>
+      {data.map((d, i) => {
+        const up = d.close >= d.open;
+        const color = up ? colors.up : colors.down;
+        const xMid = xs[i];
+        const yHigh = yOf(d.high);
+        const yLow = yOf(d.low);
+        const yOpen = yOf(d.open);
+        const yClose = yOf(d.close);
+        const top = Math.min(yOpen, yClose);
+        const bodyH = Math.max(1, Math.abs(yClose - yOpen));
         return (
-          <g key={t}>
-            <line
-              x1={cx}
-              x2={cx}
-              y1={yHigh}
-              y2={yLow}
-              stroke={color}
-              strokeWidth={1.2}
-            />
+          <g key={`${d.ts}-${i}`}>
+            <line x1={xMid} x2={xMid} y1={yHigh} y2={yLow} stroke={color} strokeWidth={1.25} />
             <rect
-              x={cx - bodyW / 2}
-              y={bodyTop}
+              x={xMid - bodyW / 2}
+              y={top}
               width={bodyW}
               height={bodyH}
               fill={color}
@@ -365,112 +119,303 @@ function CandlesLayer({ candles, yDomain, upColor, downColor }) {
   );
 }
 
-function FillMarkerShape({ cx, cy, side, fill, stroke }) {
-  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
-  const buy = side === "buy";
-  const size = 7;
-  const points = buy
-    ? `${cx},${cy - size} ${cx - size},${cy + size * 0.55} ${cx + size},${cy + size * 0.55}`
-    : `${cx},${cy + size} ${cx - size},${cy - size * 0.55} ${cx + size},${cy - size * 0.55}`;
-  return (
-    <polygon
-      points={points}
-      fill={fill}
-      stroke={stroke}
-      strokeWidth={1.25}
-    />
-  );
-}
-
-function CandleTooltip({ active, payload, label, symbol, fillMarks }) {
+function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
-
-  const nearby = (fillMarks || []).filter(
-    (f) => Math.abs(f.t - row.t) <= 15 * 60 * 1000
+  return (
+    <div
+      style={{
+        background: "rgba(15,15,18,0.92)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 8,
+        padding: "8px 10px",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ opacity: 0.7, marginBottom: 4 }}>{row.label}</div>
+      {row.open != null ? (
+        <>
+          <div>O {Number(row.open).toPrecision(6)}</div>
+          <div>H {Number(row.high).toPrecision(6)}</div>
+          <div>L {Number(row.low).toPrecision(6)}</div>
+          <div>C {Number(row.close).toPrecision(6)}</div>
+        </>
+      ) : null}
+      {row.side ? (
+        <div style={{ marginTop: 4 }}>
+          {String(row.side).toUpperCase()} @ {Number(row.priceUsd).toPrecision(6)}
+        </div>
+      ) : null}
+    </div>
   );
+}
+
+export default function PositionCandlesChart({ mint, fills = [], height = 320 }) {
+  const { token } = theme.useToken();
+  const [interval, setInterval] = useState("auto");
+  const [live, setLive] = useState({ loading: false, data: null, error: null });
+
+  const snapshot = useMemo(() => mergeFillSnapshots(fills), [fills]);
+
+  const fromTs = useMemo(() => {
+    const times = fills.map(fillUnix).filter(Boolean);
+    return times.length ? Math.min(...times) : null;
+  }, [fills]);
+  const toTs = useMemo(() => {
+    const times = fills.map(fillUnix).filter(Boolean);
+    return times.length ? Math.max(...times) : null;
+  }, [fills]);
+
+  const autoInterval = useMemo(() => {
+    if (!fromTs || !toTs) return "5m";
+    return suggestIntervalFromTradeDuration(Math.max(0, toTs - fromTs));
+  }, [fromTs, toTs]);
+
+  const effectiveInterval = interval === "auto" ? autoInterval : interval;
+
+  useEffect(() => {
+    if (!mint || !fromTs || !toTs) {
+      setLive({ loading: false, data: null, error: null });
+      return undefined;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setLive((prev) => ({ ...prev, loading: true, error: null }));
+      try {
+        const qs = new URLSearchParams({
+          mint: String(mint),
+          from: String(fromTs),
+          to: String(toTs),
+          minCandles: "100",
+          interval: String(effectiveInterval || "5m"),
+        });
+        const res = await fetch(`/api/trade/chart?${qs.toString()}`, { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setLive({
+            loading: false,
+            data: null,
+            error: json?.error || `HTTP ${res.status}`,
+          });
+          return;
+        }
+        const candles = (json.candles || []).map(normalizeCandle).filter(Boolean);
+        setLive({
+          loading: false,
+          data: { ...json, candles },
+          error: null,
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setLive({
+            loading: false,
+            data: null,
+            error: e?.message || "Chart failed",
+          });
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [mint, fromTs, toTs, effectiveInterval]);
+
+  const chartPayload = live.data?.candles?.length ? live.data : snapshot;
+  const usingSnapshot = Boolean(snapshot?.candles?.length) && !live.data?.candles?.length;
+
+  const candleRows = useMemo(() => {
+    const candles = chartPayload?.candles || [];
+    return candles.map((c) => ({
+      ...c,
+      mid: (c.open + c.close) / 2,
+      label: new Date(c.ts * 1000).toLocaleString(),
+    }));
+  }, [chartPayload]);
+
+  const markers = useMemo(() => {
+    if (!candleRows.length) return { buys: [], sells: [] };
+    const t0 = candleRows[0].ts;
+    const t1 = candleRows[candleRows.length - 1].ts;
+    const span = Math.max(1, t1 - t0);
+    const nearest = (ts) => {
+      let best = candleRows[0];
+      let bestDist = Math.abs(best.ts - ts);
+      for (const row of candleRows) {
+        const d = Math.abs(row.ts - ts);
+        if (d < bestDist) {
+          best = row;
+          bestDist = d;
+        }
+      }
+      return best;
+    };
+
+    const buys = [];
+    const sells = [];
+    for (const fill of fills) {
+      const ts = fillUnix(fill);
+      if (!ts) continue;
+      const price = Number(fill?.priceUsd);
+      if (!(price > 0)) continue;
+      const row = nearest(ts);
+      const point = {
+        ts: row.ts,
+        priceUsd: price,
+        mid: price,
+        side: fill.side,
+        label: new Date(ts * 1000).toLocaleString(),
+        xRatio: (row.ts - t0) / span,
+      };
+      if (fill.side === "buy") buys.push(point);
+      else if (fill.side === "sell") sells.push(point);
+    }
+    return { buys, sells };
+  }, [fills, candleRows]);
+
+  const colors = {
+    up: token.colorSuccess || "#3fbf7f",
+    down: token.colorError || "#ef5b5b",
+    buy: "#3b82f6",
+    sell: "#f59e0b",
+  };
+
+  if (!mint) {
+    return (
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        No mint for chart.
+      </Text>
+    );
+  }
 
   return (
-    <div className="min-w-[9.5rem] rounded-lg border border-line bg-surface-overlay px-2.5 py-1.5 shadow-lg">
-      <p className="mb-1 text-2xs text-content-subtle">
-        {row.t ? new Date(row.t).toLocaleString() : label ? new Date(label).toLocaleString() : ""}
-        {symbol ? ` · ${symbol}` : ""}
-      </p>
-      <div className="space-y-0.5 font-mono text-2xs tnum text-content-muted">
-        <OhclRow label="O" value={row.o} />
-        <OhclRow label="H" value={row.h} />
-        <OhclRow label="L" value={row.l} />
-        <OhclRow label="C" value={row.c} tone={row.up ? "profit" : "loss"} />
+    <div style={{ width: "100%", padding: "0 16px 12px" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minWidth: 0 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Entry on chart
+          </Text>
+          {chartPayload?.pairUrl ? (
+            <a href={chartPayload.pairUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+              DexScreener ↗
+            </a>
+          ) : null}
+          {usingSnapshot ? (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Snapshot
+            </Text>
+          ) : live.data?.interval ? (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {String(live.data.interval).toUpperCase()}
+              {interval === "auto" ? " · auto" : ""}
+            </Text>
+          ) : null}
+        </div>
+        <div style={{ maxWidth: "100%", overflowX: "auto" }}>
+          <Segmented
+            size="small"
+            value={interval}
+            onChange={setInterval}
+            options={CHART_INTERVAL_OPTIONS.map((o) => ({
+              ...o,
+              label: o.value === "auto" ? `Auto (${String(autoInterval).toUpperCase()})` : o.label,
+            }))}
+          />
+        </div>
       </div>
-      {nearby.length > 0 && (
-        <div className="mt-1.5 border-t border-line pt-1.5 space-y-0.5">
-          {nearby.map((f) => (
-            <p key={f.id} className="text-2xs text-content-muted">
-              <span className={f.side === "sell" ? "text-loss-fg" : "text-profit-fg"}>
-                {f.side.toUpperCase()}
-              </span>
-              {f.price != null && (
-                <span className="ml-1.5 font-mono tnum">
-                  {formatCurrency(f.price, {
-                    compact: f.price < 0.01,
-                    decimals: f.price < 0.01 ? 6 : 4,
-                  })}
-                </span>
-              )}
-            </p>
-          ))}
+
+      {live.loading && !candleRows.length ? (
+        <div style={{ display: "grid", placeItems: "center", height: Math.min(height, 260) }}>
+          <Spin />
+        </div>
+      ) : !candleRows.length ? (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {live.error || "No candle data for this window."}
+        </Text>
+      ) : (
+        <div style={{ width: "100%", height: Math.min(height, 420), minHeight: 200 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={candleRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis
+                dataKey="ts"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={(v) =>
+                  new Date(v * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                }
+                tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={28}
+              />
+              <YAxis
+                domain={["auto", "auto"]}
+                tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                width={56}
+                tickFormatter={(v) => {
+                  const n = Number(v);
+                  if (!(n > 0)) return "";
+                  if (n >= 1) return n.toFixed(2);
+                  return n.toPrecision(3);
+                }}
+              />
+              <Tooltip content={<ChartTooltip />} />
+              <Customized component={<CandlestickLayer data={candleRows} colors={colors} />} />
+              <Scatter
+                data={markers.buys}
+                dataKey="mid"
+                fill={colors.buy}
+                shape={(props) => {
+                  const { cx, cy } = props;
+                  if (cx == null || cy == null) return null;
+                  return <circle cx={cx} cy={cy} r={5} fill={colors.buy} stroke="#fff" strokeWidth={1} />;
+                }}
+                name="Buy"
+              />
+              <Scatter
+                data={markers.sells}
+                dataKey="mid"
+                fill={colors.sell}
+                shape={(props) => {
+                  const { cx, cy } = props;
+                  if (cx == null || cy == null) return null;
+                  return (
+                    <rect
+                      x={cx - 4}
+                      y={cy - 4}
+                      width={8}
+                      height={8}
+                      fill={colors.sell}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                  );
+                }}
+                name="Sell"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+          {live.loading ? (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Refreshing live candles…
+            </Text>
+          ) : null}
         </div>
       )}
     </div>
   );
-}
-
-function OhclRow({ label, value, tone }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-content-subtle">{label}</span>
-      <span
-        className={cn(
-          "font-semibold text-content",
-          tone === "profit" && "text-profit-fg",
-          tone === "loss" && "text-loss-fg"
-        )}
-      >
-        {formatCurrency(value, {
-          compact: (value ?? 0) < 0.01,
-          decimals: (value ?? 0) < 0.01 ? 6 : 4,
-        })}
-      </span>
-    </div>
-  );
-}
-
-function toMs(value) {
-  if (value == null) return null;
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value > 1e12 ? value : value * 1000;
-  }
-  const ms = Date.parse(String(value));
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function formatTickTime(ms) {
-  if (!Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  return d.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatAxisPrice(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  if (n >= 0.01) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
-  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }

@@ -7,7 +7,12 @@ import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import PositionPanel from "../../components/swap/PositionPanel";
 import ChartField from "../../components/trade/ChartField";
+import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
+import TradeCompletionPanel from "../../components/trade/TradeCompletionPanel";
 import { isPositionLive } from "../../lib/swap/position";
+import {
+  getJournalCompletionStatus,
+} from "../../lib/tradeCompletion";
 import { Parser } from "expr-eval";
 import {
   XCircle,
@@ -69,66 +74,39 @@ function getPnlValue(trade, variables) {
 
 function getTradeStatus(trade, variables) {
   const fj = trade?._fj;
-  if (fj?.kind === "solana_position") {
-    if (isPositionLive(fj.computed)) {
-      return {
-        icon: Activity,
-        color: "bg-profit-soft text-profit-fg border border-profit/30",
-        label: "Position live",
-      };
-    }
+  // Solana live/closed is shown on PositionPanel; header uses journal completion.
+  if (fj?.kind === "solana_position" && isPositionLive(fj.computed)) {
     return {
-      icon: CheckCircle,
-      color: "bg-surface-raised text-content-muted border border-line",
-      label: "Position closed",
+      icon: Activity,
+      color: "bg-profit-soft text-profit-fg border border-profit/30",
+      label: "Position live",
     };
   }
 
-  const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
-  const postVars = variables.filter((v) => v.phase === "post" && v.visible);
-
-  const isFilled = (vName) => {
-    const val = trade[vName];
-    return val !== null && val !== undefined && val !== "";
-  };
-
-  const allPreFilled = preVars.every((v) => isFilled(v.name));
-  const allPostFilled = postVars.every((v) => isFilled(v.name));
-
-  const pnlVal = getPnlValue(trade, variables);
-  const pnlFilled =
-    pnlVal !== 0 && pnlVal !== "" && pnlVal !== null && pnlVal !== undefined;
-
-  if (!allPreFilled)
-    return {
+  const journal = getJournalCompletionStatus(trade, variables);
+  const map = {
+    incomplete: {
       icon: XCircle,
       color: "bg-loss-soft text-loss-fg border border-loss/30",
-      label: "Pre-trade incomplete",
-    };
-  if (allPreFilled && !allPostFilled && !pnlFilled)
-    return {
+      label: journal.label,
+    },
+    open: {
       icon: Clock,
       color: "bg-surface-raised text-content-muted border border-line",
-      label: "Open",
-    };
-  if (pnlFilled && !allPostFilled)
-    return {
+      label: journal.label,
+    },
+    in_progress: {
       icon: AlertTriangle,
       color: "bg-warn-soft text-warn-fg border border-warn/30",
-      label: "In progress",
-    };
-  if (allPreFilled && allPostFilled)
-    return {
+      label: journal.label,
+    },
+    completed: {
       icon: CheckCircle,
       color: "bg-profit-soft text-profit-fg border border-profit/30",
-      label: "Completed",
-    };
-
-  return {
-    icon: Clock,
-    color: "bg-surface-raised text-content-muted border border-line",
-    label: "Open",
+      label: journal.label,
+    },
   };
+  return map[journal.key] || map.open;
 }
 
 async function removeDropdownOption(variable, optionToRemove, setVariables) {
@@ -293,7 +271,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   // Dropdown
   if (!v.varType || v.varType === "dropdown") {
     return (
-      <div className="grid grid-cols-[80px,1fr] gap-2 items-center py-0.5">
+      <div className="grid grid-cols-1 gap-1 py-0.5 sm:grid-cols-[minmax(5rem,7rem),1fr] sm:items-center sm:gap-2">
         <span className="text-xs text-content-subtle truncate">{colLabel(v.name)}</span>
 
         <CreatableSelect
@@ -426,7 +404,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     const inputCls = "h-7 w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-content hover:border-line focus:border-brand focus:outline-none focus:ring-[2px] focus:ring-brand/18 transition-colors";
 
     return (
-      <div className="grid grid-cols-[80px,1fr] items-center gap-2 py-0.5">
+      <div className="grid grid-cols-1 gap-1 py-0.5 sm:grid-cols-[minmax(5rem,7rem),1fr] sm:items-center sm:gap-2">
         <div className="text-xs text-content-subtle flex items-center gap-1 truncate">
           <Sigma size={11} className="text-content-subtle shrink-0" />
           <span className="truncate">{colLabel(v.name)}</span>
@@ -490,7 +468,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   }
 
   const fieldCls = "h-7 w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-content hover:border-line focus:border-brand focus:outline-none focus:ring-[2px] focus:ring-brand/18 transition-colors";
-  const rowCls = "grid grid-cols-[80px,1fr] items-center gap-2 py-0.5";
+  const rowCls = "grid grid-cols-1 gap-1 py-0.5 sm:grid-cols-[minmax(5rem,7rem),1fr] sm:items-center sm:gap-2";
   const labelCls = "text-xs text-content-subtle truncate";
 
   // Text
@@ -670,22 +648,22 @@ export default function TradeViewPage() {
   const numericPnl = Number(pnlValue) || 0;
 
   return (
-    <div className="flex flex-col max-w-7xl mx-auto px-4 py-4 gap-4">
+    <div className="flex flex-col max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 gap-3 sm:gap-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <a
             href="/trades"
             className="text-xs font-medium text-content-subtle hover:text-content transition-colors"
           >
             ← Trades
           </a>
-          <h2 className="text-2xl font-semibold tracking-tight text-content">
+          <h2 className="truncate text-xl font-semibold tracking-tight text-content sm:text-2xl">
             {trade.Coins || trade["Coin"] || "Unknown coin"}
           </h2>
           {pnlValue !== "" && pnlValue !== null && (
             <span
-              className={`rounded-lg text-base font-semibold px-2.5 py-1 ${
+              className={`rounded-lg text-sm font-semibold px-2.5 py-1 sm:text-base ${
                 numericPnl >= 0
                   ? "bg-profit-soft text-profit-fg"
                   : "bg-loss-soft text-loss-fg"
@@ -697,7 +675,7 @@ export default function TradeViewPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${status.color}`}
           >
@@ -725,9 +703,27 @@ export default function TradeViewPage() {
 
       <PositionPanel trade={trade} onRefresh={loadTrade} />
 
-      <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,340px),1fr]">
         {/* Sidebar */}
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5 order-2 lg:order-1">
+          <TradeCompletionPanel
+            trade={trade}
+            variables={variables}
+            saveTrade={saveTrade}
+          />
+
+          <div className="rounded-xl border border-line bg-surface px-3 py-3">
+            <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle mb-2">
+              Tags
+            </p>
+            <TradeTagsEditor
+              value={trade.Tags || trade.tags || []}
+              onChange={(tags) => saveTrade({ ...trade, Tags: tags })}
+              suggestions={["breakout", "scalp", "swing", "fomo", "plan", "revenge"]}
+              compact
+            />
+          </div>
+
           {/* Pre-Trade fields */}
           {variables.filter((v) => v.phase === "pre" && v.visible).length > 0 && (
             <div className="rounded-xl border border-line bg-surface px-3 py-3 flex flex-col gap-1.5">
@@ -776,7 +772,7 @@ export default function TradeViewPage() {
         </div>
 
         {/* Charts */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 order-1 lg:order-2">
           {variables
             .filter(
               (v) =>
@@ -786,7 +782,7 @@ export default function TradeViewPage() {
             )
             .sort((a, b) => a.order - b.order)
             .map((v) => (
-              <div key={v.id} className="rounded-xl border border-line bg-surface p-4">
+              <div key={v.id} className="rounded-xl border border-line bg-surface p-3 sm:p-4">
                 <ChartField
                   label={v.name}
                   value={trade[v.name] || ""}
@@ -804,7 +800,7 @@ export default function TradeViewPage() {
             )
             .sort((a, b) => a.order - b.order)
             .map((v) => (
-              <div key={v.id} className="rounded-xl border border-line bg-surface p-4">
+              <div key={v.id} className="rounded-xl border border-line bg-surface p-3 sm:p-4">
                 <ChartField
                   label={v.name}
                   value={trade[v.name] || ""}

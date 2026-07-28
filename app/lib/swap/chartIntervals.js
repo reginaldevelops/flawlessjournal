@@ -11,6 +11,12 @@ export const CHART_TIMEFRAMES = [
   { id: "1d", timeframe: "day", aggregate: 1, label: "1d", seconds: 86400 },
 ];
 
+/** Segmented control options for the entry chart. */
+export const CHART_INTERVAL_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  ...CHART_TIMEFRAMES.map((t) => ({ value: t.id, label: t.label })),
+];
+
 export function resolveChartTimeframe(id) {
   if (!id || id === "auto") return null;
   const key = String(id).toLowerCase();
