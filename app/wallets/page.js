@@ -149,10 +149,6 @@ export default function WalletsPage() {
               })}
             </div>
 
-            <p className="mt-4 text-xs text-content-subtle">
-              {wallets.filter((w) => w.include_in_balance).length} of {wallets.length}{" "}
-              wallet{wallets.length !== 1 ? "s" : ""} included in balance total
-            </p>
           </>
         )}
       </PageBody>
@@ -337,12 +333,14 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
   const chain = chainMeta(wallet.chain);
   const explorer = explorerUrl(wallet.chain, wallet.address);
   const usdValue = balanceData?.usdValue ?? null;
-  const assets = balanceData?.assets ?? [];
+  const assets = (balanceData?.assets ?? []).filter((a) => (a.usdValue ?? 0) > 0 || a.amount > 0);
   const walletError = balanceData?.error;
+  const showAssets = !balancesLoading && assets.length > 0;
 
   return (
     <Card>
       <CardBody className="p-0">
+        {/* Main row */}
         <div className="flex flex-wrap items-center gap-4 px-5 py-4">
           {/* Color swatch */}
           <span
@@ -396,15 +394,6 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
                 <p className="font-mono text-sm font-semibold tnum text-content">
                   {usdValue != null ? formatCurrency(usdValue, { decimals: 0 }) : "—"}
                 </p>
-                {assets.length > 0 && (
-                  <p className="mt-0.5 text-2xs text-content-subtle">
-                    {assets
-                      .slice(0, 3)
-                      .map((a) => a.symbol)
-                      .join(" · ")}
-                    {assets.length > 3 ? ` +${assets.length - 3}` : ""}
-                  </p>
-                )}
                 {walletError && (
                   <Tooltip content={walletError}>
                     <Badge tone="warn" size="xs" className="mt-0.5">
@@ -450,6 +439,46 @@ function WalletCard({ wallet, balanceData, balancesLoading, onEdit, onDelete, on
             />
           </div>
         </div>
+
+        {/* Token breakdown row */}
+        {showAssets && (
+          <div className="border-t border-line/40 px-5 pb-3.5 pt-2.5">
+            <div className="flex flex-wrap gap-1.5">
+              {assets.slice(0, 7).map((asset) => {
+                const change = asset.priceChange24h;
+                const changePos = change != null && change >= 0;
+                return (
+                  <div
+                    key={asset.mint ?? asset.symbol}
+                    className="flex items-center gap-1.5 rounded-md border border-line bg-surface-raised px-2 py-1"
+                  >
+                    <span className="text-2xs font-semibold text-content">{asset.symbol}</span>
+                    {asset.usdValue > 0 && (
+                      <span className="font-mono text-2xs text-content-muted tnum">
+                        {formatCurrency(asset.usdValue, { decimals: 0 })}
+                      </span>
+                    )}
+                    {change != null && (
+                      <span
+                        className={`text-2xs font-medium ${
+                          changePos ? "text-profit-fg" : "text-loss-fg"
+                        }`}
+                      >
+                        {changePos ? "+" : ""}
+                        {change.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {assets.length > 7 && (
+                <div className="flex items-center rounded-md border border-line bg-surface-raised px-2 py-1">
+                  <span className="text-2xs text-content-subtle">+{assets.length - 7} more</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </CardBody>
     </Card>
   );

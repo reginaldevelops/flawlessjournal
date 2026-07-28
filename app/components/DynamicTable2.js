@@ -531,20 +531,74 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     const colLow = col.toLowerCase();
 
                     if (colLow === "pnl") {
-                      const num = Number(val);
+                      const hasVal = val !== null && val !== undefined && val !== "";
+                      const num = hasVal ? Number(val) : 0;
                       return (
                         <td
                           key={col}
                           onClick={() => router.push(`/trade/${row.id}`)}
                           className={`px-4 py-3 font-semibold font-mono tnum text-sm ${
-                            num >= 0 ? "text-profit-fg" : "text-loss-fg"
+                            !hasVal
+                              ? "text-content-subtle"
+                              : num >= 0
+                              ? "text-profit-fg"
+                              : "text-loss-fg"
                           }`}
                         >
-                          {val !== null && val !== undefined
+                          {hasVal
                             ? num >= 0
                               ? `+${val}`
                               : `${val}`
-                            : "—"}
+                            : <span className="select-none">—</span>}
+                        </td>
+                      );
+                    }
+
+                    if (colLow === "r" || colLow === "r-multiple") {
+                      const hasVal = val !== null && val !== undefined && val !== "";
+                      const num = hasVal ? Number(val) : 0;
+                      return (
+                        <td
+                          key={col}
+                          onClick={() => router.push(`/trade/${row.id}`)}
+                          className={`px-4 py-3 font-mono tnum text-sm ${
+                            !hasVal
+                              ? "text-content-subtle"
+                              : num >= 0
+                              ? "text-profit-fg"
+                              : "text-loss-fg"
+                          }`}
+                        >
+                          {hasVal ? (num >= 0 ? `+${num}` : `${num}`) : <span className="select-none">—</span>}
+                        </td>
+                      );
+                    }
+
+                    if (colLow === "grade" || colLow === "graad") {
+                      const grade = String(val ?? "").trim().toUpperCase();
+                      const gradeClass =
+                        !grade
+                          ? "text-content-subtle"
+                          : /^A/.test(grade)
+                          ? "text-profit-fg bg-profit-soft"
+                          : /^B/.test(grade)
+                          ? "text-brand bg-brand/10"
+                          : /^C/.test(grade)
+                          ? "text-warn-fg bg-warn-soft"
+                          : "text-loss-fg bg-loss-soft";
+                      return (
+                        <td
+                          key={col}
+                          onClick={() => router.push(`/trade/${row.id}`)}
+                          className="px-4 py-3"
+                        >
+                          {grade ? (
+                            <span className={`inline-flex items-center justify-center h-5 w-5 rounded text-2xs font-bold ${gradeClass}`}>
+                              {grade}
+                            </span>
+                          ) : (
+                            <span className="text-content-subtle select-none">—</span>
+                          )}
                         </td>
                       );
                     }
