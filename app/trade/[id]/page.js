@@ -834,14 +834,12 @@ export default function TradeViewPage() {
         </div>
       </div>
 
-      {showManageModal && (
-        <ManageVariablesModal
-          context="trade"
-          variables={variables}
-          setVariables={setVariables}
-          onClose={() => setShowManageModal(false)}
-        />
-      )}
+      <ManageVariablesModal
+        open={showManageModal}
+        variables={variables}
+        setVariables={setVariables}
+        onClose={() => setShowManageModal(false)}
+      />
     </div>
   );
 }

@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Button, Input, cn } from "./ui";
 
-/* Utility: deep update via path */
 function updateAtPath(obj, path, updater) {
   if (path.length === 1) {
     const key = path[0];
     const oldVal = obj[key];
-    // ✅ support voor string velden
     return { ...obj, [key]: updater(oldVal) };
   }
   const [head, ...rest] = path;
@@ -24,93 +23,82 @@ function ConditionalBlock({ block, onChange, setActiveField, path }) {
   };
 
   return (
-    <div className="ml-2 mt-3 border-l-2 pl-3">
-      {/* IF */}
-      <div className="mb-2 py-5">
-        <label className="font-bold text-sm mr-2">IF</label>
-        <input
-          type="text"
+    <div className="ml-1 mt-3 space-y-3 border-l-2 border-line pl-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-12 shrink-0 text-xs font-semibold text-brand">IF</span>
+        <Input
+          size="sm"
           value={block.condition}
           onChange={(e) => updateField("condition", e.target.value)}
           onFocus={() => setActiveField([...path, "condition"])}
-          placeholder="Condition..."
-          className="border-b border-black w-64 text-sm px-1"
+          placeholder="Condition…"
+          className="max-w-xs flex-1 font-mono"
         />
       </div>
 
-      {/* THEN */}
-      <div className="mb-2 py-3">
-        <label className="font-bold text-sm mr-2">→ THEN</label>
-        <input
-          type="text"
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-12 shrink-0 text-xs font-semibold text-content-muted">
+          THEN
+        </span>
+        <Input
+          size="sm"
           value={block.then}
           onChange={(e) => updateField("then", e.target.value)}
           onFocus={() => setActiveField([...path, "then"])}
-          placeholder="Result..."
-          className="border-b border-black w-64 text-sm px-1"
+          placeholder="Result…"
+          className="max-w-xs flex-1 font-mono"
         />
       </div>
 
-      {/* ELSE */}
       {block.else !== null ? (
         typeof block.else === "string" ? (
-          <div className="mb-2">
-            <label className="font-bold text-sm mr-2">ELSE</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={block.else}
-                onChange={(e) => updateField("else", e.target.value)}
-                onFocus={() => setActiveField([...path, "else"])}
-                placeholder="Else result..."
-                className="border-b border-black w-64 text-sm px-1"
-              />
-              <button
-                type="button"
-                onClick={removeElse}
-                className="text-xs text-red-600 underline"
-              >
-                ✕ Remove
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-12 shrink-0 text-xs font-semibold text-content-muted">
+              ELSE
+            </span>
+            <Input
+              size="sm"
+              value={block.else}
+              onChange={(e) => updateField("else", e.target.value)}
+              onFocus={() => setActiveField([...path, "else"])}
+              placeholder="Else result…"
+              className="max-w-xs flex-1 font-mono"
+            />
+            <Button variant="danger-ghost" size="xs" onClick={removeElse}>
+              Remove
+            </Button>
           </div>
         ) : (
-          <div>
+          <div className="space-y-2">
             <ConditionalBlock
               block={block.else}
               onChange={(val) => updateField("else", val)}
               setActiveField={setActiveField}
               path={[...path, "else"]}
             />
-            <button
-              type="button"
-              onClick={removeElse}
-              className="mt-1 text-xs text-red-600 underline"
-            >
-              ✕ Remove OR IF
-            </button>
+            <Button variant="danger-ghost" size="xs" onClick={removeElse}>
+              Remove nested IF
+            </Button>
           </div>
         )
       ) : (
-        <div className="flex gap-2 mt-2">
-          {/* ✅ ELSE maakt nu expliciet een string */}
-          <button
-            type="button"
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button
+            variant="subtle"
+            size="xs"
             onClick={() => updateField("else", "")}
-            className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
           >
             + OR ELSE
-          </button>
-
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="subtle"
+            size="xs"
             onClick={() =>
               updateField("else", { condition: "", then: "", else: null })
             }
-            className="px-2 py-1 text-xs bg-sky-100 text-sky-600 rounded hover:bg-sky-200"
           >
             + OR IF
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -119,11 +107,10 @@ function ConditionalBlock({ block, onChange, setActiveField, path }) {
 
 function wrapValue(val) {
   if (val === "") return "0";
-  if (!isNaN(parseFloat(val))) return val; // getal blijft getal
-  return JSON.stringify(val); // altijd string in quotes
+  if (!isNaN(parseFloat(val))) return val;
+  return JSON.stringify(val);
 }
 
-/* Formula generator */
 function toFormula(block) {
   let result = `if(${block.condition || "0"}, ${wrapValue(block.then)}, `;
   if (block.else) {
@@ -139,7 +126,6 @@ function toFormula(block) {
   return result;
 }
 
-/* Main builder */
 export default function ConditionalBuilder({
   variables = [],
   onChange,
@@ -157,6 +143,10 @@ export default function ConditionalBuilder({
     onChange(toFormula(rootBlock));
   }, [rootBlock, onChange]);
 
+  useEffect(() => {
+    setInFocus?.(Boolean(activePath));
+  }, [activePath, setInFocus]);
+
   const insertToken = (token) => {
     if (!activePath) return;
     setRootBlock((prev) =>
@@ -164,16 +154,24 @@ export default function ConditionalBuilder({
     );
   };
 
+  const chipClass =
+    "rounded-md border border-line bg-surface-raised px-2 py-1 text-xs font-medium text-content transition hover:border-line-strong hover:bg-surface-hover";
+
   return (
-    <div className="border p-3 rounded flex flex-col gap-3 bg-gray-50">
-      <p className="text-xs text-gray-600 font-medium">
-        Conditional Formula Builder
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border border-line bg-surface p-3.5"
+      )}
+    >
+      <p className="text-xs font-medium text-content-muted">
+        Conditional formula builder
       </p>
 
-      {/* Toolbar */}
       <div>
-        <p className="text-xs text-gray-500 mb-1">Numeric variables:</p>
-        <div className="flex flex-wrap gap-2">
+        <p className="mb-1.5 text-2xs uppercase tracking-wider text-content-subtle">
+          Numeric variables
+        </p>
+        <div className="flex flex-wrap gap-1.5">
           {variables
             .filter((v) => ["number", "calculated"].includes(v.varType))
             .map((varItem) => {
@@ -183,24 +181,33 @@ export default function ConditionalBuilder({
                   key={varItem.id}
                   type="button"
                   onClick={() => insertToken(token)}
-                  className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                  className={chipClass}
                 >
                   {token}
                 </button>
               );
             })}
+          {variables.filter((v) =>
+            ["number", "calculated"].includes(v.varType)
+          ).length === 0 && (
+            <span className="text-xs text-content-subtle">
+              No numeric variables yet
+            </span>
+          )}
         </div>
       </div>
 
       <div>
-        <p className="text-xs text-gray-500 mb-1">Operators:</p>
-        <div className="flex flex-wrap gap-2">
+        <p className="mb-1.5 text-2xs uppercase tracking-wider text-content-subtle">
+          Operators
+        </p>
+        <div className="flex flex-wrap gap-1.5">
           {["+", "-", "*", "/", ">", "<", ">=", "<=", "=="].map((op) => (
             <button
               key={op}
               type="button"
               onClick={() => insertToken(op)}
-              className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+              className={cn(chipClass, "font-semibold")}
             >
               {op}
             </button>
@@ -208,12 +215,11 @@ export default function ConditionalBuilder({
         </div>
       </div>
 
-      {/* Recursive block */}
       <ConditionalBlock
         block={rootBlock}
         onChange={setRootBlock}
         setActiveField={setActivePath}
-        path={[]} // root pad
+        path={[]}
       />
     </div>
   );
