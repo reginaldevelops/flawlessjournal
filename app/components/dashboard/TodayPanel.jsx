@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, Clock, Pencil, ShieldAlert } from "lucide-react";
 import {
   Badge,
@@ -156,26 +156,17 @@ function SessionTimeline({ now, sessionEdge }) {
         )}
       </div>
 
-      {openSessions.some((s) => sessionEdge?.[s.name]) && (
-        <p className="mt-2 text-2xs leading-relaxed text-content-subtle">
-          {openSessions
-            .filter((s) => sessionEdge?.[s.name])
-            .map((s) => {
-              const edge = sessionEdge[s.name];
-              return `${s.name}: ${formatCurrency(edge.pnl, { decimals: 0, signed: true })} over ${pluralize(
-                edge.count,
-                "trade"
-              )} at ${formatPercent(edge.winRate, { decimals: 0 })}`;
-            })
-            .join(" · ")}
-        </p>
-      )}
     </div>
   );
 }
 
 function RiskLimitBlock({ todayPnl, todayCount, limit, onChangeLimit, suggestion }) {
   const [draft, setDraft] = useState(String(limit));
+
+  useEffect(() => {
+    setDraft(String(limit));
+  }, [limit]);
+
   const used = limit > 0 ? Math.min(1, Math.max(0, -todayPnl) / limit) : 0;
   const breached = limit > 0 && -todayPnl >= limit;
   const tone = todayPnl > 0 ? "profit" : breached ? "loss" : used > 0.5 ? "warn" : "neutral";

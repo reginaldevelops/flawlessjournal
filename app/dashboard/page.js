@@ -173,6 +173,7 @@ export default function DashboardPage() {
               icon={RefreshCw}
               iconOnly
               aria-label="Refresh"
+              aria-busy={loading}
               onClick={reload}
               className={loading ? "pointer-events-none opacity-60" : undefined}
             />
@@ -185,7 +186,9 @@ export default function DashboardPage() {
           <Toolbar>
             <PeriodSelector value={period} onChange={setPeriod} />
             <ToolbarDivider />
-            <span className="font-mono text-2xs tnum text-content-subtle">{rangeLabel}</span>
+            <span className="hidden max-w-[11rem] truncate font-mono text-2xs tnum text-content-subtle md:inline">
+              {rangeLabel}
+            </span>
             <div className="ml-auto flex items-center gap-2">
               <Badge tone="outline" size="sm">
                 {pluralize(metrics.totalTrades, "closed trade")}

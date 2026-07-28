@@ -17,6 +17,7 @@ import {
 } from "../ui";
 import { compactNumber, formatCurrency, formatDate, formatPercent, pluralize } from "../../lib/format";
 import { heatTint } from "./helpers";
+import { useNow } from "./hooks";
 import TradeRow from "./TradeRow";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -194,7 +195,8 @@ export default function PnlCalendarCard({ days = {}, loading }) {
   });
   const [selected, setSelected] = useState(null);
 
-  const today = useMemo(() => keyOf(new Date()), []);
+  const now = useNow(60_000);
+  const today = useMemo(() => keyOf(now ?? new Date()), [now]);
   const { weeks, scale, summary } = useMemo(() => buildMonth(cursor, days), [cursor, days]);
 
   const shift = (delta) => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
