@@ -36,6 +36,7 @@ import {
   toneTextClass,
   truncateMiddle,
 } from "../lib/format";
+import SwapSheet from "../components/swap/SwapSheet";
 
 const REFRESH_MS = 30_000;
 
@@ -96,6 +97,7 @@ export default function ScannerPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [swapTarget, setSwapTarget] = useState(null);
   const abortRef = useRef(null);
   const hydrated = useRef(false);
 
@@ -495,9 +497,9 @@ export default function ScannerPage() {
                       `${windowMeta.label} Δ`,
                       "Txns",
                       "",
-                    ].map((h) => (
+                    ].map((h, i) => (
                       <th
-                        key={h || "link"}
+                        key={`${h}-${i}`}
                         className="px-3 py-2.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle first:pl-4 last:pr-4"
                       >
                         {h}
@@ -593,18 +595,38 @@ export default function ScannerPage() {
                         <span className="mx-0.5 text-content-subtle">/</span>
                         <span className="text-loss">{hit.sells}</span>
                       </td>
-                      <td className="px-3 py-3 last:pr-4">
-                        {hit.url && (
-                          <a
-                            href={hit.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover"
-                          >
-                            Dex
-                            <ExternalLink size={12} />
-                          </a>
-                        )}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          {hit.chainId === "solana" && (
+                            <Button
+                              variant="primary"
+                              size="xs"
+                              onClick={() =>
+                                setSwapTarget({
+                                  address: hit.baseToken.address,
+                                  symbol: hit.baseToken.symbol,
+                                  name: hit.baseToken.name,
+                                  url: hit.url,
+                                  imageUrl: hit.imageUrl,
+                                  chainId: hit.chainId,
+                                })
+                              }
+                            >
+                              Buy
+                            </Button>
+                          )}
+                          {hit.url && (
+                            <a
+                              href={hit.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover"
+                            >
+                              Dex
+                              <ExternalLink size={12} />
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -614,6 +636,13 @@ export default function ScannerPage() {
           </div>
         )}
       </PageBody>
+
+      <SwapSheet
+        open={Boolean(swapTarget)}
+        onClose={() => setSwapTarget(null)}
+        token={swapTarget}
+        initialSide="buy"
+      />
     </>
   );
 }
