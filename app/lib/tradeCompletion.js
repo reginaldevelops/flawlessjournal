@@ -74,8 +74,22 @@ export function clearFieldCheckedEmpty(trade, fieldName) {
  * Status for journal completeness (ignores Solana live/closed).
  */
 export function getJournalCompletionStatus(trade, variables = []) {
-  const preVars = variables.filter((v) => v.phase === "pre" && v.visible);
-  const postVars = variables.filter((v) => v.phase === "post" && v.visible);
+  const preVars = variables.filter(
+    (v) =>
+      v.phase === "pre" &&
+      v.visible &&
+      v.varType !== "calculated" &&
+      v.name !== "Trade number" &&
+      v.name !== "trade_number"
+  );
+  const postVars = variables.filter(
+    (v) =>
+      v.phase === "post" &&
+      v.visible &&
+      v.varType !== "calculated" &&
+      v.name !== "Trade number" &&
+      v.name !== "trade_number"
+  );
   const incompletePre = preVars.filter((v) => !isFieldComplete(trade, v.name));
   const incompletePost = postVars.filter((v) => !isFieldComplete(trade, v.name));
 

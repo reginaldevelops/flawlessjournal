@@ -8,10 +8,12 @@ import ManageVariablesModal from "../../components/ManageVariablesModal";
 import PositionPanel from "../../components/swap/PositionPanel";
 import ChartField from "../../components/trade/ChartField";
 import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
-import TradeCompletionPanel from "../../components/trade/TradeCompletionPanel";
+import FieldShell from "../../components/trade/FieldShell";
 import { isPositionLive } from "../../lib/swap/position";
 import {
   getJournalCompletionStatus,
+  isFieldComplete,
+  markFieldCheckedEmpty,
 } from "../../lib/tradeCompletion";
 import { Parser } from "expr-eval";
 import {
@@ -164,6 +166,15 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   const [manualOverride, setManualOverride] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
 
+  const trackable =
+    v.varType !== "calculated" &&
+    v.varType !== "chart" &&
+    v.varType !== "link" &&
+    v.name !== "Trade number" &&
+    v.name !== "trade_number";
+  const missing = trackable && !isFieldComplete(trade, v.name);
+  const onSkip = () => saveTrade(markFieldCheckedEmpty(trade, v.name));
+
   const handleNumericChange = (e) => {
     const val = e.target.value;
     saveTrade({ ...trade, [v.name]: val });
@@ -271,9 +282,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   // Dropdown
   if (!v.varType || v.varType === "dropdown") {
     return (
-      <div className="grid grid-cols-1 gap-1 py-0.5 sm:grid-cols-[minmax(5rem,7rem),1fr] sm:items-center sm:gap-2">
-        <span className="text-xs text-content-subtle truncate">{colLabel(v.name)}</span>
-
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
         <CreatableSelect
           isClearable
           value={value ? { value, label: value } : null}
@@ -385,7 +394,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           }}
           classNamePrefix="react-select"
         />
-      </div>
+      </FieldShell>
     );
   }
 
@@ -468,29 +477,25 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   }
 
   const fieldCls = "h-7 w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-content hover:border-line focus:border-brand focus:outline-none focus:ring-[2px] focus:ring-brand/18 transition-colors";
-  const rowCls = "grid grid-cols-1 gap-1 py-0.5 sm:grid-cols-[minmax(5rem,7rem),1fr] sm:items-center sm:gap-2";
-  const labelCls = "text-xs text-content-subtle truncate";
 
   // Text
   if (v.varType === "text") {
     return (
-      <div className={rowCls}>
-        <span className={labelCls}>{colLabel(v.name)}</span>
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
         <input
           type="text"
           value={value}
           onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
           className={fieldCls}
         />
-      </div>
+      </FieldShell>
     );
   }
 
   // Number
   if (v.varType === "number") {
     return (
-      <div className={rowCls}>
-        <span className={labelCls}>{colLabel(v.name)}</span>
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
         <input
           type="number"
           value={value}
@@ -498,52 +503,54 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           onBlur={handleNumericBlur}
           className={fieldCls}
         />
-      </div>
+      </FieldShell>
     );
   }
 
   // Time
   if (v.varType === "time") {
     return (
-      <div className={rowCls}>
-        <span className={labelCls}>{colLabel(v.name)}</span>
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
         <input
           type="time"
           value={value}
           onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
           className={`${fieldCls} w-[90px]`}
         />
-      </div>
+      </FieldShell>
     );
   }
 
   // Date
   if (v.varType === "date") {
     return (
-      <div className={rowCls}>
-        <span className={labelCls}>{colLabel(v.name)}</span>
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
         <input
           type="date"
           value={value}
           onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
           className={`${fieldCls} w-[130px]`}
         />
-      </div>
+      </FieldShell>
     );
   }
 
   // Textarea
   if (v.varType === "textarea") {
     return (
-      <div className="flex flex-col gap-1 py-0.5">
-        <span className={labelCls}>{colLabel(v.name)}</span>
+      <FieldShell
+        label={colLabel(v.name)}
+        missing={missing}
+        onSkip={onSkip}
+        stacked
+      >
         <textarea
           rows={3}
           value={value}
           onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
           className="w-full rounded-lg border border-line bg-surface-raised px-2 py-1.5 text-xs text-content resize-y h-[90px] hover:border-line-strong focus:border-brand focus:outline-none focus:ring-[2px] focus:ring-brand/18 transition-colors"
         />
-      </div>
+      </FieldShell>
     );
   }
 
@@ -650,55 +657,63 @@ export default function TradeViewPage() {
   return (
     <div className="flex flex-col max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 gap-3 sm:gap-4">
       {/* Header */}
-      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <a
-            href="/trades"
-            className="text-xs font-medium text-content-subtle hover:text-content transition-colors"
-          >
-            ← Trades
-          </a>
-          <h2 className="truncate text-xl font-semibold tracking-tight text-content sm:text-2xl">
-            {trade.Coins || trade["Coin"] || "Unknown coin"}
-          </h2>
-          {pnlValue !== "" && pnlValue !== null && (
-            <span
-              className={`rounded-lg text-sm font-semibold px-2.5 py-1 sm:text-base ${
-                numericPnl >= 0
-                  ? "bg-profit-soft text-profit-fg"
-                  : "bg-loss-soft text-loss-fg"
-              }`}
+      <div className="flex flex-col gap-2 border-b border-line pb-3 sm:pb-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+            <a
+              href="/trades"
+              className="text-xs font-medium text-content-subtle hover:text-content transition-colors"
             >
-              {numericPnl >= 0 ? "+" : ""}
-              {pnlValue}
+              ← Trades
+            </a>
+            <h2 className="truncate text-xl font-semibold tracking-tight text-content sm:text-2xl">
+              {trade.Coins || trade["Coin"] || "Unknown coin"}
+            </h2>
+            {pnlValue !== "" && pnlValue !== null && (
+              <span
+                className={`rounded-lg text-sm font-semibold px-2.5 py-1 sm:text-base ${
+                  numericPnl >= 0
+                    ? "bg-profit-soft text-profit-fg"
+                    : "bg-loss-soft text-loss-fg"
+                }`}
+              >
+                {numericPnl >= 0 ? "+" : ""}
+                {pnlValue}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-semibold ${status.color}`}
+              title="Journal completion"
+            >
+              <status.icon size={12} />
+              {status.label}
             </span>
-          )}
+            <span className="text-sm text-content-muted font-mono">
+              {trade.Datum || trade["Date"] || "—"}
+            </span>
+            <button
+              onClick={() => setShowManageModal(true)}
+              className="h-8 px-3 rounded-md border border-line text-content-subtle text-xs font-medium hover:bg-surface-hover hover:text-content transition-colors"
+            >
+              Settings
+            </button>
+            <button
+              onClick={deleteTrade}
+              className="h-8 w-8 flex items-center justify-center rounded-md border border-line text-content-subtle hover:bg-loss-soft hover:text-loss hover:border-loss/30 transition-colors"
+              aria-label="Delete trade"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${status.color}`}
-          >
-            <status.icon size={13} />
-            {status.label}
-          </span>
-          <span className="text-sm text-content-muted font-mono">
-            {trade.Datum || trade["Date"] || "—"}
-          </span>
-          <button
-            onClick={() => setShowManageModal(true)}
-            className="h-8 px-3 rounded-md border border-line text-content-subtle text-xs font-medium hover:bg-surface-hover hover:text-content transition-colors"
-          >
-            Settings
-          </button>
-          <button
-            onClick={deleteTrade}
-            className="h-8 w-8 flex items-center justify-center rounded-md border border-line text-content-subtle hover:bg-loss-soft hover:text-loss hover:border-loss/30 transition-colors"
-            aria-label="Delete trade"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <TradeTagsEditor
+          value={trade.Tags || trade.tags || []}
+          onChange={(tags) => saveTrade({ ...trade, Tags: tags })}
+        />
       </div>
 
       <PositionPanel trade={trade} onRefresh={loadTrade} />
@@ -706,24 +721,6 @@ export default function TradeViewPage() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,340px),1fr]">
         {/* Sidebar */}
         <div className="flex flex-col gap-2.5 order-2 lg:order-1">
-          <TradeCompletionPanel
-            trade={trade}
-            variables={variables}
-            saveTrade={saveTrade}
-          />
-
-          <div className="rounded-xl border border-line bg-surface px-3 py-3">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle mb-2">
-              Tags
-            </p>
-            <TradeTagsEditor
-              value={trade.Tags || trade.tags || []}
-              onChange={(tags) => saveTrade({ ...trade, Tags: tags })}
-              suggestions={["breakout", "scalp", "swing", "fomo", "plan", "revenge"]}
-              compact
-            />
-          </div>
-
           {/* Pre-Trade fields */}
           {variables.filter((v) => v.phase === "pre" && v.visible).length > 0 && (
             <div className="rounded-xl border border-line bg-surface px-3 py-3 flex flex-col gap-1.5">
@@ -781,15 +778,36 @@ export default function TradeViewPage() {
                 v.phase === "pre"
             )
             .sort((a, b) => a.order - b.order)
-            .map((v) => (
-              <div key={v.id} className="rounded-xl border border-line bg-surface p-3 sm:p-4">
-                <ChartField
-                  label={v.name}
-                  value={trade[v.name] || ""}
-                  onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
-                />
-              </div>
-            ))}
+            .map((v) => {
+              const missing = !isFieldComplete(trade, v.name);
+              return (
+                <div
+                  key={v.id}
+                  className={`relative rounded-xl border bg-surface p-3 sm:p-4 ${
+                    missing
+                      ? "border-warn/40 ring-1 ring-warn/25"
+                      : "border-line"
+                  }`}
+                >
+                  {missing ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        saveTrade(markFieldCheckedEmpty(trade, v.name))
+                      }
+                      className="absolute right-3 top-3 z-10 text-2xs text-content-subtle underline-offset-2 hover:text-content hover:underline"
+                    >
+                      Skip
+                    </button>
+                  ) : null}
+                  <ChartField
+                    label={v.name}
+                    value={trade[v.name] || ""}
+                    onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
+                  />
+                </div>
+              );
+            })}
 
           {variables
             .filter(
@@ -799,15 +817,36 @@ export default function TradeViewPage() {
                 v.phase === "post"
             )
             .sort((a, b) => a.order - b.order)
-            .map((v) => (
-              <div key={v.id} className="rounded-xl border border-line bg-surface p-3 sm:p-4">
-                <ChartField
-                  label={v.name}
-                  value={trade[v.name] || ""}
-                  onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
-                />
-              </div>
-            ))}
+            .map((v) => {
+              const missing = !isFieldComplete(trade, v.name);
+              return (
+                <div
+                  key={v.id}
+                  className={`relative rounded-xl border bg-surface p-3 sm:p-4 ${
+                    missing
+                      ? "border-warn/40 ring-1 ring-warn/25"
+                      : "border-line"
+                  }`}
+                >
+                  {missing ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        saveTrade(markFieldCheckedEmpty(trade, v.name))
+                      }
+                      className="absolute right-3 top-3 z-10 text-2xs text-content-subtle underline-offset-2 hover:text-content hover:underline"
+                    >
+                      Skip
+                    </button>
+                  ) : null}
+                  <ChartField
+                    label={v.name}
+                    value={trade[v.name] || ""}
+                    onChange={(next) => saveTrade({ ...trade, [v.name]: next })}
+                  />
+                </div>
+              );
+            })}
         </div>
       </div>
 
