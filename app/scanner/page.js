@@ -471,7 +471,7 @@ export default function ScannerPage() {
             title="No pairs matched"
             description="Loosen volume, liquidity or age filters — or wait for the next boost/meta wave on DexScreener."
             action={
-              <Button variant="secondary" size="sm" onClick={resetFilters}>
+              <Button variant="secondary" size="sm" className="mt-4" onClick={resetFilters}>
                 Reset filters
               </Button>
             }
