@@ -12,6 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  // Recharts 3.1.2: usePlotArea is public; useXAxis/useYAxis are not exported.
   usePlotArea,
 } from "recharts";
 import { ExternalLink } from "lucide-react";
