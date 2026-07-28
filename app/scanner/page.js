@@ -609,6 +609,8 @@ export default function ScannerPage() {
                                   url: hit.url,
                                   imageUrl: hit.imageUrl,
                                   chainId: hit.chainId,
+                                  ageHours: hit.ageHours,
+                                  changeH1: hit.priceChange?.h1 ?? hit.changeActive,
                                 })
                               }
                             >

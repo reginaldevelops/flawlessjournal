@@ -1,18 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Field, Input, Select, Switch, cn } from "../ui";
+import { Button, Field, Select, cn } from "../ui";
 import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
-import { DEFAULT_SWAP_SETTINGS, QUOTE_TOKENS } from "../../lib/swap/constants";
+import {
+  DEFAULT_SWAP_SETTINGS,
+  QUOTE_TOKENS,
+  SLIPPAGE_OPTIONS,
+} from "../../lib/swap/constants";
+import { suggestSlippageBps } from "../../lib/swap/slippage";
 
-export default function SwapSettingsPanel({ open, onChange }) {
+/**
+ * Compact swap settings: 0.5% / 4% slippage, fee mode, default quote.
+ * Priority/Jito amounts are auto from p90 — not user-editable.
+ */
+export default function SwapSettingsPanel({
+  open,
+  onChange,
+  /** Optional pair context for “Auto” slippage suggestion */
+  pairContext,
+  feeEstimate,
+}) {
   const [settings, setSettings] = useState(DEFAULT_SWAP_SETTINGS);
 
   useEffect(() => {
     const loaded = loadSwapSettings();
     setSettings(loaded);
     onChange?.(loaded);
-  }, [onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!open) return null;
 
@@ -22,36 +38,54 @@ export default function SwapSettingsPanel({ open, onChange }) {
     onChange?.(next);
   };
 
+  const applyAuto = () => {
+    const bps = suggestSlippageBps(pairContext ?? {});
+    update({ slippageBps: bps, slippageAuto: true });
+  };
+
+  const fee =
+    settings.feeMode === "jito" ? feeEstimate?.jito : feeEstimate?.priority;
+
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface-sunken p-3.5 animate-fade-in">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-content">Manual mode</p>
-          <p className="text-2xs text-content-subtle">
-            Fixed slippage — Jupiter won’t override with dynamic slippage.
-          </p>
+      <div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-content">Slippage</p>
+          <button
+            type="button"
+            onClick={applyAuto}
+            className="text-2xs font-medium text-brand hover:text-brand-hover"
+          >
+            Auto
+          </button>
         </div>
-        <Switch
-          checked={settings.manualMode}
-          onChange={(manualMode) => update({ manualMode })}
-          label="Manual mode"
-        />
+        <div className="flex gap-1.5">
+          {SLIPPAGE_OPTIONS.map((opt) => {
+            const on = settings.slippageBps === opt.bps;
+            return (
+              <button
+                key={opt.bps}
+                type="button"
+                onClick={() =>
+                  update({ slippageBps: opt.bps, slippageAuto: false })
+                }
+                className={cn(
+                  "flex-1 rounded-md border px-2 py-2 text-sm font-semibold transition",
+                  on
+                    ? "border-brand/40 bg-brand-soft text-brand"
+                    : "border-line bg-surface-raised text-content-muted hover:text-content"
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 text-2xs text-content-subtle">
+          Auto picks 4% for fresh (&lt;12h) or volatile (≥12% / 1h) pairs, otherwise
+          0.5%.
+        </p>
       </div>
-
-      <Field label={`Slippage (${(settings.slippageBps / 100).toFixed(2)}%)`}>
-        {(id) => (
-          <Input
-            id={id}
-            type="number"
-            min={1}
-            max={5000}
-            step={10}
-            value={settings.slippageBps}
-            onChange={(e) => update({ slippageBps: Number(e.target.value) || 100 })}
-            size="sm"
-          />
-        )}
-      </Field>
 
       <Field label="Default quote (payment) token">
         {(id) => (
@@ -70,7 +104,7 @@ export default function SwapSettingsPanel({ open, onChange }) {
         )}
       </Field>
 
-      <Field label="Landing fee mode">
+      <Field label="Landing fee">
         {(id) => (
           <div id={id} className="flex gap-1.5">
             {["priority", "jito"].map((mode) => (
@@ -79,7 +113,7 @@ export default function SwapSettingsPanel({ open, onChange }) {
                 type="button"
                 onClick={() => update({ feeMode: mode })}
                 className={cn(
-                  "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium capitalize transition",
+                  "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition",
                   settings.feeMode === mode
                     ? "border-brand/40 bg-brand-soft text-brand"
                     : "border-line bg-surface-raised text-content-muted hover:text-content"
@@ -92,57 +126,23 @@ export default function SwapSettingsPanel({ open, onChange }) {
         )}
       </Field>
 
-      {settings.feeMode === "priority" ? (
-        <>
-          <Field label="Priority level">
-            {(id) => (
-              <Select
-                id={id}
-                size="sm"
-                value={settings.priorityLevel}
-                onChange={(e) => update({ priorityLevel: e.target.value })}
-              >
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="veryHigh">Very high</option>
-              </Select>
-            )}
-          </Field>
-          <Field label="Max priority fee (lamports)" hint="1e9 lamports = 1 SOL">
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                min={1000}
-                step={10000}
-                value={settings.maxPriorityLamports}
-                onChange={(e) =>
-                  update({ maxPriorityLamports: Number(e.target.value) || 1_000_000 })
-                }
-                size="sm"
-              />
-            )}
-          </Field>
-        </>
-      ) : (
-        <Field
-          label="Jito tip (lamports)"
-          hint="Requires a Jito-compatible broadcast path"
-        >
-          {(id) => (
-            <Input
-              id={id}
-              type="number"
-              min={1000}
-              step={10000}
-              value={settings.jitoTipLamports}
-              onChange={(e) =>
-                update({ jitoTipLamports: Number(e.target.value) || 1_000_000 })
-              }
-              size="sm"
-            />
-          )}
-        </Field>
+      {fee && (
+        <p className="rounded-lg border border-line bg-surface-raised px-3 py-2 text-2xs text-content-muted">
+          {settings.feeMode === "jito" ? "Jito tip" : "Priority fee"} · p90 ≈{" "}
+          <span className="font-mono tnum text-content">
+            ${Number(fee.usd).toFixed(3)}
+          </span>
+          {fee.capped ? (
+            <span className="text-warn">
+              {" "}
+              (capped at ${fee.maxUsd.toFixed(2)})
+            </span>
+          ) : null}
+          <span className="text-content-subtle">
+            {" "}
+            · max ${fee.maxUsd.toFixed(2)}
+          </span>
+        </p>
       )}
 
       <Button

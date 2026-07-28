@@ -15,6 +15,9 @@ export const JITO_TX_URL =
   process.env.NEXT_PUBLIC_JITO_TX_URL ||
   "https://mainnet.block-engine.jito.wtf/api/v1/transactions";
 
+/** Live tip-floor percentiles (SOL). */
+export const JITO_TIP_FLOOR_URL = "https://bundles.jito.wtf/api/v1/bundles/tip_floor";
+
 export const QUOTE_TOKENS = [
   {
     mint: FARTCOIN_MINT,
@@ -39,15 +42,31 @@ export const QUOTE_TOKENS = [
 
 export const SWAP_SETTINGS_KEY = "flawless.swap.settings";
 
+/** Only two slippage choices in the UI. */
+export const SLIPPAGE_PRESETS = {
+  tight: 50, // 0.5%
+  loose: 400, // 4%
+};
+
+export const SLIPPAGE_OPTIONS = [
+  { bps: SLIPPAGE_PRESETS.tight, label: "0.5%" },
+  { bps: SLIPPAGE_PRESETS.loose, label: "4%" },
+];
+
+/** Hard USD caps — never exceeded when building the swap. */
+export const MAX_PRIORITY_FEE_USD = 0.3;
+export const MAX_JITO_TIP_USD = 0.5;
+
+/** Assumed CU budget for converting µ-lamports/CU → total priority lamports. */
+export const SWAP_CU_ESTIMATE = 400_000;
+
 export const DEFAULT_SWAP_SETTINGS = {
-  /** Exact user amounts; no dynamic slippage from Jupiter. */
+  /** Always fixed slippage (0.5% or 4%) — never Jupiter dynamic. */
   manualMode: true,
-  slippageBps: 100, // 1%
+  slippageBps: SLIPPAGE_PRESETS.tight,
+  slippageAuto: true,
   /** 'priority' | 'jito' — mutually exclusive on Jupiter /swap */
   feeMode: "priority",
-  priorityLevel: "high", // medium | high | veryHigh
-  maxPriorityLamports: 1_000_000,
-  jitoTipLamports: 1_000_000,
   defaultQuoteMint: FARTCOIN_MINT,
 };
 

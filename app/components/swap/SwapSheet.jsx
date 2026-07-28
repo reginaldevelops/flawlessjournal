@@ -25,8 +25,10 @@ import {
   FARTCOIN_MINT,
   JITO_TX_URL,
   QUOTE_TOKENS,
+  SLIPPAGE_OPTIONS,
 } from "../../lib/swap/constants";
-import { loadSwapSettings } from "../../lib/swap/settings";
+import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
+import { suggestSlippageBps } from "../../lib/swap/slippage";
 import { appendFillToPosition } from "../../lib/swap/journal";
 import { formatCurrency } from "../../lib/format";
 
@@ -89,6 +91,7 @@ export default function SwapSheet({
   const [swapping, setSwapping] = useState(false);
   const [error, setError] = useState(null);
   const [prices, setPrices] = useState({});
+  const [feeEstimate, setFeeEstimate] = useState(null);
 
   const quoteToken = useMemo(
     () => QUOTE_TOKENS.find((t) => t.mint === quoteMint) ?? QUOTE_TOKENS[0],
@@ -97,8 +100,15 @@ export default function SwapSheet({
 
   const positionMint = token?.address;
   const positionSymbol = token?.symbol || "TOKEN";
-  // Position token decimals — default 6 (pump.fun); refined from quote response when available
-  const [tokenDecimals, setTokenDecimals] = useState(6);
+  const [tokenDecimals] = useState(6);
+
+  const pairContext = useMemo(
+    () => ({
+      ageHours: token?.ageHours ?? null,
+      changeH1: token?.changeH1 ?? null,
+    }),
+    [token?.ageHours, token?.changeH1]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -107,9 +117,45 @@ export default function SwapSheet({
     setQuote(null);
     setError(null);
     const s = loadSwapSettings();
-    setSettings(s);
-    setQuoteMint(s.defaultQuoteMint || FARTCOIN_MINT);
-  }, [open, initialSide, token?.address]);
+    const autoBps = suggestSlippageBps({
+      ageHours: token?.ageHours ?? null,
+      changeH1: token?.changeH1 ?? null,
+    });
+    const next = {
+      ...s,
+      slippageBps:
+        s.slippageAuto !== false
+          ? autoBps
+          : normalizeSlippage(s.slippageBps),
+      slippageAuto: s.slippageAuto !== false,
+    };
+    saveSwapSettings(next);
+    setSettings(next);
+    setQuoteMint(next.defaultQuoteMint || FARTCOIN_MINT);
+  }, [open, initialSide, token?.address, token?.ageHours, token?.changeH1]);
+
+  // Live p90 fee estimate (capped)
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/swap/fees?feeMode=${settings.feeMode === "jito" ? "jito" : "priority"}`
+        );
+        const data = await res.json();
+        if (!cancelled && res.ok) setFeeEstimate(data);
+      } catch {
+        /* ignore — build route re-estimates anyway */
+      }
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [open, settings.feeMode]);
 
   useEffect(() => {
     if (!open || !positionMint) return undefined;
@@ -483,18 +529,27 @@ export default function SwapSheet({
         </div>
 
         {preview && (
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <Stat
-              label="Est. entry / px"
-              value={formatCurrency(preview.priceUsd, {
-                compact: preview.priceUsd < 0.01,
-                decimals: preview.priceUsd < 0.01 ? 6 : 4,
-              })}
-            />
-            <Stat
-              label="$ value"
-              value={formatCurrency(preview.usdValue, { compact: true })}
-            />
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <Stat
+                label="Est. entry / px"
+                value={formatCurrency(preview.priceUsd, {
+                  compact: preview.priceUsd < 0.01,
+                  decimals: preview.priceUsd < 0.01 ? 6 : 4,
+                })}
+              />
+              <Stat
+                label="$ value"
+                value={formatCurrency(preview.usdValue, { compact: true })}
+              />
+            </div>
+            <p className="px-0.5 text-2xs text-content-subtle">
+              Slippage{" "}
+              <span className="font-mono tnum text-content">
+                {(Number(settings.slippageBps) / 100).toFixed(1)}%
+              </span>
+              {settings.slippageAuto !== false ? " · auto" : ""}
+            </p>
           </div>
         )}
 
@@ -521,7 +576,12 @@ export default function SwapSheet({
           )}
         </div>
 
-        <SwapSettingsPanel open={settingsOpen} onChange={setSettings} />
+        <SwapSettingsPanel
+          open={settingsOpen}
+          onChange={setSettings}
+          pairContext={pairContext}
+          feeEstimate={feeEstimate}
+        />
 
         <p className="text-2xs leading-relaxed text-content-subtle">
           Phantom will ask you to sign once per swap (web apps can’t silent
@@ -531,6 +591,12 @@ export default function SwapSheet({
       </div>
     </Sheet>
   );
+}
+
+function normalizeSlippage(bps) {
+  const n = Number(bps);
+  if (n === SLIPPAGE_OPTIONS[1].bps) return SLIPPAGE_OPTIONS[1].bps;
+  return SLIPPAGE_OPTIONS[0].bps;
 }
 
 function Stat({ label, value }) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchJson } from "../../../lib/chain/http";
-import { JUPITER_SWAP_API } from "../../../lib/swap/constants";
+import { DEFAULT_RPC, JUPITER_SWAP_API } from "../../../lib/swap/constants";
+import { estimateSwapFees } from "../../../lib/swap/fees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,9 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/swap/build
  * Body: { quoteResponse, userPublicKey, settings }
- * Returns Jupiter { swapTransaction, lastValidBlockHeight, ... }
+ *
+ * Priority / Jito amounts are always taken from live p90 estimates and
+ * hard-capped ($0.30 priority, $0.50 Jito) — client values are ignored.
  */
 export async function POST(request) {
   try {
@@ -22,27 +25,27 @@ export async function POST(request) {
       );
     }
 
+    const feeMode = settings.feeMode === "jito" ? "jito" : "priority";
+    const fees = await estimateSwapFees({
+      rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_RPC,
+      feeMode,
+    });
+
     const payload = {
       quoteResponse,
       userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
-      dynamicSlippage: settings.manualMode === false,
+      dynamicSlippage: false,
     };
 
-    if (settings.feeMode === "jito") {
+    if (feeMode === "jito") {
       payload.prioritizationFeeLamports = {
-        jitoTipLamports: Math.max(1000, Number(settings.jitoTipLamports) || 1_000_000),
+        jitoTipLamports: fees.jito.lamports,
       };
     } else {
-      payload.prioritizationFeeLamports = {
-        priorityLevelWithMaxLamports: {
-          maxLamports: Math.max(1000, Number(settings.maxPriorityLamports) || 1_000_000),
-          priorityLevel: ["medium", "high", "veryHigh"].includes(settings.priorityLevel)
-            ? settings.priorityLevel
-            : "high",
-        },
-      };
+      // Exact lamports from p90 × CU estimate, capped at $0.30
+      payload.prioritizationFeeLamports = fees.priority.lamports;
     }
 
     const result = await fetchJson(`${JUPITER_SWAP_API}/swap`, {
@@ -53,9 +56,10 @@ export async function POST(request) {
       body: JSON.stringify(payload),
     });
 
-    return NextResponse.json(result, {
-      headers: { "Cache-Control": "no-store" },
-    });
+    return NextResponse.json(
+      { ...result, feeEstimate: fees },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     console.error("[swap/build]", error);
     return NextResponse.json(
