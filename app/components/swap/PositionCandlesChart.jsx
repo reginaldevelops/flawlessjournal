@@ -12,8 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  useXAxis,
-  useYAxis,
+  usePlotArea,
 } from "recharts";
 import { ExternalLink } from "lucide-react";
 import { cn, useChartColors } from "../ui";
@@ -217,6 +216,7 @@ export default function PositionCandlesChart({
                 component={() => (
                   <CandlesLayer
                     candles={chartData}
+                    yDomain={yDomain}
                     upColor={colors.profit}
                     downColor={colors.loss}
                   />
@@ -259,16 +259,31 @@ export default function PositionCandlesChart({
   );
 }
 
-/** Draw OHLC candles using axis scales from the chart context (Recharts 3). */
-function CandlesLayer({ candles, upColor, downColor }) {
-  const xAxis = useXAxis(0);
-  const yAxis = useYAxis(0);
-  if (!xAxis?.scale || !yAxis?.scale || !Array.isArray(candles) || candles.length < 2) {
+/** Draw OHLC candles using the plot area (Recharts 3.1 has usePlotArea, not useXAxis). */
+function CandlesLayer({ candles, yDomain, upColor, downColor }) {
+  const plot = usePlotArea();
+  if (
+    !plot ||
+    !Array.isArray(candles) ||
+    candles.length < 2 ||
+    !Array.isArray(yDomain) ||
+    !Number.isFinite(yDomain[0]) ||
+    !Number.isFinite(yDomain[1]) ||
+    !(yDomain[1] > yDomain[0])
+  ) {
     return null;
   }
 
-  const xScale = xAxis.scale;
-  const yScale = yAxis.scale;
+  const xMin = candles[0].t;
+  const xMax = candles[candles.length - 1].t;
+  const xSpan = xMax - xMin || 1;
+  const yMin = yDomain[0];
+  const yMax = yDomain[1];
+  const ySpan = yMax - yMin || 1;
+
+  const xScale = (t) => plot.x + ((t - xMin) / xSpan) * plot.width;
+  const yScale = (p) => plot.y + ((yMax - p) / ySpan) * plot.height;
+
   const band =
     candles.length > 1
       ? Math.abs(xScale(candles[1].t) - xScale(candles[0].t))
