@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ChartNoAxesCombined,
+  Globe2,
   LayoutDashboard,
   NotebookPen,
   Radar,
@@ -26,6 +27,12 @@ export const NAV_ITEMS = [
     label: "Scanner",
     icon: Radar,
     description: "Volume breakouts across DexScreener pairs",
+  },
+  {
+    href: "/chain",
+    label: "Chain",
+    icon: Globe2,
+    description: "On-chain volume, TVL and platform heat",
   },
   {
     href: "/journal",
