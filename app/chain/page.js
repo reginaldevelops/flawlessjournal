@@ -403,21 +403,21 @@ export default function ChainAnalysisPage() {
                     label="Tokens launched 24h"
                     value={
                       pump?.launches24h != null
-                        ? formatNumber(pump.launches24h, { decimals: 0 })
+                        ? `~${formatNumber(pump.launches24h, { decimals: 0 })}`
                         : "—"
                     }
-                    sublabel={pump?.note ? "pump.fun estimate" : undefined}
+                    sublabel="pump.fun rate × 24h"
                     hint={pump?.note || "Estimated pump.fun create rate × 24h."}
                   />
                   <StatCard
                     label="Tokens migrated 24h"
                     value={
                       pump?.migrations24h != null
-                        ? formatNumber(pump.migrations24h, { decimals: 0 })
+                        ? `~${formatNumber(pump.migrations24h, { decimals: 0 })}`
                         : "—"
                     }
-                    sublabel="graduated estimate"
-                    hint="Estimated completed/graduated pump.fun coins × 24h."
+                    sublabel="graduated rate × 24h"
+                    hint="Estimated completed/graduated pump.fun coins (rate × 24h)."
                   />
                 </>
               ) : (
