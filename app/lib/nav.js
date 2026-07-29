@@ -21,7 +21,7 @@ export const NAV_ITEMS = [
     href: "/terminal",
     label: "Terminal",
     icon: LineChart,
-    description: "Live chart + swap on any Solana token",
+    description: "TradingView chart + Jupiter swap on any Solana token",
   },
   {
     href: "/trades",

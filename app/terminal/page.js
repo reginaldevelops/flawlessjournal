@@ -9,7 +9,8 @@ import {
   PageBody,
   PageHeader,
 } from "../components/ui";
-import LiveTokenChart from "../components/terminal/LiveTokenChart";
+import DexScreenerChart from "../components/terminal/DexScreenerChart";
+import SessionFillsBar from "../components/terminal/SessionFillsBar";
 import SwapSheet from "../components/swap/SwapSheet";
 import { isValidSolanaAddress } from "../lib/chain/validate";
 
@@ -83,7 +84,7 @@ function TerminalPageInner() {
     <>
       <PageHeader
         title="Terminal"
-        description="Paste a contract address, watch the chart, and swap without leaving the screen."
+        description="Paste a contract address — TradingView chart with buy/sell panel."
       />
 
       <PageBody wide className="flex min-h-0 flex-1 flex-col gap-0 p-0">
@@ -141,12 +142,12 @@ function TerminalPageInner() {
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-h-[24rem] min-w-0 flex-1 flex-col border-b border-line lg:border-b-0 lg:border-r">
-            <LiveTokenChart
-              mint={token?.address}
+            <DexScreenerChart
+              pairAddress={token?.pairAddress}
               pairUrl={token?.url}
               symbol={token?.symbol}
-              entryMarks={sessionFills}
             />
+            <SessionFillsBar fills={sessionFills} />
           </div>
 
           <aside className="flex w-full shrink-0 flex-col lg:w-[22rem] xl:w-[24rem]">
@@ -164,7 +165,7 @@ function TerminalPageInner() {
                 <LineChart size={32} className="mb-3 text-content-subtle" aria-hidden />
                 <p className="text-sm font-medium text-content">No token loaded</p>
                 <p className="mt-1 max-w-xs text-2xs text-content-subtle">
-                  Paste a Solana mint address above to load live candles and open the swap panel.
+                  Paste a Solana mint address above to load the TradingView chart and swap panel.
                 </p>
               </div>
             )}
