@@ -17,7 +17,11 @@ import SwapSheet from "../components/swap/SwapSheet";
 import TerminalSidebar, { WatchlistToggle } from "../components/terminal/TerminalSidebar";
 import TokenInfoPanel from "../components/terminal/TokenInfoPanel";
 import { useTerminalLayout } from "../components/terminal/useTerminalLayout";
-import { isValidSolanaAddress } from "../lib/chain/validate";
+import {
+  isValidTerminalTokenAddress,
+  normalizeTerminalQuery,
+  terminalAddressError,
+} from "../lib/terminal/validate";
 import { mergeRecent, tokenListEntry } from "../lib/terminal/mapPair";
 
 const WATCHLIST_KEY = "flawless.terminal.watchlist";
@@ -49,15 +53,16 @@ function TerminalPageInner() {
 
   const loadToken = useCallback(
     async (mint) => {
-      const trimmed = String(mint || "").trim();
+      const trimmed = normalizeTerminalQuery(mint);
       if (!trimmed) {
         setToken(null);
         setLookupError(null);
         return;
       }
-      if (!isValidSolanaAddress(trimmed)) {
+      const addrErr = terminalAddressError(trimmed);
+      if (addrErr) {
         setToken(null);
-        setLookupError("Enter a valid Solana contract address (32-byte base58 mint).");
+        setLookupError(addrErr);
         return;
       }
 
@@ -78,8 +83,8 @@ function TerminalPageInner() {
           setRecent((prev) => mergeRecent(prev, entry, 20));
           setWatchlist((prev) =>
             (Array.isArray(prev) ? prev : []).map((w) =>
-              w.address === entry.address
-                ? { ...w, priceUsd: entry.priceUsd, symbol: entry.symbol, imageUrl: entry.imageUrl }
+              w.address === entry.address && (w.chainId ?? "solana") === (entry.chainId ?? "solana")
+                ? { ...w, priceUsd: entry.priceUsd, symbol: entry.symbol, imageUrl: entry.imageUrl, chainId: entry.chainId }
                 : w
             )
           );
@@ -122,8 +127,16 @@ function TerminalPageInner() {
   }, []);
 
   const inWatchlist = useMemo(
-    () => Boolean(token?.address && watchlist.some((w) => w.address === token.address)),
-    [token?.address, watchlist]
+    () =>
+      Boolean(
+        token?.address &&
+          watchlist.some(
+            (w) =>
+              w.address === token.address &&
+              (w.chainId ?? "solana") === (token.chainId ?? "solana")
+          )
+      ),
+    [token?.address, token?.chainId, watchlist]
   );
 
   const toggleWatchlist = useCallback(() => {
@@ -132,8 +145,14 @@ function TerminalPageInner() {
     if (!entry) return;
     setWatchlist((prev) => {
       const list = Array.isArray(prev) ? prev : [];
-      if (list.some((w) => w.address === token.address)) {
-        return list.filter((w) => w.address !== token.address);
+      if (list.some((w) => w.address === token.address && (w.chainId ?? "solana") === (token.chainId ?? "solana"))) {
+        return list.filter(
+          (w) =>
+            !(
+              w.address === token.address &&
+              (w.chainId ?? "solana") === (token.chainId ?? "solana")
+            )
+        );
       }
       return [entry, ...list];
     });
@@ -167,7 +186,7 @@ function TerminalPageInner() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Paste Solana contract address (CA)…"
+              placeholder="Solana mint or Robinhood / EVM address (0x…)…"
               className="pl-9 font-mono text-sm"
               spellCheck={false}
               autoComplete="off"
@@ -218,7 +237,8 @@ function TerminalPageInner() {
               style={{ height: chartHeight }}
             >
               <DexScreenerChart
-                key={token?.address || "empty"}
+                key={`${token?.chainId}-${token?.address}` || "empty"}
+                chainId={token?.chainId}
                 pairAddress={token?.pairAddress}
                 pairUrl={token?.url}
                 symbol={token?.symbol}
@@ -260,15 +280,26 @@ function TerminalPageInner() {
               </div>
               <div className="shrink-0 border-t border-line">
                 {token ? (
-                  <div className="max-h-[28rem] min-h-[18rem] overflow-y-auto">
-                    <SwapSheet
-                      key={token.address}
-                      embedded
-                      token={token}
-                      initialSide="buy"
-                      onSuccess={handleSwapSuccess}
-                    />
-                  </div>
+                  token.swapEnabled !== false ? (
+                    <div className="max-h-[28rem] min-h-[18rem] overflow-y-auto">
+                      <SwapSheet
+                        key={token.address}
+                        embedded
+                        token={token}
+                        initialSide="buy"
+                        onSuccess={handleSwapSuccess}
+                      />
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-content">Swap not available</p>
+                      <p className="mt-1 text-2xs text-content-subtle">
+                        Jupiter swaps are Solana-only. Chart and stats work for{" "}
+                        <span className="capitalize">{token.chainId}</span> tokens — use
+                        DexScreener or your wallet to trade on-chain.
+                      </p>
+                    </div>
+                  )
                 ) : (
                   <p className="px-4 py-8 text-center text-2xs text-content-subtle">
                     Load a token to swap
@@ -281,13 +312,19 @@ function TerminalPageInner() {
           <div className="border-t border-line lg:hidden">
             <TokenInfoPanel token={token} />
             {token ? (
-              <SwapSheet
-                key={token.address}
-                embedded
-                token={token}
-                initialSide="buy"
-                onSuccess={handleSwapSuccess}
-              />
+              token.swapEnabled !== false ? (
+                <SwapSheet
+                  key={token.address}
+                  embedded
+                  token={token}
+                  initialSide="buy"
+                  onSuccess={handleSwapSuccess}
+                />
+              ) : (
+                <p className="px-4 py-6 text-center text-2xs text-content-subtle">
+                  Swap is Solana-only. View chart &amp; stats above.
+                </p>
+              )
             ) : null}
           </div>
         </div>

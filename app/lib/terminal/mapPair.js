@@ -5,6 +5,19 @@ function num(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+export function normalizeTerminalAddress(address, chainId = "solana") {
+  const raw = String(address ?? "").trim();
+  if (!raw) return raw;
+  if (chainId !== "solana" || raw.startsWith("0x")) {
+    return raw.toLowerCase();
+  }
+  return raw;
+}
+
+export function addressesEqual(a, b, chainId = "solana") {
+  return normalizeTerminalAddress(a, chainId) === normalizeTerminalAddress(b, chainId);
+}
+
 export function pairAgeHours(pairCreatedAt) {
   const ts = num(pairCreatedAt);
   if (ts == null) return null;
@@ -20,6 +33,43 @@ export function pairCreatedIso(pairCreatedAt) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+function pairIncludesToken(pair, tokenAddress) {
+  const chainId = pair?.chainId ?? "solana";
+  const base = pair?.baseToken?.address;
+  const quote = pair?.quoteToken?.address;
+  return (
+    addressesEqual(base, tokenAddress, chainId) ||
+    addressesEqual(quote, tokenAddress, chainId)
+  );
+}
+
+/**
+ * Best pool for a token across DexScreener chains (Solana, Robinhood, EVM, …).
+ */
+export function pickBestPairForToken(pairsPayload, tokenAddress, { preferChains } = {}) {
+  const prefer = preferChains?.length ? preferChains : null;
+  const pairs = (pairsPayload?.pairs ?? pairsPayload ?? []).filter(
+    (p) => p?.pairAddress && pairIncludesToken(p, tokenAddress)
+  );
+  if (!pairs.length) return null;
+
+  const ranked = pairs.sort((a, b) => {
+    const liqA = Number(a.liquidity?.usd) || 0;
+    const liqB = Number(b.liquidity?.usd) || 0;
+    if (prefer) {
+      const prefA = prefer.indexOf(String(a.chainId).toLowerCase());
+      const prefB = prefer.indexOf(String(b.chainId).toLowerCase());
+      const boostA = prefA >= 0 ? 1_000_000_000 - prefA * 1000 : 0;
+      const boostB = prefB >= 0 ? 1_000_000_000 - prefB * 1000 : 0;
+      return liqB + boostB - (liqA + boostA);
+    }
+    return liqB - liqA;
+  });
+
+  return ranked[0];
+}
+
+/** @deprecated use pickBestPairForToken */
 export function pickBestSolanaPair(pairsPayload, mint) {
   const pairs = (pairsPayload?.pairs ?? pairsPayload ?? [])
     .filter((p) => p?.chainId === "solana" && p?.pairAddress);
@@ -29,20 +79,24 @@ export function pickBestSolanaPair(pairsPayload, mint) {
   )[0];
 }
 
-export function mapPairToTerminalToken(mint, pair, meta = null) {
+export function mapPairToTerminalToken(tokenAddress, pair, meta = null) {
+  const chainId = String(pair?.chainId ?? "solana").toLowerCase();
+  const mint = normalizeTerminalAddress(tokenAddress, chainId);
   const base = pair?.baseToken;
   const quote = pair?.quoteToken;
   const info = pair?.info ?? {};
   const symbol =
-    (base?.address === mint ? base?.symbol : null) ??
-    (quote?.address === mint ? quote?.symbol : null) ??
+    (addressesEqual(base?.address, mint, chainId) ? base?.symbol : null) ??
+    (addressesEqual(quote?.address, mint, chainId) ? quote?.symbol : null) ??
     meta?.symbol ??
     "TOKEN";
   const name =
-    (base?.address === mint ? base?.name : null) ??
-    (quote?.address === mint ? quote?.name : null) ??
+    (addressesEqual(base?.address, mint, chainId) ? base?.name : null) ??
+    (addressesEqual(quote?.address, mint, chainId) ? quote?.name : null) ??
     meta?.name ??
     "Token";
+
+  const defaultUrl = `https://dexscreener.com/${chainId}/${pair?.pairAddress ?? mint}`;
 
   return {
     address: mint,
@@ -51,10 +105,11 @@ export function mapPairToTerminalToken(mint, pair, meta = null) {
     imageUrl: info.imageUrl ?? meta?.logo ?? null,
     headerImageUrl: info.header ?? null,
     pairAddress: pair?.pairAddress ?? null,
-    url: pair?.url ?? `https://dexscreener.com/solana/${mint}`,
+    url: pair?.url ?? defaultUrl,
     dexId: pair?.dexId ?? null,
     labels: Array.isArray(pair?.labels) ? pair.labels : [],
-    chainId: "solana",
+    chainId,
+    swapEnabled: chainId === "solana",
     priceUsd: num(pair?.priceUsd),
     priceNative: num(pair?.priceNative),
     liquidity: {
@@ -79,10 +134,18 @@ export function mapPairToTerminalToken(mint, pair, meta = null) {
     pairCreatedAt: pairCreatedIso(pair?.pairCreatedAt),
     ageHours: pairAgeHours(pair?.pairCreatedAt),
     quoteToken: quote
-      ? { symbol: quote.symbol, name: quote.name, address: quote.address }
+      ? {
+          symbol: quote.symbol,
+          name: quote.name,
+          address: normalizeTerminalAddress(quote.address, chainId),
+        }
       : null,
     baseToken: base
-      ? { symbol: base.symbol, name: base.name, address: base.address }
+      ? {
+          symbol: base.symbol,
+          name: base.name,
+          address: normalizeTerminalAddress(base.address, chainId),
+        }
       : null,
     websites: Array.isArray(info.websites) ? info.websites : [],
     socials: Array.isArray(info.socials) ? info.socials : [],
@@ -106,6 +169,7 @@ export function tokenListEntry(token) {
     imageUrl: token.imageUrl ?? null,
     pairAddress: token.pairAddress ?? null,
     url: token.url ?? null,
+    chainId: token.chainId ?? "solana",
     priceUsd: token.priceUsd ?? null,
     viewedAt: token.viewedAt ?? new Date().toISOString(),
   };
@@ -114,6 +178,23 @@ export function tokenListEntry(token) {
 export function mergeRecent(list, entry, max = 20) {
   if (!entry?.address) return list ?? [];
   const prev = Array.isArray(list) ? list : [];
-  const next = [entry, ...prev.filter((r) => r.address !== entry.address)];
+  const next = [
+    entry,
+    ...prev.filter(
+      (r) =>
+        !(
+          r.address === entry.address &&
+          (r.chainId ?? "solana") === (entry.chainId ?? "solana")
+        )
+    ),
+  ];
   return next.slice(0, max);
+}
+
+export function preferredChainsForInput(address) {
+  const raw = String(address ?? "").trim();
+  if (raw.startsWith("0x")) {
+    return ["robinhood", "base", "ethereum", "bsc", "arbitrum"];
+  }
+  return ["solana"];
 }
