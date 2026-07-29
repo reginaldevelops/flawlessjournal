@@ -108,8 +108,24 @@ export function classifyFillRoleAfter(tokensOpenBefore, side, tokenAmount) {
   const open = n(tokensOpenBefore);
   const qty = n(tokenAmount);
   if (open <= 1e-12) return "orphan";
-  const after = open - qty;
+  const effective = Math.min(qty, open);
+  const after = open - effective;
   return after <= 1e-12 ? "close" : "reduce";
+}
+
+/** Apply one fill to running token balance (caps oversell at zero). */
+export function applyFillToTokensOpen(tokensOpen, side, tokenAmount) {
+  const open = n(tokensOpen);
+  const qty = n(tokenAmount);
+  if (side === "buy") return open + qty;
+  return Math.max(0, open - qty);
+}
+
+export function isOversell(tokensOpenBefore, side, tokenAmount) {
+  if (side !== "sell") return false;
+  const open = n(tokensOpenBefore);
+  const qty = n(tokenAmount);
+  return open > 1e-12 && qty > open + 1e-6;
 }
 
 export const FILL_ROLE_META = {
@@ -160,6 +176,14 @@ export function tokensOpenBefore(fills, beforeTs) {
   const t = Date.parse(beforeTs || 0);
   if (!Number.isFinite(t)) return 0;
   const before = (fills ?? []).filter((f) => Date.parse(f.ts || 0) < t - 500);
+  return computePosition(before).tokensOpen;
+}
+
+/** Tokens open before an exact timestamp (no 500ms gap — for import batch boundaries). */
+export function tokensOpenAtTime(fills, beforeTs) {
+  const t = Date.parse(beforeTs || 0);
+  if (!Number.isFinite(t)) return 0;
+  const before = (fills ?? []).filter((f) => Date.parse(f.ts || 0) < t);
   return computePosition(before).tokensOpen;
 }
 
