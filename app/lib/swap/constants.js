@@ -89,6 +89,8 @@ export const POSITION_UI_REFRESH_MS = LIVE_POSITIONS_REFRESH_MS;
 /** Swap confirm polling — journal app, not a sniper bot. */
 export const SWAP_CONFIRM_POLL_MS = 2500;
 
-/** Wallet sync: free RPC is slow — hard batch caps, never full history. */
-export const SYNC_BATCH_DEFAULT = 150;
-export const SYNC_BATCH_MAX = 200;
+/** Wallet sync: free RPC — batch sized to finish within server timeout. */
+export const SYNC_BATCH_DEFAULT = 100;
+export const SYNC_BATCH_MAX = 120;
+/** Delay between getTransaction calls (ms) — lower = faster but more rate limits. */
+export const SYNC_TX_DELAY_MS = 50;
