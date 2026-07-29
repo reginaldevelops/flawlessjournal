@@ -14,6 +14,23 @@ export function formatSlippageExceededError(slippageBps = 50) {
   return `Slippage tolerance exceeded (limit ${pct}%). Price moved before the swap landed. Try again — the quote refreshes every few seconds — or raise slippage in Swap settings (e.g. 4% for volatile tokens).`;
 }
 
+export function isSimulationRpcError(message) {
+  const s = String(message ?? "").toLowerCase();
+  return s.includes("simulation failed") || s.includes("preflight");
+}
+
+/** Jupiter route / underlying DEX simulation failure (often stale quote or already swapped). */
+export function isRouteSimulationError(message) {
+  const s = String(message ?? "").toLowerCase();
+  return (
+    isSimulationRpcError(s) &&
+    (s.includes("0x1900") ||
+      s.includes("0x1788") ||
+      s.includes("0x1771") ||
+      s.includes("custom program error"))
+  );
+}
+
 export function formatSwapExecutionError(err, { slippageBps } = {}) {
   const raw = String(err?.message ?? err ?? "Swap failed");
   if (isSlippageRpcError(raw)) {
@@ -25,8 +42,11 @@ export function formatSwapExecutionError(err, { slippageBps } = {}) {
   if (/simulation failed/i.test(raw) && /insufficient/i.test(raw)) {
     return "Insufficient balance for this swap amount (include SOL for fees).";
   }
-  if (/blockhash|expired/i.test(raw)) {
-    return "Transaction expired — try the swap again.";
+  if (isRouteSimulationError(raw)) {
+    return "Swap simulation failed — the quote may be stale, or a previous attempt already went through (check your wallet). Wait for the live quote to refresh before retrying.";
+  }
+  if (/blockhash|expired|timed out|timeout/i.test(raw)) {
+    return "Transaction expired or confirmation timed out — check your wallet before retrying. If tokens moved, do not submit again with the same amount.";
   }
   return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
 }

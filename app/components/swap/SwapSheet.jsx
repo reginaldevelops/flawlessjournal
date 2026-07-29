@@ -31,6 +31,10 @@ import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
 import { suggestSlippageBps } from "../../lib/swap/slippage";
 import { appendFillToPosition } from "../../lib/swap/journal";
 import { formatSwapExecutionError } from "../../lib/swap/errors";
+import {
+  getSuccessfulSignatureStatus,
+  waitForSignatureConfirmation,
+} from "../../lib/swap/confirm";
 import { formatCurrency } from "../../lib/format";
 
 const QUOTE_REFRESH_MS = 5000;
@@ -362,11 +366,13 @@ export default function SwapSheet({
 
     setSwapping(true);
     setError(null);
+    let signature = null;
+    let livePreview = null;
     try {
       const slippageBps = Number(settings.slippageBps) || SLIPPAGE_PRESETS.tight;
 
       const freshQuote = await fetchQuoteAtSlippage(slippageBps);
-      const livePreview = computePreviewFromQuote(freshQuote);
+      livePreview = computePreviewFromQuote(freshQuote);
       if (!livePreview) throw new Error("Could not compute swap preview");
 
       setQuote(freshQuote);
@@ -403,13 +409,9 @@ export default function SwapSheet({
       if (!broadcastRes.ok || !broadcastJson.signature) {
         throw new Error(broadcastJson.error || "Transaction broadcast failed");
       }
-      const signature = broadcastJson.signature;
+      signature = broadcastJson.signature;
 
-      const latest = await connection.getLatestBlockhash();
-      await connection.confirmTransaction(
-        { signature, ...latest },
-        "confirmed"
-      );
+      await waitForSignatureConfirmation(connection, signature);
 
       let blockTime = Math.floor(Date.now() / 1000);
       try {
@@ -451,6 +453,56 @@ export default function SwapSheet({
         window.location.href = `/trade/${result.tradeId}`;
       }
     } catch (err) {
+      if (signature && livePreview) {
+        const recovered = await getSuccessfulSignatureStatus(connection, signature);
+        if (recovered) {
+          try {
+            let blockTime = Math.floor(Date.now() / 1000);
+            try {
+              const parsed = await connection.getTransaction(signature, {
+                maxSupportedTransactionVersion: 0,
+              });
+              if (parsed?.blockTime) blockTime = parsed.blockTime;
+            } catch {
+              /* keep wall-clock fallback */
+            }
+
+            const result = await appendFillToPosition({
+              tradeId,
+              tokenMint: positionMint,
+              tokenSymbol: positionSymbol,
+              tokenName: token?.name,
+              pairUrl: token?.url,
+              imageUrl: token?.imageUrl,
+              side,
+              signature,
+              quoteMint,
+              quoteSymbol: quoteToken.symbol,
+              quoteAmount: livePreview.quoteAmt,
+              tokenAmount: livePreview.tokenAmt,
+              priceUsd: livePreview.priceUsd,
+              usdValue: livePreview.usdValue,
+              wallet: wallet.publicKey.toBase58(),
+              blockTime,
+            });
+
+            toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
+              description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
+            });
+
+            onClose?.();
+            if (onSuccess) {
+              onSuccess(result);
+            } else if (result?.tradeId) {
+              window.location.href = `/trade/${result.tradeId}`;
+            }
+            return;
+          } catch (recoverErr) {
+            console.error("[swap] recovery failed after on-chain success", recoverErr);
+          }
+        }
+      }
+
       console.error(err);
       const message = formatSwapExecutionError(err, {
         slippageBps: settings.slippageBps,
