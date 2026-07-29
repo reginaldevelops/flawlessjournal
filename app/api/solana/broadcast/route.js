@@ -78,7 +78,7 @@ export async function POST(request) {
       /403|forbidden|access forbidden/i.test(message)
         ? "Solana RPC rejected the transaction. Set SOLANA_RPC_URL (Helius/QuickNode) in Vercel env, or retry in a moment."
         : /0x1771|6001|slippage/i.test(message)
-          ? "Price moved too fast (slippage exceeded). Retry the swap — a fresh quote with 4% slippage is applied automatically."
+          ? "Slippage tolerance exceeded — price moved before the swap landed. Retry with the live quote or raise slippage in Swap settings."
           : message;
     return NextResponse.json({ error: friendly }, { status: 502 });
   }

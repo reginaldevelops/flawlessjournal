@@ -30,8 +30,10 @@ import {
 import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
 import { suggestSlippageBps } from "../../lib/swap/slippage";
 import { appendFillToPosition } from "../../lib/swap/journal";
-import { formatSwapExecutionError, isSlippageRpcError } from "../../lib/swap/errors";
+import { formatSwapExecutionError } from "../../lib/swap/errors";
 import { formatCurrency } from "../../lib/format";
+
+const QUOTE_REFRESH_MS = 5000;
 
 function toRawAmount(human, decimals) {
   const n = Number(human);
@@ -92,6 +94,7 @@ export default function SwapSheet({
   const [amount, setAmount] = useState("");
   const [amountUnit, setAmountUnit] = useState("quote"); // quote | usd
   const [quote, setQuote] = useState(null);
+  const [quoteUpdatedAt, setQuoteUpdatedAt] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [swapping, setSwapping] = useState(false);
   const [error, setError] = useState(null);
@@ -120,6 +123,7 @@ export default function SwapSheet({
     setSide(initialSide);
     setAmount("");
     setQuote(null);
+    setQuoteUpdatedAt(null);
     setError(null);
     const s = loadSwapSettings();
     const autoBps = suggestSlippageBps({
@@ -274,6 +278,7 @@ export default function SwapSheet({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Quote failed");
         setQuote(data);
+        setQuoteUpdatedAt(Date.now());
         // Infer token decimals from route amounts when buying
         if (side === "buy" && data.outAmount) {
           // keep existing unless we learn better — pump tokens are usually 6
@@ -303,6 +308,39 @@ export default function SwapSheet({
     side,
   ]);
 
+  // Keep quote fresh while the sheet is open (avoids stale prices at sign time)
+  useEffect(() => {
+    if (!open || !positionMint || !wallet.publicKey || swapping) return undefined;
+    const human = resolveHumanInput();
+    if (human == null) return undefined;
+    const raw = toRawAmount(human, inputDecimals);
+    if (!raw || raw === "0") return undefined;
+
+    const refresh = async () => {
+      try {
+        const data = await fetchQuoteAtSlippage(
+          settings.slippageBps || SLIPPAGE_PRESETS.tight
+        );
+        setQuote(data);
+        setQuoteUpdatedAt(Date.now());
+      } catch {
+        /* keep last quote on background refresh failure */
+      }
+    };
+
+    const id = setInterval(refresh, QUOTE_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [
+    open,
+    positionMint,
+    wallet.publicKey,
+    swapping,
+    resolveHumanInput,
+    inputDecimals,
+    settings.slippageBps,
+    fetchQuoteAtSlippage,
+  ]);
+
   const preview = useMemo(
     () => computePreviewFromQuote(quote),
     [quote, computePreviewFromQuote]
@@ -325,122 +363,98 @@ export default function SwapSheet({
     setSwapping(true);
     setError(null);
     try {
-      const slippageSteps = [
-        ...new Set([
-          Number(settings.slippageBps) || SLIPPAGE_PRESETS.tight,
-          SLIPPAGE_PRESETS.loose,
-        ]),
-      ];
+      const slippageBps = Number(settings.slippageBps) || SLIPPAGE_PRESETS.tight;
 
-      let freshQuote = null;
-      let livePreview = null;
-      let lastError = null;
+      const freshQuote = await fetchQuoteAtSlippage(slippageBps);
+      const livePreview = computePreviewFromQuote(freshQuote);
+      if (!livePreview) throw new Error("Could not compute swap preview");
 
-      for (let i = 0; i < slippageSteps.length; i += 1) {
-        const slippageBps = slippageSteps[i];
-        try {
-          if (i > 0) {
-            setError("Price moved — refreshing quote with 4% slippage…");
-          }
+      setQuote(freshQuote);
+      setQuoteUpdatedAt(Date.now());
 
-          freshQuote = await fetchQuoteAtSlippage(slippageBps);
-          livePreview = computePreviewFromQuote(freshQuote);
-          if (!livePreview) throw new Error("Could not compute swap preview");
+      const buildRes = await fetch("/api/swap/build", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          quoteResponse: freshQuote,
+          userPublicKey: wallet.publicKey.toBase58(),
+          settings: { ...settings, slippageBps },
+        }),
+      });
+      const built = await buildRes.json();
+      if (!buildRes.ok) throw new Error(built.error || "Could not build swap");
 
-          setQuote(freshQuote);
+      const tx = VersionedTransaction.deserialize(
+        b64ToBytes(built.swapTransaction)
+      );
+      const signed = await wallet.signTransaction(tx);
+      const raw = signed.serialize();
 
-          const buildRes = await fetch("/api/swap/build", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              quoteResponse: freshQuote,
-              userPublicKey: wallet.publicKey.toBase58(),
-              settings: { ...settings, slippageBps },
-            }),
-          });
-          const built = await buildRes.json();
-          if (!buildRes.ok) throw new Error(built.error || "Could not build swap");
+      const b64 = bytesToB64(raw);
+      const broadcastRes = await fetch("/api/solana/broadcast", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transaction: b64,
+          mode: settings.feeMode === "jito" ? "jito" : "priority",
+        }),
+      });
+      const broadcastJson = await broadcastRes.json();
+      if (!broadcastRes.ok || !broadcastJson.signature) {
+        throw new Error(broadcastJson.error || "Transaction broadcast failed");
+      }
+      const signature = broadcastJson.signature;
 
-          const tx = VersionedTransaction.deserialize(
-            b64ToBytes(built.swapTransaction)
-          );
-          const signed = await wallet.signTransaction(tx);
-          const raw = signed.serialize();
+      const latest = await connection.getLatestBlockhash();
+      await connection.confirmTransaction(
+        { signature, ...latest },
+        "confirmed"
+      );
 
-          const b64 = bytesToB64(raw);
-          const broadcastRes = await fetch("/api/solana/broadcast", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              transaction: b64,
-              mode: settings.feeMode === "jito" ? "jito" : "priority",
-            }),
-          });
-          const broadcastJson = await broadcastRes.json();
-          if (!broadcastRes.ok || !broadcastJson.signature) {
-            throw new Error(broadcastJson.error || "Transaction broadcast failed");
-          }
-          const signature = broadcastJson.signature;
-
-          const latest = await connection.getLatestBlockhash();
-          await connection.confirmTransaction(
-            { signature, ...latest },
-            "confirmed"
-          );
-
-          let blockTime = Math.floor(Date.now() / 1000);
-          try {
-            const parsed = await connection.getTransaction(signature, {
-              maxSupportedTransactionVersion: 0,
-            });
-            if (parsed?.blockTime) blockTime = parsed.blockTime;
-          } catch {
-            /* keep wall-clock fallback */
-          }
-
-          const result = await appendFillToPosition({
-            tradeId,
-            tokenMint: positionMint,
-            tokenSymbol: positionSymbol,
-            tokenName: token?.name,
-            pairUrl: token?.url,
-            imageUrl: token?.imageUrl,
-            side,
-            signature,
-            quoteMint,
-            quoteSymbol: quoteToken.symbol,
-            quoteAmount: livePreview.quoteAmt,
-            tokenAmount: livePreview.tokenAmt,
-            priceUsd: livePreview.priceUsd,
-            usdValue: livePreview.usdValue,
-            wallet: wallet.publicKey.toBase58(),
-            blockTime,
-          });
-
-          toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
-            description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
-          });
-
-          onClose?.();
-          if (onSuccess) {
-            onSuccess(result);
-          } else if (result?.tradeId) {
-            window.location.href = `/trade/${result.tradeId}`;
-          }
-          return;
-        } catch (stepErr) {
-          lastError = stepErr;
-          if (isSlippageRpcError(stepErr?.message) && i < slippageSteps.length - 1) {
-            continue;
-          }
-          throw stepErr;
-        }
+      let blockTime = Math.floor(Date.now() / 1000);
+      try {
+        const parsed = await connection.getTransaction(signature, {
+          maxSupportedTransactionVersion: 0,
+        });
+        if (parsed?.blockTime) blockTime = parsed.blockTime;
+      } catch {
+        /* keep wall-clock fallback */
       }
 
-      throw lastError ?? new Error("Swap failed");
+      const result = await appendFillToPosition({
+        tradeId,
+        tokenMint: positionMint,
+        tokenSymbol: positionSymbol,
+        tokenName: token?.name,
+        pairUrl: token?.url,
+        imageUrl: token?.imageUrl,
+        side,
+        signature,
+        quoteMint,
+        quoteSymbol: quoteToken.symbol,
+        quoteAmount: livePreview.quoteAmt,
+        tokenAmount: livePreview.tokenAmt,
+        priceUsd: livePreview.priceUsd,
+        usdValue: livePreview.usdValue,
+        wallet: wallet.publicKey.toBase58(),
+        blockTime,
+      });
+
+      toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
+        description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
+      });
+
+      onClose?.();
+      if (onSuccess) {
+        onSuccess(result);
+      } else if (result?.tradeId) {
+        window.location.href = `/trade/${result.tradeId}`;
+      }
     } catch (err) {
       console.error(err);
-      const message = formatSwapExecutionError(err);
+      const message = formatSwapExecutionError(err, {
+        slippageBps: settings.slippageBps,
+      });
       setError(message);
       toastError("Swap failed", { description: message });
     } finally {
@@ -635,6 +649,12 @@ export default function SwapSheet({
                 {(Number(settings.slippageBps) / 100).toFixed(1)}%
               </span>
               {settings.slippageAuto !== false ? " · auto" : ""}
+              {quoteUpdatedAt ? (
+                <>
+                  {" · "}
+                  {quoting ? "Updating quote…" : "Quote live · refreshes every 5s"}
+                </>
+              ) : null}
             </p>
           </div>
         )}

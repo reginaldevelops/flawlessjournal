@@ -9,10 +9,15 @@ export function isSlippageRpcError(message) {
   );
 }
 
-export function formatSwapExecutionError(err) {
+export function formatSlippageExceededError(slippageBps = 50) {
+  const pct = (Number(slippageBps) / 100).toFixed(1);
+  return `Slippage tolerance exceeded (limit ${pct}%). Price moved before the swap landed. Try again — the quote refreshes every few seconds — or raise slippage in Swap settings (e.g. 4% for volatile tokens).`;
+}
+
+export function formatSwapExecutionError(err, { slippageBps } = {}) {
   const raw = String(err?.message ?? err ?? "Swap failed");
   if (isSlippageRpcError(raw)) {
-    return "Price moved too fast (slippage exceeded). Try again — we’ll use 4% slippage, or pick 4% in swap settings for volatile tokens.";
+    return formatSlippageExceededError(slippageBps ?? 50);
   }
   if (/403|access forbidden|forbidden/i.test(raw)) {
     return "Solana RPC blocked the transaction (403). Retry in a moment — if it persists, add SOLANA_RPC_URL (Helius/QuickNode) in Vercel env.";
