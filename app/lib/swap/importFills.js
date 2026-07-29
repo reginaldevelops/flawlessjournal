@@ -7,6 +7,7 @@ import { buildImportPlan } from "./importPlan";
 import { SYNC_BATCH_DEFAULT } from "./constants";
 
 const STATE_KEY = "flawless.walletSync.state";
+const PENDING_REVIEW_KEY = "flawless.walletSync.pendingReview";
 export const AUTO_SYNC_MS = 24 * 60 * 60 * 1000;
 
 export function loadSyncState() {
@@ -44,6 +45,44 @@ export function clearWalletSyncMeta(address) {
     localStorage.setItem(STATE_KEY, JSON.stringify(all));
   } catch {
     /* ignore */
+  }
+}
+
+/** Persist a completed scan awaiting user review (survives page navigation). */
+export function savePendingImportReview(payload) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      PENDING_REVIEW_KEY,
+      JSON.stringify({ ...payload, savedAt: new Date().toISOString() })
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function loadPendingImportReview() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PENDING_REVIEW_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingImportReview() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(PENDING_REVIEW_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw new DOMException("Sync cancelled", "AbortError");
   }
 }
 
@@ -108,7 +147,9 @@ export function formatSyncProgress(ev) {
   return ev.message || "";
 }
 
-async function readSyncStream(res, onProgress) {
+async function readSyncStream(res, onProgress, signal) {
+  throwIfAborted(signal);
+
   if (!res.body) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`);
@@ -116,39 +157,56 @@ async function readSyncStream(res, onProgress) {
   }
 
   const reader = res.body.getReader();
+  const onAbort = () => {
+    reader.cancel().catch(() => {});
+  };
+  signal?.addEventListener("abort", onAbort);
+
   const decoder = new TextDecoder();
   let buf = "";
   let result = null;
   let lastProgress = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let ev;
-      try {
-        ev = JSON.parse(trimmed);
-      } catch {
-        continue;
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let ev;
+        try {
+          ev = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+        if (ev.type === "result") {
+          result = ev;
+          continue;
+        }
+        if (ev.type === "error") {
+          throw new Error(ev.error || "Wallet sync failed");
+        }
+        if (ev.type === "progress" || ev.type === "done" || ev.type === "start") {
+          lastProgress = ev;
+        }
+        onProgress?.(ev);
       }
-      if (ev.type === "result") {
-        result = ev;
-        continue;
-      }
-      if (ev.type === "error") {
-        throw new Error(ev.error || "Wallet sync failed");
-      }
-      if (ev.type === "progress" || ev.type === "done" || ev.type === "start") {
-        lastProgress = ev;
-      }
-      onProgress?.(ev);
     }
+  } catch (err) {
+    if (err?.name === "AbortError" || signal?.aborted) {
+      throw new DOMException("Sync cancelled", "AbortError");
+    }
+    throw err;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
+
+  throwIfAborted(signal);
 
   if (buf.trim()) {
     try {
@@ -230,6 +288,7 @@ export async function scanWalletSync(address, opts = {}) {
     resync = false,
     reset = false,
     onProgress,
+    signal,
   } = opts;
 
   if (reset) clearWalletSyncMeta(address);
@@ -243,6 +302,8 @@ export async function scanWalletSync(address, opts = {}) {
     throw new Error("Nothing older to scan yet — run Sync once first");
   }
 
+  throwIfAborted(signal);
+
   const res = await fetch("/api/wallet/sync", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -252,6 +313,7 @@ export async function scanWalletSync(address, opts = {}) {
       untilSignature,
       before,
     }),
+    signal,
   });
 
   if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
@@ -262,7 +324,7 @@ export async function scanWalletSync(address, opts = {}) {
     throw new Error(`Sync failed (${res.status})`);
   }
 
-  const data = await readSyncStream(res, onProgress);
+  const data = await readSyncStream(res, onProgress, signal);
 
   return {
     ...data,
@@ -319,6 +381,8 @@ export async function commitImportPlan(plan, walletAddress, scanData, syncOpts =
   const patch = buildSyncMetaPatch(scanData, meta, syncOpts);
   patch.lastImported = imported.length;
   saveWalletSyncMeta(walletAddress, patch);
+
+  clearPendingImportReview();
 
   return { imported, deduped, errors };
 }
