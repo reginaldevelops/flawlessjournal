@@ -230,6 +230,23 @@ export default function WalletsPage() {
       const plan = buildImportPlan(swaps, mintContext);
 
       if (plan.includedCount === 0) {
+        const manualOnly = plan.trades.filter(
+          (t) => !t.autoImportEligible && t.skipReason && t.skipReason !== "already_imported"
+        ).length;
+        if (manualOnly > 0) {
+          savePendingImportReview({
+            walletId: wallet.id,
+            scanData,
+            plan,
+            syncMode,
+          });
+          if (!mountedRef.current) return;
+          setImportReview({ wallet, scanData, plan });
+          toast.info(`${manualOnly} trade(s) need manual entry`, {
+            description: "No complete Open+Close found — review skipped trades in the modal.",
+          });
+          return;
+        }
         finalizeSyncScan(wallet.address, scanData, syncMode);
         if (!mountedRef.current) return;
         toast.info("No new swaps", {

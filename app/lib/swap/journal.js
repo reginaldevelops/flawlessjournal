@@ -64,35 +64,6 @@ async function insertPositionTrade(seed) {
   };
 }
 
-/** Merge swap lists from multiple scan batches (dedupe by signature+side). */
-export function mergeImportSwaps(existing = [], older = []) {
-  const byKey = new Map();
-  for (const swap of [...older, ...existing]) {
-    const key = swap.signature
-      ? `${swap.signature}:${swap.side}`
-      : `${swap.blockTime ?? 0}:${swap.side}:${swap.tokenMint ?? ""}`;
-    if (!byKey.has(key)) byKey.set(key, swap);
-  }
-  return [...byKey.values()].sort(
-    (a, b) => Number(a.blockTime ?? 0) - Number(b.blockTime ?? 0)
-  );
-}
-
-/** Combine scan metadata after loading an older batch into a pending review. */
-export function mergeScanData(base, olderScan) {
-  const mergedSwaps = mergeImportSwaps(base.swaps ?? [], olderScan.swaps ?? []);
-  return {
-    ...base,
-    swaps: mergedSwaps,
-    scanned: (base.scanned ?? 0) + (olderScan.scanned ?? 0),
-    total: (base.total ?? 0) + (olderScan.total ?? 0),
-    oldestTime: olderScan.oldestTime ?? base.oldestTime,
-    oldestSignature: olderScan.oldestSignature ?? base.oldestSignature,
-    hasMoreOlder: Boolean(olderScan.hasMoreOlder),
-    mergedBatches: (base.mergedBatches ?? 1) + 1,
-  };
-}
-
 async function listAllMintTrades(tokenMint) {
   const rows = [];
   const pageSize = 500;

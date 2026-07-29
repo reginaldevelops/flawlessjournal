@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { AlertTriangle, Download, History } from "lucide-react";
+import { AlertTriangle, Download, History, Hand } from "lucide-react";
 import { Modal, Button, Badge, useToast } from "../ui";
 import { formatCurrency, formatDate, formatRelative } from "../../lib/format";
 import { FILL_ROLE_META } from "../../lib/swap/position";
@@ -10,8 +10,120 @@ import {
   toggleFillInPlan,
   toggleTradeInPlan,
   warningLabel,
+  skipReasonLabel,
 } from "../../lib/swap/importPlan";
 import { commitImportPlan } from "../../lib/swap/importFills";
+
+function TradeCard({ trade, plan, setPlan, manual = false }) {
+  const activeCount = trade.fills.filter((f) => f.included && !f.excluded).length;
+  const allIncluded = trade.fills.every(
+    (f) => f.alreadyImported || (f.included && !f.excluded)
+  );
+
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden ${
+        manual
+          ? "border-warn/30 bg-warn-soft/10"
+          : "border-line bg-surface-raised"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-content">{trade.tokenSymbol}</span>
+          <Badge tone={trade.status === "open" ? "profit" : "neutral"} size="xs">
+            {trade.status === "open" ? "Open position" : "Closed"}
+          </Badge>
+          {manual && (
+            <Badge tone="warn" size="xs">
+              Manual only
+            </Badge>
+          )}
+          <span className="text-2xs text-content-subtle">
+            {trade.fills.length} tx{trade.fills.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-2xs text-content-muted">
+          <input
+            type="checkbox"
+            checked={allIncluded && activeCount > 0}
+            onChange={(e) => setPlan(toggleTradeInPlan(plan, trade.id, e.target.checked))}
+            className="rounded border-line"
+          />
+          {manual ? "Force include" : "Include trade"}
+        </label>
+      </div>
+
+      {manual && trade.skipReason && (
+        <div className="border-b border-line/40 bg-warn-soft/30 px-4 py-2">
+          <p className="flex items-start gap-1.5 text-2xs text-warn-fg">
+            <Hand size={12} className="mt-0.5 shrink-0" aria-hidden />
+            {skipReasonLabel(trade.skipReason)}
+          </p>
+        </div>
+      )}
+
+      {trade.warnings.length > 0 && (
+        <div className="space-y-1 border-b border-line/40 bg-surface-sunken/50 px-4 py-2">
+          {trade.warnings.map((w) => (
+            <p key={w} className="text-2xs text-content-muted">
+              {warningLabel(w)}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <ul className="divide-y divide-line/40">
+        {trade.fills.map((fill) => {
+          const roleMeta = FILL_ROLE_META[fill.role] ?? FILL_ROLE_META.unknown;
+          const disabled = fill.alreadyImported;
+          return (
+            <li
+              key={fill.id}
+              className={`flex flex-wrap items-center gap-3 px-4 py-2.5 text-xs ${
+                fill.excluded ? "opacity-50" : ""
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={fill.included && !fill.excluded}
+                disabled={disabled}
+                onChange={() => setPlan(toggleFillInPlan(plan, trade.id, fill.id))}
+                className="rounded border-line"
+                aria-label={`Include ${fill.role} ${fill.side}`}
+              />
+              <Badge tone={roleMeta.tone} size="xs">
+                {roleMeta.label}
+              </Badge>
+              <Badge tone={fill.side === "buy" ? "profit" : "loss"} size="xs">
+                {fill.side}
+              </Badge>
+              <span className="font-mono tnum text-content">
+                {fill.tokenAmount > 0
+                  ? fill.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                  : "—"}{" "}
+                {trade.tokenSymbol}
+              </span>
+              {fill.usdValue > 0 && (
+                <span className="font-mono tnum text-content-muted">
+                  {formatCurrency(fill.usdValue, { compact: true })}
+                </span>
+              )}
+              <span className="ml-auto text-2xs text-content-subtle">
+                {fill.executedAt ? formatRelative(fill.executedAt) : "—"}
+              </span>
+              {disabled && (
+                <Badge tone="neutral" size="xs">
+                  In journal
+                </Badge>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export default function WalletImportReviewModal({
   open,
@@ -35,11 +147,24 @@ export default function WalletImportReviewModal({
   }, [open, initialPlan, initialScanData]);
 
   const summary = useMemo(() => planSummary(plan ?? { trades: [] }), [plan]);
+
+  const readyTrades = useMemo(
+    () => (plan?.trades ?? []).filter((t) => t.autoImportEligible),
+    [plan]
+  );
+  const manualTrades = useMemo(
+    () =>
+      (plan?.trades ?? []).filter(
+        (t) => !t.autoImportEligible && t.skipReason && t.skipReason !== "already_imported"
+      ),
+    [plan]
+  );
+
   const canLoadOlder =
     Boolean(onLoadOlder) &&
     scanData?.hasMoreOlder !== false &&
     Boolean(scanData?.oldestSignature);
-  const showLoadOlder = canLoadOlder && summary.warnings > 0;
+  const showLoadOlder = canLoadOlder && summary.manualOnly > 0;
 
   if (!open || !wallet || !scanData || !plan) return null;
 
@@ -54,10 +179,7 @@ export default function WalletImportReviewModal({
       onReviewUpdated?.(next);
       const nextSummary = planSummary(next.plan);
       toast.success("Older batch loaded", {
-        description:
-          nextSummary.warnings > 0
-            ? `${next.scanData.mergedBatches ?? 2} batches · ${nextSummary.warnings} trade(s) still start mid-position — load again or exclude`
-            : `${next.scanData.mergedBatches ?? 2} batches merged · orphan warnings cleared`,
+        description: `${nextSummary.ready} ready · ${nextSummary.manualOnly} still manual`,
       });
     } catch (err) {
       toast.error("Could not load older batch", { description: err.message });
@@ -73,7 +195,7 @@ export default function WalletImportReviewModal({
     }
     if (summary.warnings > 0) {
       const ok = window.confirm(
-        `${summary.warnings} trade(s) start mid-position (no open in this batch). Import anyway?`
+        `${summary.warnings} trade(s) were marked manual-only but you included them anyway. Import?`
       );
       if (!ok) return;
     }
@@ -88,7 +210,7 @@ export default function WalletImportReviewModal({
       );
       const n = result.imported.length;
       toast.success(`Imported ${n} fill${n === 1 ? "" : "s"}`, {
-        description: `${result.deduped.length} already known · ${result.errors.length} errors`,
+        description: `${result.deduped.length} already known · ${summary.manualOnly} skipped for manual entry`,
         action:
           n > 0 && result.imported[0]?.tradeId
             ? {
@@ -113,7 +235,7 @@ export default function WalletImportReviewModal({
       open={open}
       onClose={committing ? undefined : onClose}
       title="Review wallet import"
-      description={`${summary.included} fill${summary.included === 1 ? "" : "s"} selected · ${plan.trades.length} detected trade${plan.trades.length === 1 ? "" : "s"}`}
+      description={`${summary.ready} complete trade${summary.ready === 1 ? "" : "s"} ready · ${summary.manualOnly} manual`}
       icon={Download}
       size="xl"
       footer={
@@ -148,162 +270,71 @@ export default function WalletImportReviewModal({
       bodyClassName="max-h-[70vh] overflow-y-auto"
     >
       <div className="space-y-4 py-1">
+        <div className="rounded-lg border border-line bg-surface-sunken/40 px-3 py-2.5 text-xs">
+          <p className="text-content">
+            Only trades with a clear <strong>Open</strong> (buy from flat) and{" "}
+            <strong>Close</strong> (position flat) are selected automatically.
+          </p>
+          <p className="mt-1 text-content-muted">
+            Incomplete, open, or mid-batch trades are skipped — add those manually in{" "}
+            <span className="font-mono">/trades</span>.
+          </p>
+        </div>
+
         {(summary.skipped > 0 || summary.excluded > 0 || (scanData.mergedBatches ?? 1) > 1) && (
           <p className="text-xs text-content-muted">
-            {(scanData.mergedBatches ?? 1) > 1
-              ? `${scanData.mergedBatches} batches merged · `
-              : ""}
+            {(scanData.mergedBatches ?? 1) > 1 ? `${scanData.mergedBatches} batches merged · ` : ""}
             {summary.skipped > 0 ? `${summary.skipped} already in journal · ` : ""}
             {summary.excluded > 0 ? `${summary.excluded} excluded` : ""}
           </p>
         )}
 
-        {summary.warnings > 0 && canLoadOlder && (
-          <div className="rounded-lg border border-warn/40 bg-warn-soft/40 px-3 py-2 text-xs text-warn-fg">
-            <p className="font-medium">Mid-trade start detected</p>
-            <p className="mt-0.5 text-content-muted">
-              The opening buy is probably in an older batch. Use &ldquo;Load older batch&rdquo; below
-              to pull it in before importing — repeat until warnings clear.
-            </p>
-          </div>
-        )}
-
         {plan.trades.length === 0 ? (
           <p className="text-sm text-content-muted">No swaps detected in this batch.</p>
         ) : (
-          plan.trades.map((trade) => {
-            const activeCount = trade.fills.filter((f) => f.included && !f.excluded).length;
-            const allIncluded = trade.fills.every(
-              (f) => f.alreadyImported || (f.included && !f.excluded)
-            );
-            const hasWarn = trade.warnings.includes("incomplete_start");
+          <>
+            {readyTrades.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+                  Ready to import ({readyTrades.length})
+                </h3>
+                {readyTrades.map((trade) => (
+                  <TradeCard key={trade.id} trade={trade} plan={plan} setPlan={setPlan} />
+                ))}
+              </section>
+            )}
 
-            return (
-              <div
-                key={trade.id}
-                className="rounded-xl border border-line bg-surface-raised overflow-hidden"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-content">
-                      {trade.tokenSymbol}
-                    </span>
-                    <Badge tone={trade.status === "open" ? "profit" : "neutral"} size="xs">
-                      {trade.status === "open" ? "Open position" : "Closed"}
-                    </Badge>
-                    <span className="text-2xs text-content-subtle">
-                      {trade.fills.length} tx{trade.fills.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <label className="flex cursor-pointer items-center gap-2 text-2xs text-content-muted">
-                    <input
-                      type="checkbox"
-                      checked={allIncluded && activeCount > 0}
-                      onChange={(e) =>
-                        setPlan(toggleTradeInPlan(plan, trade.id, e.target.checked))
-                      }
-                      className="rounded border-line"
-                    />
-                    Include trade
-                  </label>
-                </div>
+            {manualTrades.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-warn-fg">
+                  <AlertTriangle size={12} aria-hidden />
+                  Manual only ({manualTrades.length})
+                </h3>
+                {manualTrades.map((trade) => (
+                  <TradeCard
+                    key={trade.id}
+                    trade={trade}
+                    plan={plan}
+                    setPlan={setPlan}
+                    manual
+                  />
+                ))}
+              </section>
+            )}
 
-                {trade.warnings.length > 0 && (
-                  <div className="space-y-1 border-b border-line/40 bg-warn-soft/30 px-4 py-2">
-                    {trade.warnings.map((w) => (
-                      <p
-                        key={w}
-                        className={`flex items-start gap-1.5 text-2xs ${
-                          w === "incomplete_start" ? "text-warn-fg" : "text-content-muted"
-                        }`}
-                      >
-                        {w === "incomplete_start" && (
-                          <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
-                        )}
-                        {warningLabel(w)}
-                      </p>
-                    ))}
-                  </div>
-                )}
-
-                {trade.linkTradeId && trade.warnings.includes("continues") && (
-                  <p className="border-b border-line/40 px-4 py-1.5 text-2xs text-content-subtle">
-                    Links to existing journal trade
-                    {trade.openAtBatchStart > 0
-                      ? ` (~${Math.round(trade.openAtBatchStart).toLocaleString()} tokens held before batch)`
-                      : ""}
-                    .
-                  </p>
-                )}
-
-                <ul className="divide-y divide-line/40">
-                  {trade.fills.map((fill) => {
-                    const roleMeta = FILL_ROLE_META[fill.role] ?? FILL_ROLE_META.unknown;
-                    const disabled = fill.alreadyImported;
-                    return (
-                      <li
-                        key={fill.id}
-                        className={`flex flex-wrap items-center gap-3 px-4 py-2.5 text-xs ${
-                          fill.excluded ? "opacity-50" : ""
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={fill.included && !fill.excluded}
-                          disabled={disabled}
-                          onChange={() => setPlan(toggleFillInPlan(plan, trade.id, fill.id))}
-                          className="rounded border-line"
-                          aria-label={`Include ${fill.role} ${fill.side}`}
-                        />
-                        <Badge tone={roleMeta.tone} size="xs">
-                          {roleMeta.label}
-                        </Badge>
-                        <Badge tone={fill.side === "buy" ? "profit" : "loss"} size="xs">
-                          {fill.side}
-                        </Badge>
-                        <span className="font-mono tnum text-content">
-                          {fill.tokenAmount > 0
-                            ? fill.tokenAmount.toLocaleString(undefined, {
-                                maximumFractionDigits: 6,
-                              })
-                            : "—"}{" "}
-                          {trade.tokenSymbol}
-                        </span>
-                        {fill.usdValue > 0 && (
-                          <span className="font-mono tnum text-content-muted">
-                            {formatCurrency(fill.usdValue, { compact: true })}
-                          </span>
-                        )}
-                        <span className="ml-auto text-2xs text-content-subtle">
-                          {fill.executedAt
-                            ? formatRelative(fill.executedAt)
-                            : "—"}
-                        </span>
-                    {disabled && (
-                      <Badge tone="neutral" size="xs">
-                        In journal
-                      </Badge>
-                    )}
-                    {fill.oversell && (
-                      <Badge tone="warn" size="xs">
-                        Oversell
-                      </Badge>
-                    )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })
+            {readyTrades.length === 0 && manualTrades.length === 0 && (
+              <p className="text-sm text-content-muted">
+                All detected fills are already in your journal.
+              </p>
+            )}
+          </>
         )}
 
         {scanData.oldestTime && (
           <p className="text-2xs text-content-subtle">
             Batch range:{" "}
             {formatDate(new Date(Number(scanData.oldestTime) * 1000), "medium")}
-            {scanData.newestTime &&
-            scanData.newestTime !== scanData.oldestTime
+            {scanData.newestTime && scanData.newestTime !== scanData.oldestTime
               ? ` – ${formatDate(new Date(Number(scanData.newestTime) * 1000), "medium")}`
               : ""}
           </p>
