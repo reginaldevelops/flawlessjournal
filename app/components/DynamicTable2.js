@@ -17,8 +17,11 @@ import {
   ChevronRight,
   Plus,
   ListOrdered,
+  ArrowDownUp,
 } from "lucide-react";
 import { EmptyState } from "./ui";
+import { createJournalTrade } from "../lib/trades/createJournalTrade";
+import { useSwapFlow } from "./swap/SwapFlowContext";
 
 /** Position / system blobs stored in trades.data — never table columns. */
 function isInternalTradeKey(key) {
@@ -196,6 +199,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "desc" });
   const router = useRouter();
+  const { openSwap } = useSwapFlow();
   const rowsPerPage = 10;
 
   const sensors = useSensors(
@@ -345,33 +349,13 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     });
   };
 
-  const addTrade = async () => {
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    const time = now.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // Prefer writing trade_number when the column exists; fall back otherwise.
-    const payloadWithNumber = {
-      data: { Datum: date, Entreetijd: time },
-    };
-    let { data, error } = await supabase
-      .from("trades")
-      .insert([payloadWithNumber])
-      .select();
-
-    if (error && /trade_number|null value|not-null/i.test(error.message ?? "")) {
-      // Trigger/column missing — still insert the trade body.
-      ({ data, error } = await supabase
-        .from("trades")
-        .insert([{ data: { Datum: date, Entreetijd: time } }])
-        .select());
+  const addJournalEntry = async () => {
+    try {
+      const id = await createJournalTrade(supabase);
+      if (id) router.push(`/trade/${id}`);
+    } catch (err) {
+      console.error("Error adding trade:", err);
     }
-
-    if (error) return console.error("Error adding trade:", error);
-    if (data && data.length > 0) router.push(`/trade/${data[0].id}`);
   };
 
   const bulkDelete = async () => {
@@ -392,13 +376,22 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     <div>
       {/* Top controls */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
-        <button
-          onClick={addTrade}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
-        >
-          <Plus size={14} aria-hidden />
-          Add Trade
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={addJournalEntry}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
+          >
+            <Plus size={14} aria-hidden />
+            Journal entry
+          </button>
+          <button
+            onClick={() => openSwap()}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-line bg-surface text-content-muted text-xs font-semibold hover:bg-surface-hover hover:text-content transition-colors"
+          >
+            <ArrowDownUp size={14} aria-hidden />
+            Swap
+          </button>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Bulk actions */}
@@ -520,14 +513,24 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
           description="Add your first trade to start building your journal."
           compact
           action={
-            <button
-              type="button"
-              onClick={addTrade}
-              className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
-            >
-              <Plus size={14} aria-hidden />
-              Add Trade
-            </button>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={addJournalEntry}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
+              >
+                <Plus size={14} aria-hidden />
+                Journal entry
+              </button>
+              <button
+                type="button"
+                onClick={() => openSwap()}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-line bg-surface text-content-muted text-xs font-semibold hover:bg-surface-hover hover:text-content transition-colors"
+              >
+                <ArrowDownUp size={14} aria-hidden />
+                Swap
+              </button>
+            </div>
           }
         />
       ) : (

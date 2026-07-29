@@ -72,6 +72,10 @@ export default function SwapSheet({
   token,
   /** Optional: force initial side */
   initialSide = "buy",
+  /** When set, attach the fill to this journal trade instead of find/create by mint */
+  tradeId = null,
+  /** Called after a successful swap; default navigates to the trade */
+  onSuccess,
 }) {
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -337,6 +341,7 @@ export default function SwapSheet({
       }
 
       const result = await appendFillToPosition({
+        tradeId,
         tokenMint: positionMint,
         tokenSymbol: positionSymbol,
         tokenName: token?.name,
@@ -359,7 +364,9 @@ export default function SwapSheet({
       });
 
       onClose?.();
-      if (result?.tradeId) {
+      if (onSuccess) {
+        onSuccess(result);
+      } else if (result?.tradeId) {
         window.location.href = `/trade/${result.tradeId}`;
       }
     } catch (err) {

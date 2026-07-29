@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
+  ArrowDownUp,
   ArrowRight,
   Command,
   Moon,
@@ -14,6 +15,8 @@ import {
 } from "lucide-react";
 import { NAV_ITEMS } from "../../lib/nav";
 import { isDemoMode, supabase } from "../../lib/supabaseClient";
+import { createJournalTrade } from "../../lib/trades/createJournalTrade";
+import { useSwapFlow } from "../swap/SwapFlowContext";
 import { cn } from "../ui/cn";
 import { Kbd } from "../ui/Badge";
 import { useTheme } from "./ThemeProvider";
@@ -31,21 +34,15 @@ export default function CommandPalette({ open, onOpenChange }) {
     setActiveIndex(0);
   }, [onOpenChange]);
 
-  const addTrade = useCallback(async () => {
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    const { data } = await supabase
-      .from("trades")
-      .insert([
-        {
-          data: {
-            Datum: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-            Entreetijd: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-          },
-        },
-      ])
-      .select();
-    if (data?.[0]?.id) router.push(`/trade/${data[0].id}`);
+  const { openSwap } = useSwapFlow();
+
+  const addJournalEntry = useCallback(async () => {
+    try {
+      const id = await createJournalTrade(supabase);
+      if (id) router.push(`/trade/${id}`);
+    } catch (err) {
+      console.error("Create journal trade failed:", err);
+    }
   }, [router]);
 
   const commands = useMemo(() => {
@@ -60,13 +57,21 @@ export default function CommandPalette({ open, onOpenChange }) {
 
     const actions = [
       {
-        id: "new-trade",
+        id: "journal-entry",
         group: "Actions",
-        label: "Log a new trade",
-        description: "Create a trade and open its detail view",
+        label: "New journal entry",
+        description: "Manual trade log — pre/post fields, notes, tags",
         icon: Plus,
         shortcut: "N",
-        run: addTrade,
+        run: addJournalEntry,
+      },
+      {
+        id: "swap-trade",
+        group: "Actions",
+        label: "Swap trade",
+        description: "Execute on Solana, then journal with fills and chart",
+        icon: ArrowDownUp,
+        run: () => openSwap(),
       },
       {
         id: "theme",
@@ -92,7 +97,7 @@ export default function CommandPalette({ open, onOpenChange }) {
     }
 
     return [...nav, ...actions];
-  }, [router, addTrade, theme, setTheme]);
+  }, [router, addJournalEntry, openSwap, theme, setTheme]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
