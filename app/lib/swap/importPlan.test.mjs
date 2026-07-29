@@ -19,7 +19,6 @@ import {
 } from "./position.js";
 import {
   MINT_A,
-  MINT_B,
   SCENARIO_JIMOTHY_FLAT,
   SCENARIO_ORPHAN_SELL,
   SCENARIO_OVERSELL,
@@ -36,6 +35,12 @@ import {
 
 function roles(trade) {
   return trade.fills.map((f) => f.role);
+}
+
+function includedRoles(plan) {
+  return plan.trades.flatMap((t) =>
+    t.fills.filter((f) => f.included && !f.excluded).map((f) => f.role)
+  );
 }
 
 describe("classifyFillRoleAfter", () => {
@@ -66,76 +71,68 @@ describe("classifyFillRoleAfter", () => {
 });
 
 describe("buildImportPlan — flat journal", () => {
-  it("simple open → add → close = 1 closed trade", () => {
+  it("simple open → add → close imports only Open", () => {
     const plan = buildImportPlan(SCENARIO_SIMPLE_CLOSE);
     assert.equal(plan.trades.length, 1);
-    assert.equal(plan.trades[0].status, "closed");
     assert.deepEqual(roles(plan.trades[0]), ["open", "add", "close"]);
     assert.ok(plan.trades[0].autoImportEligible);
-    assert.equal(plan.includedCount, 3);
+    assert.equal(plan.includedCount, 1);
+    assert.deepEqual(includedRoles(plan), ["open"]);
   });
 
-  it("two episodes → 2 trades (first closed, second open)", () => {
+  it("two episodes import one Open each", () => {
     const plan = buildImportPlan(SCENARIO_TWO_EPISODES);
     assert.equal(plan.trades.length, 2);
-    assert.equal(plan.trades[0].status, "closed");
-    assert.equal(plan.trades[1].status, "open");
-    assert.deepEqual(roles(plan.trades[0]), ["open", "close"]);
-    assert.deepEqual(roles(plan.trades[1]), ["open", "add"]);
     assert.ok(plan.trades[0].autoImportEligible);
     assert.ok(plan.trades[1].autoImportEligible);
-    assert.equal(plan.includedCount, 4);
+    assert.equal(plan.includedCount, 2);
+    assert.deepEqual(includedRoles(plan), ["open", "open"]);
   });
 
-  it("reduce then close", () => {
+  it("reduce then close imports only Open", () => {
     const plan = buildImportPlan(SCENARIO_REDUCE_CLOSE);
-    assert.equal(plan.trades.length, 1);
-    assert.deepEqual(roles(plan.trades[0]), ["open", "reduce", "close"]);
-    assert.ok(plan.trades[0].autoImportEligible);
+    assert.equal(plan.includedCount, 1);
+    assert.deepEqual(includedRoles(plan), ["open"]);
   });
 
-  it("Jimothy flat start → oversell stub skipped, second episode imports", () => {
+  it("Jimothy flat → both episodes import their Open", () => {
     const jimothy = SCENARIO_JIMOTHY_FLAT.map((s) => ({
       ...s,
       tokenMint: MINT_A,
     }));
     const plan = buildImportPlan(jimothy);
     assert.equal(plan.trades.length, 2);
-    assert.equal(plan.trades[0].autoImportEligible, false);
-    assert.equal(plan.trades[0].skipReason, "oversell");
+    assert.ok(plan.trades[0].autoImportEligible);
     assert.ok(plan.trades[1].autoImportEligible);
-    assert.ok(plan.includedCount > 0);
+    assert.equal(plan.includedCount, 2);
+    assert.ok(plan.trades[0].warnings.includes("oversell"));
   });
 
-  it("orphan sell episode skipped; later open episode imports", () => {
+  it("orphan episode skipped; open episode imports Open only", () => {
     const plan = buildImportPlan(SCENARIO_ORPHAN_SELL);
     const orphan = plan.trades.find((t) => t.fills[0]?.role === "orphan");
     const open = plan.trades.find((t) => t.fills[0]?.role === "open");
-    assert.ok(orphan);
     assert.equal(orphan.autoImportEligible, false);
     assert.ok(open?.autoImportEligible);
+    assert.equal(plan.includedCount, 1);
   });
 
-  it("oversell episode gets oversell warning and skips auto import", () => {
+  it("oversell episode still imports Open", () => {
     const plan = buildImportPlan(SCENARIO_OVERSELL);
-    assert.equal(plan.trades.length, 1);
     assert.ok(plan.trades[0].warnings.includes("oversell"));
-    assert.equal(plan.trades[0].autoImportEligible, false);
-    assert.equal(plan.trades[0].skipReason, "oversell");
+    assert.ok(plan.trades[0].autoImportEligible);
+    assert.equal(plan.includedCount, 1);
   });
 
-  it("splits two mints — both open episodes import", () => {
+  it("splits two mints — one Open per mint", () => {
     const plan = buildImportPlan(SCENARIO_TWO_MINTS);
-    assert.equal(plan.trades.length, 2);
-    const aaa = plan.trades.find((t) => t.tokenSymbol === "AAA");
-    const bbb = plan.trades.find((t) => t.tokenSymbol === "BBB");
-    assert.ok(aaa.autoImportEligible);
-    assert.ok(bbb.autoImportEligible);
+    assert.equal(plan.includedCount, 2);
+    assert.ok(plan.trades.every((t) => t.autoImportEligible));
   });
 });
 
 describe("buildImportPlan — with journal context", () => {
-  it("Jimothy with 200k prior → continues journal and auto imports", () => {
+  it("Jimothy with prior journal → Add-only episode not auto imported", () => {
     const rows = journalRowsJimothyPrior();
     const ctx = buildMintContextFromTrades(rows, [MINT_A]);
     const batchStart = new Date(BASE * 1000).toISOString();
@@ -147,12 +144,9 @@ describe("buildImportPlan — with journal context", () => {
     }));
     const plan = buildImportPlan(jimothy, ctx);
     assert.equal(plan.trades.length, 1);
-    assert.equal(plan.trades[0].status, "open");
     assert.equal(roles(plan.trades[0])[0], "add");
-    assert.ok(plan.trades[0].warnings.includes("continues"));
-    assert.equal(plan.trades[0].linkTradeId, "trade-prior");
-    assert.ok(plan.trades[0].autoImportEligible);
-    assert.ok(plan.includedCount > 0);
+    assert.equal(plan.trades[0].autoImportEligible, false);
+    assert.equal(plan.includedCount, 0);
   });
 
   it("JOURNAL_POSITION_KIND is solana_position", () => {
@@ -175,19 +169,21 @@ describe("buildImportPlan — with journal context", () => {
   });
 });
 
-describe("auto import policy", () => {
-  it("isAutoImportEligible allows open episodes and journal continues", () => {
-    const closedPlan = buildImportPlan(SCENARIO_SIMPLE_CLOSE);
-    assert.ok(isAutoImportEligible(closedPlan.trades[0]));
+describe("open-only import policy", () => {
+  it("isAutoImportEligible when trade has Open fill", () => {
+    const plan = buildImportPlan(SCENARIO_SIMPLE_CLOSE);
+    assert.ok(isAutoImportEligible(plan.trades[0]));
 
-    const openPlan = buildImportPlan(SCENARIO_TWO_EPISODES);
-    assert.ok(isAutoImportEligible(openPlan.trades[1]));
+    const oversell = buildImportPlan(SCENARIO_OVERSELL);
+    assert.ok(isAutoImportEligible(oversell.trades[0]));
+  });
 
+  it("isAutoImportEligible false without Open", () => {
     const rows = journalRowsJimothyPrior();
     const ctx = buildMintContextFromTrades(rows, [MINT_A]);
     const jimothy = SCENARIO_JIMOTHY_FLAT.map((s) => ({ ...s, tokenMint: MINT_A }));
-    const contPlan = buildImportPlan(jimothy, ctx);
-    assert.ok(isAutoImportEligible(contPlan.trades[0]));
+    const plan = buildImportPlan(jimothy, ctx);
+    assert.equal(isAutoImportEligible(plan.trades[0]), false);
   });
 });
 
