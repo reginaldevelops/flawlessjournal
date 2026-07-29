@@ -45,6 +45,7 @@ import {
   waitForSignatureConfirmation,
 } from "../../lib/swap/confirm";
 import { formatCurrency } from "../../lib/format";
+import { notifyPositionChanged } from "../../lib/swap/positionEvents";
 
 const QUOTE_REFRESH_MS = 5000;
 const SELL_PERCENT_PRESETS = [25, 50, 100];
@@ -503,6 +504,8 @@ export default function SwapSheet({
         description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
       });
 
+      notifyPositionChanged({ tradeId: result.tradeId, side, source: "swap" });
+
       onClose?.();
       if (onSuccess) {
         onSuccess(result);
@@ -546,6 +549,8 @@ export default function SwapSheet({
             toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
               description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
             });
+
+            notifyPositionChanged({ tradeId: result.tradeId, side, source: "swap-recovery" });
 
             onClose?.();
             if (onSuccess) {

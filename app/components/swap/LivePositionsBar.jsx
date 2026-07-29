@@ -1,23 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Activity, ChevronRight } from "lucide-react";
 import { cn } from "../ui";
 import { formatCurrency, toneTextClass } from "../../lib/format";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchUsdPrices } from "../../lib/swap/clientPrices";
+import { POSITION_UI_REFRESH_MS } from "../../lib/swap/constants";
+import { runWalletSync } from "../../lib/swap/importFills";
 import {
   isPositionLive,
   unrealizedPnlUsd,
 } from "../../lib/swap/position";
+import {
+  notifyPositionChanged,
+  subscribePositionChanged,
+} from "../../lib/swap/positionEvents";
+import { fetchWalletMintBalance } from "../../lib/swap/walletBalance";
 
 /**
  * Thin global bar under the app header for open Solana positions.
+ * Refreshes every ~5s; immediate refresh after FJ swaps; wallet reconcile
+ * when Phantom is connected (detects sells done in other apps).
  */
 export default function LivePositionsBar() {
+  const { connection } = useConnection();
+  const wallet = useWallet();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const syncCooldownUntil = useRef(0);
+
+  const maybeSyncExternalClose = useCallback(async (address) => {
+    const now = Date.now();
+    if (now < syncCooldownUntil.current) return;
+    syncCooldownUntil.current = now + 12_000;
+    try {
+      await runWalletSync(address, { limit: 40, quiet: true });
+      notifyPositionChanged({ source: "wallet-sync" });
+    } catch (err) {
+      console.warn("[live-positions] wallet sync:", err?.message || err);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -28,7 +53,7 @@ export default function LivePositionsBar() {
         .limit(250);
       if (error) throw error;
 
-      const open = (data ?? [])
+      let open = (data ?? [])
         .map((row) => {
           const fj = row.data?._fj;
           if (!fj || fj.kind !== "solana_position") return null;
@@ -42,6 +67,28 @@ export default function LivePositionsBar() {
           };
         })
         .filter(Boolean);
+
+      if (wallet.publicKey && open.length > 0) {
+        let sawWalletEmpty = false;
+        const checked = await Promise.all(
+          open.map(async (row) => {
+            const bal = await fetchWalletMintBalance(
+              connection,
+              wallet.publicKey,
+              row.mint
+            );
+            if (bal && bal.ui <= 1e-12) {
+              sawWalletEmpty = true;
+              return null;
+            }
+            return row;
+          })
+        );
+        open = checked.filter(Boolean);
+        if (sawWalletEmpty) {
+          maybeSyncExternalClose(wallet.publicKey.toBase58());
+        }
+      }
 
       if (!open.length) {
         setRows([]);
@@ -62,12 +109,18 @@ export default function LivePositionsBar() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [connection, wallet.publicKey, maybeSyncExternalClose]);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 45_000);
-    return () => clearInterval(t);
+    const interval = setInterval(load, POSITION_UI_REFRESH_MS);
+    const unsub = subscribePositionChanged(() => {
+      load();
+    });
+    return () => {
+      clearInterval(interval);
+      unsub();
+    };
   }, [load]);
 
   if (loading || rows.length === 0) return null;

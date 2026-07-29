@@ -11,6 +11,8 @@ import ChartField from "../../components/trade/ChartField";
 import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
 import FieldShell from "../../components/trade/FieldShell";
 import { isPositionLive } from "../../lib/swap/position";
+import { POSITION_UI_REFRESH_MS } from "../../lib/swap/constants";
+import { subscribePositionChanged } from "../../lib/swap/positionEvents";
 import {
   getJournalCompletionStatus,
   isFieldComplete,
@@ -618,6 +620,22 @@ export default function TradeViewPage() {
     if (id) loadTrade();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Refresh open Solana positions ~every 5s (+ immediately after swaps / wallet sync)
+  useEffect(() => {
+    if (!trade?._fj || trade._fj.kind !== "solana_position") return undefined;
+    if (!isPositionLive(trade._fj.computed)) return undefined;
+
+    const interval = setInterval(loadTrade, POSITION_UI_REFRESH_MS);
+    const unsub = subscribePositionChanged(() => {
+      loadTrade();
+    });
+    return () => {
+      clearInterval(interval);
+      unsub();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, trade?._fj?.kind, trade?._fj?.computed?.tokensOpen]);
 
   // Load variables
   useEffect(() => {

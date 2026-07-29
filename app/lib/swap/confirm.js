@@ -1,5 +1,7 @@
+import { SWAP_CONFIRM_POLL_MS } from "./constants";
+
 const DEFAULT_TIMEOUT_MS = 90_000;
-const POLL_MS = 500;
+const POLL_MS = SWAP_CONFIRM_POLL_MS;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

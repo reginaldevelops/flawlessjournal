@@ -77,6 +77,12 @@ export const DEFAULT_SWAP_SETTINGS = {
 
 export const POSITION_KIND = "solana_position";
 
+/** UI refresh for open positions (live bar, trade header). */
+export const POSITION_UI_REFRESH_MS = 5000;
+
+/** Swap confirm polling — journal app, not a sniper bot. */
+export const SWAP_CONFIRM_POLL_MS = 2500;
+
 /** Wallet sync: free RPC is slow — hard batch caps, never full history. */
 export const SYNC_BATCH_DEFAULT = 50;
 export const SYNC_BATCH_MAX = 100;
