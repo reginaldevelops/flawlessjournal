@@ -44,7 +44,7 @@ export default function TerminalSidebar({
             {items.map((item) => {
               const active = item.address === activeMint;
               return (
-                <li key={item.address}>
+                <li key={`${item.chainId ?? "solana"}-${item.address}`}>
                   <div
                     className={cn(
                       "group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition",
@@ -73,6 +73,11 @@ export default function TerminalSidebar({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-content">
                           {item.symbol || "TOKEN"}
+                          {item.chainId && item.chainId !== "solana" ? (
+                            <span className="ml-1 text-2xs font-normal capitalize text-content-subtle">
+                              · {item.chainId}
+                            </span>
+                          ) : null}
                         </p>
                         <p className="truncate font-mono text-2xs text-content-subtle">
                           {item.priceUsd != null

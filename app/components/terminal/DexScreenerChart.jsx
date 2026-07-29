@@ -5,28 +5,33 @@ import { ExternalLink } from "lucide-react";
 import { cn } from "../ui";
 import { useTheme } from "../shell/ThemeProvider";
 
-/** Extract Solana pair address from a DexScreener URL. */
-function pairAddressFromUrl(url) {
+/** Extract pair address from a DexScreener URL. */
+function pairAddressFromUrl(url, chainId = "solana") {
   if (!url) return null;
-  const m = String(url).match(
-    /dexscreener\.com\/solana\/([1-9A-HJ-NP-Za-km-z]{32,48})/i
+  const chain = String(chainId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const evm = new RegExp(`dexscreener\\.com\\/${chain}\\/(0x[a-fA-F0-9]{40})`, "i");
+  const sol = new RegExp(
+    `dexscreener\\.com\\/${chain}\\/([1-9A-HJ-NP-Za-km-z]{32,48})`,
+    "i"
   );
+  const m = String(url).match(evm) || String(url).match(sol);
   return m?.[1] || null;
 }
 
 /**
- * DexScreener embed — TradingView Advanced Charts under the hood.
- * Same chart engine BullX, Photon, etc. use via DexScreener for Solana pairs.
+ * DexScreener embed — TradingView Advanced Charts (Solana, Robinhood, EVM).
  */
 export default function DexScreenerChart({
+  chainId = "solana",
   pairAddress,
   pairUrl,
   symbol,
   className,
 }) {
   const { theme } = useTheme();
+  const chain = String(chainId || "solana").toLowerCase();
 
-  const resolvedPair = pairAddress || pairAddressFromUrl(pairUrl);
+  const resolvedPair = pairAddress || pairAddressFromUrl(pairUrl, chain);
   const embedSrc = useMemo(() => {
     if (!resolvedPair) return null;
     const params = new URLSearchParams({
@@ -35,12 +40,11 @@ export default function DexScreenerChart({
       trades: "0",
       info: "0",
     });
-    return `https://dexscreener.com/solana/${encodeURIComponent(resolvedPair)}?${params}`;
-  }, [resolvedPair, theme]);
+    return `https://dexscreener.com/${chain}/${encodeURIComponent(resolvedPair)}?${params}`;
+  }, [resolvedPair, chain, theme]);
 
   const externalUrl =
-    pairUrl ||
-    (resolvedPair ? `https://dexscreener.com/solana/${resolvedPair}` : null);
+    pairUrl || (resolvedPair ? `https://dexscreener.com/${chain}/${resolvedPair}` : null);
 
   if (!embedSrc) {
     return (
@@ -65,7 +69,7 @@ export default function DexScreenerChart({
           <p className="text-sm font-semibold text-content">
             {symbol || "Chart"}
             <span className="ml-2 text-2xs font-normal text-content-subtle">
-              · TradingView via DexScreener
+              · {chain} · TradingView
             </span>
           </p>
           <p className="text-2xs text-content-subtle">

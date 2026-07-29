@@ -86,6 +86,11 @@ export default function TokenInfoPanel({ token, className }) {
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-content">
               {token.symbol}
+              {token.chainId && token.chainId !== "solana" ? (
+                <span className="ml-2 rounded bg-surface-sunken px-1.5 py-0.5 text-2xs font-medium capitalize text-content-muted">
+                  {token.chainId}
+                </span>
+              ) : null}
             </h2>
             <p className="truncate text-2xs text-content-muted">{token.name}</p>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
