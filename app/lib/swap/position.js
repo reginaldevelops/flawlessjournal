@@ -88,6 +88,48 @@ export function isPositionLive(computed) {
   return n(computed?.tokensOpen) > 1e-12;
 }
 
+/** Sort fills oldest → newest. */
+export function sortFillsChrono(fills = []) {
+  return [...fills].sort(
+    (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)
+  );
+}
+
+/** Split fill history into separate open/close episodes (flat = boundary). */
+export function splitFillEpisodes(fills = []) {
+  const sorted = sortFillsChrono(fills);
+  const episodes = [];
+  let episode = [];
+
+  for (const fill of sorted) {
+    episode.push(fill);
+    const c = computePosition(episode);
+    if (c.tokensOpen <= 1e-12) {
+      episodes.push(episode);
+      episode = [];
+    }
+  }
+
+  if (episode.length) episodes.push(episode);
+  return episodes;
+}
+
+/** Timestamp when the current (last) episode started. */
+export function currentEpisodeStartTs(fills = []) {
+  const episodes = splitFillEpisodes(fills);
+  const current = episodes[episodes.length - 1] ?? [];
+  const first = current[0];
+  return first?.ts ? Date.parse(first.ts) : 0;
+}
+
+/** Tokens open using only fills strictly before `beforeTs` (ISO string). */
+export function tokensOpenBefore(fills, beforeTs) {
+  const t = Date.parse(beforeTs || 0);
+  if (!Number.isFinite(t)) return 0;
+  const before = (fills ?? []).filter((f) => Date.parse(f.ts || 0) < t - 500);
+  return computePosition(before).tokensOpen;
+}
+
 /** Mirror computed stats into flat journal keys the rest of FJ already understands. */
 export function mirrorJournalFields({ symbol, computed, existing = {} }) {
   const pnlKey =
