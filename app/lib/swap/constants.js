@@ -40,6 +40,11 @@ export const QUOTE_TOKENS = [
   },
 ];
 
+/** Receive options when selling a position (no SOL). */
+export const SELL_RECEIVE_TOKENS = QUOTE_TOKENS.filter(
+  (t) => t.mint === FARTCOIN_MINT || t.mint === USDC_MINT
+);
+
 export const SWAP_SETTINGS_KEY = "flawless.swap.settings";
 
 /** Only two slippage choices in the UI. */

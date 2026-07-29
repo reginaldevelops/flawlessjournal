@@ -5,6 +5,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
   VersionedTransaction,
+  PublicKey,
 } from "@solana/web3.js";
 import {
   ArrowDownUp,
@@ -24,9 +25,17 @@ import SwapSettingsPanel from "./SwapSettingsPanel";
 import {
   FARTCOIN_MINT,
   QUOTE_TOKENS,
+  SELL_RECEIVE_TOKENS,
   SLIPPAGE_OPTIONS,
   SLIPPAGE_PRESETS,
 } from "../../lib/swap/constants";
+import {
+  formatAmountInput,
+  fromRawAmount,
+  parseLocaleAmount,
+  rawAmountFromPercent,
+  toRawAmount,
+} from "../../lib/swap/amount";
 import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
 import { suggestSlippageBps } from "../../lib/swap/slippage";
 import { appendFillToPosition } from "../../lib/swap/journal";
@@ -38,26 +47,7 @@ import {
 import { formatCurrency } from "../../lib/format";
 
 const QUOTE_REFRESH_MS = 5000;
-
-function toRawAmount(human, decimals) {
-  const n = Number(human);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const [i, f = ""] = String(human).replace(/,/g, "").split(".");
-  const frac = (f + "0".repeat(decimals)).slice(0, decimals);
-  const raw = BigInt(i || "0") * BigInt(10 ** decimals) + BigInt(frac || "0");
-  return raw.toString();
-}
-
-function fromRawAmount(raw, decimals) {
-  const s = String(raw ?? "0");
-  const neg = s.startsWith("-");
-  const digits = neg ? s.slice(1) : s;
-  const padded = digits.padStart(decimals + 1, "0");
-  const whole = padded.slice(0, -decimals) || "0";
-  const frac = padded.slice(-decimals).replace(/0+$/, "");
-  const out = frac ? `${whole}.${frac}` : whole;
-  return Number(neg ? `-${out}` : out);
-}
+const SELL_PERCENT_PRESETS = [25, 50, 100];
 
 async function fetchUsdPrices(mints) {
   const ids = [...new Set(mints.filter(Boolean))].join(",");
@@ -104,6 +94,9 @@ export default function SwapSheet({
   const [error, setError] = useState(null);
   const [prices, setPrices] = useState({});
   const [feeEstimate, setFeeEstimate] = useState(null);
+  const [tokenDecimals, setTokenDecimals] = useState(6);
+  const [walletTokenBalance, setWalletTokenBalance] = useState(null);
+  const [sellPercent, setSellPercent] = useState(null);
 
   const quoteToken = useMemo(
     () => QUOTE_TOKENS.find((t) => t.mint === quoteMint) ?? QUOTE_TOKENS[0],
@@ -112,7 +105,6 @@ export default function SwapSheet({
 
   const positionMint = token?.address;
   const positionSymbol = token?.symbol || "TOKEN";
-  const [tokenDecimals] = useState(6);
 
   const pairContext = useMemo(
     () => ({
@@ -129,6 +121,8 @@ export default function SwapSheet({
     setQuote(null);
     setQuoteUpdatedAt(null);
     setError(null);
+    setWalletTokenBalance(null);
+    setSellPercent(null);
     const s = loadSwapSettings();
     const autoBps = suggestSlippageBps({
       ageHours: token?.ageHours ?? null,
@@ -146,6 +140,57 @@ export default function SwapSheet({
     setSettings(next);
     setQuoteMint(next.defaultQuoteMint || FARTCOIN_MINT);
   }, [open, initialSide, token?.address, token?.ageHours, token?.changeH1]);
+
+  useEffect(() => {
+    if (
+      side === "sell" &&
+      !SELL_RECEIVE_TOKENS.some((t) => t.mint === quoteMint)
+    ) {
+      setQuoteMint(FARTCOIN_MINT);
+    }
+  }, [side, quoteMint]);
+
+  useEffect(() => {
+    if (!open || side !== "sell" || !wallet.publicKey || !positionMint) {
+      setWalletTokenBalance(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const accounts = await connection.getParsedTokenAccountsByOwner(
+          wallet.publicKey,
+          { mint: new PublicKey(positionMint) }
+        );
+        if (cancelled) return;
+
+        let raw = 0n;
+        let decimals = 6;
+        for (const { account } of accounts.value) {
+          const ta = account.data.parsed.info.tokenAmount;
+          decimals = ta.decimals;
+          raw += BigInt(ta.amount);
+        }
+
+        setTokenDecimals(decimals);
+        setWalletTokenBalance({
+          raw: raw.toString(),
+          ui: fromRawAmount(raw.toString(), decimals),
+          decimals,
+        });
+      } catch {
+        if (!cancelled) setWalletTokenBalance(null);
+      }
+    };
+
+    load();
+    const id = setInterval(load, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [open, side, wallet.publicKey, positionMint, connection]);
 
   // Live p90 fee estimate (capped)
   useEffect(() => {
@@ -187,8 +232,8 @@ export default function SwapSheet({
   const inputSymbol = side === "buy" ? quoteToken.symbol : positionSymbol;
 
   const resolveHumanInput = useCallback(() => {
-    const rawNum = Number(String(amount).replace(/,/g, ""));
-    if (!Number.isFinite(rawNum) || rawNum <= 0) return null;
+    const rawNum = parseLocaleAmount(amount);
+    if (rawNum == null) return null;
     if (amountUnit === "usd") {
       const px =
         side === "buy" ? prices[quoteMint] : prices[positionMint];
@@ -197,6 +242,18 @@ export default function SwapSheet({
     }
     return rawNum;
   }, [amount, amountUnit, side, prices, quoteMint, positionMint]);
+
+  const applySellPercent = useCallback(
+    (percent) => {
+      if (!walletTokenBalance?.raw) return;
+      setSellPercent(percent);
+      setAmountUnit("quote");
+      const raw = rawAmountFromPercent(walletTokenBalance.raw, percent);
+      const human = fromRawAmount(raw, walletTokenBalance.decimals);
+      setAmount(formatAmountInput(human, walletTokenBalance.decimals));
+    },
+    [walletTokenBalance]
+  );
 
   const fetchQuoteAtSlippage = useCallback(
     async (slippageBps) => {
@@ -635,8 +692,11 @@ export default function SwapSheet({
           <div className="flex gap-2">
             <Input
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setSellPercent(null);
+              }}
+              placeholder="0,00"
               inputMode="decimal"
               className="font-mono text-lg"
               autoFocus
@@ -660,14 +720,63 @@ export default function SwapSheet({
             )}
           </div>
 
+          {side === "sell" && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {SELL_PERCENT_PRESETS.map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  disabled={!walletTokenBalance?.raw || walletTokenBalance.raw === "0"}
+                  onClick={() => applySellPercent(pct)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-2xs font-semibold transition",
+                    sellPercent === pct
+                      ? "border-brand/40 bg-brand-soft text-brand"
+                      : "border-line bg-surface-raised text-content-muted hover:text-content disabled:opacity-40"
+                  )}
+                >
+                  {pct}%
+                </button>
+              ))}
+              {walletTokenBalance?.ui > 0 ? (
+                <p className="ml-auto font-mono text-2xs tnum text-content-subtle">
+                  Balance{" "}
+                  {walletTokenBalance.ui.toLocaleString(undefined, {
+                    maximumFractionDigits: 6,
+                  })}{" "}
+                  {positionSymbol}
+                </p>
+              ) : connected ? (
+                <p className="ml-auto text-2xs text-content-subtle">
+                  No {positionSymbol} in wallet
+                </p>
+              ) : null}
+            </div>
+          )}
+
           <div className="flex items-center justify-center py-1 text-content-subtle">
             <ArrowDownUp size={14} />
           </div>
 
           <div className="rounded-lg border border-line bg-surface-raised px-3 py-2.5">
-            <p className="text-2xs text-content-subtle">
-              You receive ({side === "buy" ? positionSymbol : quoteToken.symbol})
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-2xs text-content-subtle">
+                You receive ({side === "buy" ? positionSymbol : quoteToken.symbol})
+              </p>
+              {side === "sell" && (
+                <Select
+                  value={quoteMint}
+                  onChange={(e) => setQuoteMint(e.target.value)}
+                  className="h-7 w-28 shrink-0 text-xs"
+                >
+                  {SELL_RECEIVE_TOKENS.map((t) => (
+                    <option key={t.mint} value={t.mint}>
+                      {t.symbol}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
             <p className="mt-0.5 font-mono text-base tnum text-content">
               {quoting
                 ? "…"
