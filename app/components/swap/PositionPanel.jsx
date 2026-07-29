@@ -298,6 +298,7 @@ export default function PositionPanel({ trade, onRefresh }) {
           setSwapOpen(false);
           onRefresh?.();
         }}
+        tradeId={trade.id}
         initialSide={swapSide}
         token={{
           address: fj.tokenMint,

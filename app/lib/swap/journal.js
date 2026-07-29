@@ -2,13 +2,15 @@ import { supabase } from "../supabaseClient";
 import { POSITION_KIND } from "./constants";
 import {
   computePosition,
+  isPositionLive,
   makeFill,
   mirrorJournalFields,
 } from "./position";
 import { captureFillOhlcSnapshot } from "./ohlcSnapshot";
 
 /**
- * Find an existing Solana position trade for a mint, or create a new one.
+ * Find an open Solana position trade for a mint, or create a new one.
+ * Closed trades (0 tokens left) are ignored so re-entry starts a fresh journal row.
  */
 export async function findOrCreatePositionTrade({
   tokenMint,
@@ -26,11 +28,12 @@ export async function findOrCreatePositionTrade({
 
   if (error) throw error;
 
-  const existing = (rows ?? []).find(
-    (row) =>
-      row.data?._fj?.kind === POSITION_KIND &&
-      row.data?._fj?.tokenMint === tokenMint
-  );
+  const existing = (rows ?? []).find((row) => {
+    const fj = row.data?._fj;
+    if (fj?.kind !== POSITION_KIND || fj?.tokenMint !== tokenMint) return false;
+    const computed = fj.computed ?? computePosition(fj.fills ?? []);
+    return isPositionLive(computed);
+  });
 
   if (existing) {
     return {
@@ -221,12 +224,16 @@ export async function appendFillToPosition({
       const fills = [...fj.fills];
       fills[existingIdx] = { ...existing, ts: executedAt };
       fills.sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0));
+      const computed = computePosition(fills);
+      const closed = !isPositionLive(computed);
       const nextData = {
         ...trade.data,
         _fj: {
           ...fj,
           fills,
-          computed: computePosition(fills),
+          computed,
+          status: closed ? "closed" : "open",
+          closedAt: closed ? fj.closedAt ?? new Date().toISOString() : null,
           updatedAt: new Date().toISOString(),
         },
       };
@@ -261,6 +268,7 @@ export async function appendFillToPosition({
     (a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0)
   );
   const computed = computePosition(fills);
+  const closed = !isPositionLive(computed);
   const mirrored = mirrorJournalFields({
     symbol: tokenSymbol,
     computed,
@@ -279,6 +287,8 @@ export async function appendFillToPosition({
       imageUrl: imageUrl || fj.imageUrl || null,
       fills,
       computed,
+      status: closed ? "closed" : "open",
+      closedAt: closed ? fj.closedAt ?? new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
     },
   };
