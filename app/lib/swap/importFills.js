@@ -119,6 +119,7 @@ async function readSyncStream(res, onProgress) {
   const decoder = new TextDecoder();
   let buf = "";
   let result = null;
+  let lastProgress = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -142,6 +143,9 @@ async function readSyncStream(res, onProgress) {
       if (ev.type === "error") {
         throw new Error(ev.error || "Wallet sync failed");
       }
+      if (ev.type === "progress" || ev.type === "done" || ev.type === "start") {
+        lastProgress = ev;
+      }
       onProgress?.(ev);
     }
   }
@@ -154,14 +158,23 @@ async function readSyncStream(res, onProgress) {
       else onProgress?.(ev);
     } catch (e) {
       if (e instanceof SyntaxError) {
-        /* ignore trailing junk */
+        /* truncated stream — fall through */
       } else {
         throw e;
       }
     }
   }
 
-  if (!result) throw new Error("Sync ended without a result");
+  if (!result) {
+    if (lastProgress?.scanned != null && lastProgress?.total != null) {
+      throw new Error(
+        `Sync timed out after ${lastProgress.scanned}/${lastProgress.total} txs — server cut off before finishing. Retry Sync; if it keeps failing, use Older for smaller batches.`
+      );
+    }
+    throw new Error(
+      "Sync ended without a result — likely a server timeout. Retry Sync or use Older to scan a smaller batch."
+    );
+  }
   return result;
 }
 

@@ -21,6 +21,7 @@ import {
   QUOTE_TOKENS,
   SYNC_BATCH_DEFAULT,
   SYNC_BATCH_MAX,
+  SYNC_TX_DELAY_MS,
 } from "./constants";
 
 const QUOTE_MINTS = new Set(QUOTE_TOKENS.map((t) => t.mint));
@@ -321,7 +322,7 @@ export async function syncWalletSwaps({
       continue;
     }
 
-    await sleep(120);
+    if (SYNC_TX_DELAY_MS > 0) await sleep(SYNC_TX_DELAY_MS);
 
     let tx;
     try {
@@ -330,7 +331,7 @@ export async function syncWalletSwaps({
         { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
       ]);
       if (!tx) {
-        await sleep(1500);
+        await sleep(600);
         tx = await rpc(rpcUrl, "getTransaction", [
           row.signature,
           { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
