@@ -17,7 +17,7 @@ import {
 /* Constants                                                           */
 /* ------------------------------------------------------------------ */
 
-import { getServerRpcUrl } from "../../lib/swap/rpc";
+import { postServerRpc } from "../../lib/swap/rpc";
 const HL_API = "https://api.hyperliquid.xyz/info";
 const SOL_DECIMALS = 9;
 const DUST_USD = 0.05;
@@ -128,13 +128,28 @@ function demoFallback(wallet) {
 /* ------------------------------------------------------------------ */
 
 async function rpc(method, params) {
-  return fetchJson(getServerRpcUrl(), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    label: `Solana RPC (${method})`,
+  return postServerRpc(method, params, {
     timeout: 12_000,
+    label: `Solana RPC (${method})`,
   });
+}
+
+function splUiAmount(tokenAmount) {
+  if (!tokenAmount) return 0;
+  const fromString = Number(tokenAmount.uiAmountString);
+  if (Number.isFinite(fromString)) return fromString;
+  const fromUi = tokenAmount.uiAmount;
+  if (fromUi != null && Number.isFinite(fromUi)) return fromUi;
+  const raw = tokenAmount.amount;
+  const decimals = toNum(tokenAmount.decimals, 0);
+  if (raw != null && raw !== "") {
+    try {
+      return Number(raw) / 10 ** decimals;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -172,7 +187,7 @@ async function fetchSolanaWallet(address) {
         if (!info) continue;
         splAccounts.push({
           mint: info.mint,
-          amount: toNum(info.tokenAmount?.uiAmount, 0),
+          amount: splUiAmount(info.tokenAmount),
           decimals: toNum(info.tokenAmount?.decimals, 0),
         });
       }
@@ -415,6 +430,7 @@ async function buildPortfolioResponse(wallets) {
     address: r.address,
     color: r.color ?? null,
     usdValue: r.usdValue ?? 0,
+    assets: r.assets ?? [],
     error: r.error ?? null,
   }));
 

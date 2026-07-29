@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { subscribePositionChanged } from "../lib/swap/positionEvents";
 import Link from "next/link";
 import {
   ExternalLink,
@@ -390,9 +391,12 @@ function usePortfolioBalances(wallets, walletsLoading) {
       if (!controller.signal.aborted) {
         const map = new Map();
         for (const w of data?.wallets ?? []) {
-          const assets = (data?.assets ?? []).filter(
-            (a) => !a.chain || a.chain === w.chain
-          );
+          const assets =
+            w.assets?.length > 0
+              ? w.assets
+              : (data?.assets ?? []).filter(
+                  (a) => !a.chain || a.chain === w.chain
+                );
           map.set(String(w.id), { ...w, assets });
         }
         setBalances(map);
@@ -419,6 +423,18 @@ function usePortfolioBalances(wallets, walletsLoading) {
     return () => abortRef.current?.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletsLoading, wallets.length]);
+
+  useEffect(() => {
+    let timer;
+    const unsub = subscribePositionChanged(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => refresh(), 1500);
+    });
+    return () => {
+      unsub();
+      clearTimeout(timer);
+    };
+  }, [refresh]);
 
   return { balances, balancesLoading: loading, refreshBalances: refresh };
 }
