@@ -77,8 +77,14 @@ export const DEFAULT_SWAP_SETTINGS = {
 
 export const POSITION_KIND = "solana_position";
 
-/** UI refresh for open positions (live bar, trade header). */
-export const POSITION_UI_REFRESH_MS = 5000;
+/** Live bar refresh (global header strip). */
+export const LIVE_POSITIONS_REFRESH_MS = 5000;
+
+/** Trade page refresh while a Solana position is open. */
+export const TRADE_POSITION_REFRESH_MS = 10_000;
+
+/** @deprecated use LIVE_POSITIONS_REFRESH_MS */
+export const POSITION_UI_REFRESH_MS = LIVE_POSITIONS_REFRESH_MS;
 
 /** Swap confirm polling — journal app, not a sniper bot. */
 export const SWAP_CONFIRM_POLL_MS = 2500;

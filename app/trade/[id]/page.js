@@ -11,8 +11,9 @@ import ChartField from "../../components/trade/ChartField";
 import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
 import FieldShell from "../../components/trade/FieldShell";
 import { isPositionLive } from "../../lib/swap/position";
-import { POSITION_UI_REFRESH_MS } from "../../lib/swap/constants";
+import { TRADE_POSITION_REFRESH_MS } from "../../lib/swap/constants";
 import { subscribePositionChanged } from "../../lib/swap/positionEvents";
+import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import {
   getJournalCompletionStatus,
   isFieldComplete,
@@ -621,21 +622,28 @@ export default function TradeViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Refresh open Solana positions ~every 5s (+ immediately after swaps / wallet sync)
-  useEffect(() => {
-    if (!trade?._fj || trade._fj.kind !== "solana_position") return undefined;
-    if (!isPositionLive(trade._fj.computed)) return undefined;
+  // Refresh open Solana positions every ~10s while tab visible (+ after swaps / wallet sync)
+  const positionLive =
+    trade?._fj?.kind === "solana_position" && isPositionLive(trade._fj.computed);
 
-    const interval = setInterval(loadTrade, POSITION_UI_REFRESH_MS);
-    const unsub = subscribePositionChanged(() => {
+  useVisibleInterval(
+    () => {
       loadTrade();
+    },
+    TRADE_POSITION_REFRESH_MS,
+    Boolean(id && positionLive)
+  );
+
+  useEffect(() => {
+    if (!positionLive) return undefined;
+    const unsub = subscribePositionChanged(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadTrade();
+      }
     });
-    return () => {
-      clearInterval(interval);
-      unsub();
-    };
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, trade?._fj?.kind, trade?._fj?.computed?.tokensOpen]);
+  }, [id, positionLive]);
 
   // Load variables
   useEffect(() => {

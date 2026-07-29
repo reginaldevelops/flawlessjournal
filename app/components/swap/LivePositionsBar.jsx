@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Activity, ChevronRight } from "lucide-react";
+import { Tooltip } from "../ui/Overlays";
 import { cn } from "../ui";
-import { formatCurrency, toneTextClass } from "../../lib/format";
+import { formatCurrency, formatRelative, toneTextClass } from "../../lib/format";
+import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchUsdPrices } from "../../lib/swap/clientPrices";
-import { POSITION_UI_REFRESH_MS } from "../../lib/swap/constants";
+import { LIVE_POSITIONS_REFRESH_MS } from "../../lib/swap/constants";
 import { runWalletSync } from "../../lib/swap/importFills";
 import {
   isPositionLive,
@@ -22,14 +24,14 @@ import { fetchWalletMintBalance } from "../../lib/swap/walletBalance";
 
 /**
  * Thin global bar under the app header for open Solana positions.
- * Refreshes every ~5s; immediate refresh after FJ swaps; wallet reconcile
- * when Phantom is connected (detects sells done in other apps).
+ * Refreshes every ~5s while tab visible; wallet reconcile when Phantom connected.
  */
 export default function LivePositionsBar() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const syncCooldownUntil = useRef(0);
 
   const maybeSyncExternalClose = useCallback(async (address) => {
@@ -90,6 +92,8 @@ export default function LivePositionsBar() {
         }
       }
 
+      setLastUpdatedAt(Date.now());
+
       if (!open.length) {
         setRows([]);
         return;
@@ -111,27 +115,32 @@ export default function LivePositionsBar() {
     }
   }, [connection, wallet.publicKey, maybeSyncExternalClose]);
 
+  useVisibleInterval(load, LIVE_POSITIONS_REFRESH_MS, true);
+
   useEffect(() => {
-    load();
-    const interval = setInterval(load, POSITION_UI_REFRESH_MS);
     const unsub = subscribePositionChanged(() => {
-      load();
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        load();
+      }
     });
-    return () => {
-      clearInterval(interval);
-      unsub();
-    };
+    return unsub;
   }, [load]);
 
   if (loading || rows.length === 0) return null;
 
+  const updatedLabel = lastUpdatedAt
+    ? `Last updated ${formatRelative(lastUpdatedAt)}`
+    : "Updating…";
+
   return (
     <div className="sticky top-topbar z-header border-b border-line bg-surface/90 backdrop-blur-xl">
       <div className="flex items-center gap-2 overflow-x-auto px-3 py-1.5 sm:px-5">
-        <span className="inline-flex shrink-0 items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-          <Activity size={11} aria-hidden />
-          Live
-        </span>
+        <Tooltip content={updatedLabel}>
+          <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+            <Activity size={11} aria-hidden />
+            Live
+          </span>
+        </Tooltip>
         <div className="flex min-w-0 items-center gap-1.5">
           {rows.map((row) => {
             const pnl = row.unrealized;
