@@ -100,6 +100,46 @@ async function recalcAllTrades(variable) {
   }
 }
 
+/* ---------- Variable row (presentational — safe for DragOverlay) ---------- */
+function VariableRow({ v, dragHandleProps, isDragging, onRename, onDelete, onToggleVisible, onEditFormula }) {
+  if (!v) return null;
+  return (
+    <div
+      className={`flex items-center justify-between p-2.5 border border-slate-200 rounded-xl bg-white mb-2 shadow-sm ${
+        isDragging ? "opacity-40" : ""
+      }`}
+    >
+      <span
+        {...dragHandleProps}
+        className="cursor-grab text-slate-300 hover:text-slate-500 mr-2 select-none text-base active:cursor-grabbing"
+      >
+        ⠿
+      </span>
+      <span className="flex-1 text-xs font-medium text-slate-800">{v.name}</span>
+      <div className="flex items-center gap-2.5 text-slate-400">
+        <button type="button" onClick={() => onToggleVisible(v)} className="hover:text-slate-600 transition">
+          {v.visible ? <Eye size={15} /> : <EyeOff size={15} />}
+        </button>
+        {v.type === "custom" && (
+          <>
+            <button type="button" onClick={() => onRename(v)} className="hover:text-blue-600 transition">
+              <Pencil size={15} />
+            </button>
+            {v.varType === "calculated" && (
+              <button type="button" onClick={() => onEditFormula(v)} className="hover:text-purple-600 font-bold text-xs transition">
+                ƒx
+              </button>
+            )}
+            <button type="button" onClick={() => onDelete(v)} className="hover:text-red-600 transition">
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Sortable Item ---------- */
 function SortableItemModal({
   v,
@@ -108,7 +148,7 @@ function SortableItemModal({
   onToggleVisible,
   onEditFormula,
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: v.id,
       animateLayoutChanges: (args) =>
@@ -116,63 +156,21 @@ function SortableItemModal({
     });
 
   const style = {
-    transform: transform ? CSS.Transform.toString(transform) : undefined,
+    transform: CSS.Translate.toString(transform),
     transition,
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      className="flex items-center justify-between p-2.5 border border-slate-200 rounded-xl bg-white mb-2 shadow-sm"
-    >
-      <span
-        {...listeners}
-        className="cursor-grab text-slate-300 hover:text-slate-500 mr-2 select-none text-base"
-      >
-        ⠿
-      </span>
-      <span className="flex-1 text-xs font-medium text-slate-800">
-        {v.name}
-      </span>
-      <div className="flex items-center gap-2.5 text-slate-400">
-        <button
-          type="button"
-          onClick={() => onToggleVisible(v)}
-          className="hover:text-slate-600 transition"
-        >
-          {v.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-        </button>
-
-        {v.type === "custom" && (
-          <>
-            <button
-              type="button"
-              onClick={() => onRename(v)}
-              className="hover:text-blue-600 transition"
-            >
-              <Pencil size={15} />
-            </button>
-            {v.varType === "calculated" && (
-              <button
-                type="button"
-                onClick={() => onEditFormula(v)}
-                className="hover:text-purple-600 font-bold text-xs transition"
-              >
-                ƒx
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onDelete(v)}
-              className="hover:text-red-600 transition"
-            >
-              <Trash2 size={15} />
-            </button>
-          </>
-        )}
-      </div>
+    <div ref={setNodeRef} style={style}>
+      <VariableRow
+        v={v}
+        isDragging={isDragging}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        onRename={onRename}
+        onDelete={onDelete}
+        onToggleVisible={onToggleVisible}
+        onEditFormula={onEditFormula}
+      />
     </div>
   );
 }
@@ -657,14 +655,15 @@ export default function ManageVariablesModal({
 
           <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
             {activeId ? (
-              <SortableItemModal
-                key={activeId}
-                v={variables.find((x) => x.id === activeId)}
-                onRename={handleRename}
-                onEditFormula={handleEditFormula}
-                onDelete={handleDelete}
-                onToggleVisible={handleToggleVisible}
-              />
+              <div className="w-[280px] cursor-grabbing">
+                <VariableRow
+                  v={variables.find((x) => x.id === activeId)}
+                  onRename={handleRename}
+                  onEditFormula={handleEditFormula}
+                  onDelete={handleDelete}
+                  onToggleVisible={handleToggleVisible}
+                />
+              </div>
             ) : null}
           </DragOverlay>
         </DndContext>

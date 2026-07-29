@@ -166,9 +166,26 @@ function getTradeStatus(row, variables) {
   return map[status.key] || "Open";
 }
 
-/* ------------------------------------------------------------------ */
-/* Main component                                                      */
-/* ------------------------------------------------------------------ */
+const TABLE_SETTINGS_KEY = "fj.trades.tableSettings";
+
+function readLocalTableSettings() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(TABLE_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalTableSettings(payload) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TABLE_SETTINGS_KEY, JSON.stringify(payload));
+  } catch {
+    /* quota */
+  }
+}
 export default function DynamicTable2({ rows: initialRows, variables }) {
   const [rows, setRows] = useState(initialRows || []);
   const [visibleCols, setVisibleCols] = useState([]);
@@ -220,32 +237,55 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   }, [initialRows]);
 
   const loadVisibleCols = async (allColumns) => {
+    const local = readLocalTableSettings();
+
     const { data, error } = await supabase
       .from("table_settings")
       .select("visible_columns, sort_key, sort_direction")
       .eq("id", 1)
       .single();
 
-    if (!error && data && data.visible_columns?.length > 0) {
-      const savedCols = data.visible_columns.filter((c) => !isInternalTradeKey(c));
-      const mergedCols = [
+    const source =
+      !error && data?.visible_columns?.length > 0
+        ? data
+        : local?.visible_columns?.length > 0
+          ? local
+          : null;
+
+    if (source?.visible_columns?.length > 0) {
+      const savedCols = source.visible_columns.filter((c) => !isInternalTradeKey(c));
+      const mergedAllCols = [
         ...savedCols,
         ...allColumns.filter((c) => !savedCols.includes(c) && !isInternalTradeKey(c)),
       ];
-      setVisibleCols(mergedCols);
-      setAllCols(mergedCols);
+      setAllCols(mergedAllCols);
+      setVisibleCols(savedCols);
       setSortConfig({
-        key: data.sort_key || allColumns[0] || "",
-        direction: data.sort_direction || "desc",
+        key: source.sort_key || allColumns[0] || "",
+        direction: source.sort_direction || "desc",
       });
     } else {
+      setAllCols(allColumns);
       setVisibleCols(allColumns);
       setSortConfig((prev) => ({ ...prev, key: allColumns[0] || "" }));
-      await supabase
-        .from("table_settings")
-        .upsert({ id: 1, visible_columns: allColumns })
-        .select();
+      const payload = { visible_columns: allColumns, sort_key: allColumns[0] || "", sort_direction: "desc" };
+      writeLocalTableSettings(payload);
+      await supabase.from("table_settings").upsert({ id: 1, ...payload }).select();
     }
+  };
+
+  const persistTableSettings = async (cols, sort = sortConfig) => {
+    const payload = {
+      visible_columns: cols,
+      sort_key: sort.key,
+      sort_direction: sort.direction,
+    };
+    writeLocalTableSettings(payload);
+    const { error } = await supabase
+      .from("table_settings")
+      .upsert({ id: 1, ...payload })
+      .select();
+    return !error;
   };
 
   const toggleCol = (col) => {
@@ -260,7 +300,13 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       setAllCols((items) => {
         const oldIndex = items.indexOf(active.id);
         const newIndex = items.indexOf(over.id);
-        return arrayMove(items, oldIndex, newIndex);
+        const next = arrayMove(items, oldIndex, newIndex);
+        setVisibleCols((visible) => {
+          const reordered = next.filter((c) => visible.includes(c));
+          const rest = visible.filter((c) => !next.includes(c));
+          return [...reordered, ...rest];
+        });
+        return next;
       });
     }
   };
@@ -274,6 +320,8 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     return 0;
   });
 
+  const displayCols = allCols.filter((c) => visibleCols.includes(c));
+
   const totalPages = Math.ceil(sortedRows.length / rowsPerPage) || 1;
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = startIndex + rowsPerPage;
@@ -286,14 +334,12 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
           ? { key: col, direction: prev.direction === "asc" ? "desc" : "asc" }
           : { key: col, direction: "asc" };
       (async () => {
-        await supabase
-          .from("table_settings")
-          .upsert({
-            id: 1,
-            sort_key: newConfig.key,
-            sort_direction: newConfig.direction,
-          })
-          .select();
+        const payload = {
+          sort_key: newConfig.key,
+          sort_direction: newConfig.direction,
+        };
+        writeLocalTableSettings({ ...readLocalTableSettings(), ...payload, visible_columns: visibleCols });
+        await supabase.from("table_settings").upsert({ id: 1, ...payload }).select();
       })();
       return newConfig;
     });
@@ -448,10 +494,12 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    await supabase
-                      .from("table_settings")
-                      .upsert({ id: 1, visible_columns: visibleCols })
-                      .select();
+                    const orderedVisible = allCols.filter((c) => visibleCols.includes(c));
+                    setVisibleCols(orderedVisible);
+                    const ok = await persistTableSettings(orderedVisible);
+                    if (!ok) {
+                      console.error("Failed to save column settings to server; kept locally.");
+                    }
                     setShowModal(false);
                   }}
                   className="px-3.5 py-1.5 rounded-md bg-brand text-brand-fg text-xs font-semibold hover:bg-brand-hover transition-colors"
@@ -503,7 +551,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
               <th className="px-4 py-2.5 text-left font-medium text-2xs uppercase tracking-wider text-content-subtle whitespace-nowrap">
                 Status
               </th>
-              {visibleCols.map((col) => (
+              {displayCols.map((col) => (
                 <th
                   key={col}
                   onClick={() => handleSort(col)}
@@ -581,7 +629,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     </span>
                   </td>
 
-                  {visibleCols.map((col) => {
+                  {displayCols.map((col) => {
                     const val = getCellValue(row, col);
                     const colLow = col.toLowerCase();
 

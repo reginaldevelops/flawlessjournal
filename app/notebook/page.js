@@ -9,6 +9,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Highlight from "@tiptap/extension-highlight";
+import Image from "@tiptap/extension-image";
 import Typography from "@tiptap/extension-typography";
 import TextAlign from "@tiptap/extension-text-align";
 import { FolderPlus } from "lucide-react";
@@ -23,6 +24,7 @@ import {
 import TagsSidebar from "../components/notebook/TagsSidebar";
 import NotesSidebar from "../components/notebook/NotesSidebar";
 import EditorPane from "../components/notebook/EditorPane";
+import { compressImageToDataUrl } from "../lib/chartImage";
 
 const SAVE_DELAY = 550;
 
@@ -74,6 +76,8 @@ export default function NotebookPage() {
     });
   }, []);
 
+  const insertImageRef = useRef(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -85,6 +89,13 @@ export default function NotebookPage() {
         autolink: true,
         openOnClick: false,
         defaultProtocol: "https",
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "rounded-lg max-w-full h-auto my-3",
+        },
       }),
       Placeholder.configure({
         placeholder: "Start writing…",
@@ -103,6 +114,26 @@ export default function NotebookPage() {
         class: "tiptap min-h-full focus:outline-none",
         spellcheck: "true",
       },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            void insertImageRef.current?.(file);
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (_view, event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file?.type?.startsWith("image/")) return false;
+        event.preventDefault();
+        void insertImageRef.current?.(file);
+        return true;
+      },
     },
     onUpdate: ({ editor: currentEditor }) => {
       editorUpdateRef.current?.(currentEditor.getHTML());
@@ -111,6 +142,23 @@ export default function NotebookPage() {
       editorBlurRef.current?.();
     },
   });
+
+  const insertImageFromFile = useCallback(
+    async (file) => {
+      if (!editor || !file) return;
+      try {
+        const src = await compressImageToDataUrl(file);
+        editor.chain().focus().setImage({ src, alt: file.name || "Image" }).run();
+      } catch (err) {
+        toast.error("Could not insert image", {
+          description: err?.message || "Try a smaller JPG or PNG.",
+        });
+      }
+    },
+    [editor, toast]
+  );
+
+  insertImageRef.current = insertImageFromFile;
 
   const scheduleSave = useCallback(() => {
     window.clearTimeout(saveTimerRef.current);
@@ -624,6 +672,7 @@ export default function NotebookPage() {
             onTagChange={changeTag}
             onBlur={() => void persistLatest()}
             onDelete={() => setNoteDeleteOpen(true)}
+            onInsertImage={insertImageFromFile}
           />
         </div>
       </div>

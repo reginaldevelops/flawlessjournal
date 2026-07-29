@@ -39,6 +39,7 @@ export default function EditorPane({
   onTagChange,
   onBlur,
   onDelete,
+  onInsertImage,
 }) {
   if (!post) {
     return (
@@ -113,7 +114,7 @@ export default function EditorPane({
         </Tooltip>
       </div>
 
-      <NotebookToolbar editor={editor} />
+      <NotebookToolbar editor={editor} onInsertImage={onInsertImage} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken/35 px-4 py-5 thin-scrollbar sm:px-6 sm:py-7">
         <div className="mx-auto min-h-full w-full max-w-[860px] rounded-xl border border-line bg-surface px-7 py-8 shadow-sm sm:px-12 sm:py-11">

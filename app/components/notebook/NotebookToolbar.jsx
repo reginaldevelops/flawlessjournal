@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useEditorState } from "@tiptap/react";
 import {
   AlignCenter,
@@ -17,6 +18,7 @@ import {
   ListTodo,
   Minus,
   Quote,
+  ImageIcon,
   Redo2,
   Strikethrough,
   Underline,
@@ -49,7 +51,8 @@ function Divider() {
   return <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden />;
 }
 
-export default function NotebookToolbar({ editor }) {
+export default function NotebookToolbar({ editor, onInsertImage }) {
+  const fileInputRef = useRef(null);
   const state = useEditorState({
     editor,
     selector: ({ editor: current }) => ({
@@ -199,6 +202,23 @@ export default function NotebookToolbar({ editor }) {
         icon={AlignRight}
         active={state?.alignRight}
         onClick={() => editor.chain().focus().setTextAlign("right").run()}
+      />
+      <Divider />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void onInsertImage?.(file);
+          event.target.value = "";
+        }}
+      />
+      <ToolButton
+        label="Insert image"
+        icon={ImageIcon}
+        onClick={() => fileInputRef.current?.click()}
       />
       <Divider />
       <ToolButton label="Add link" icon={Link2} active={state?.link} onClick={setLink} />
