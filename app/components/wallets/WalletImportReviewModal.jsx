@@ -272,11 +272,10 @@ export default function WalletImportReviewModal({
       <div className="space-y-4 py-1">
         <div className="rounded-lg border border-line bg-surface-sunken/40 px-3 py-2.5 text-xs">
           <p className="text-content">
-            Only trades with a clear <strong>Open</strong> (buy from flat) and{" "}
-            <strong>Close</strong> (position flat) are selected automatically.
+            Auto-imports new positions (Open) and journal continuations (Add/Reduce/Close).
           </p>
           <p className="mt-1 text-content-muted">
-            Incomplete, open, or mid-batch trades are skipped — add those manually in{" "}
+            Skips mid-batch orphans and oversells — use Load older or add those manually in{" "}
             <span className="font-mono">/trades</span>.
           </p>
         </div>

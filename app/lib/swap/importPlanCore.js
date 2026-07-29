@@ -162,34 +162,44 @@ function episodeWarnings(fills, { continuesFromJournal = false, hasOversell = fa
   return warnings;
 }
 
-/** True when episode has a clear Open (buy from flat) and Close (flat at end). */
+/** Auto-import when episode is trustworthy; skip orphans/oversells/mid-batch gaps. */
 export function isAutoImportEligible(trade) {
   if (!trade?.fills?.length) return false;
   const pending = trade.fills.filter((f) => !f.alreadyImported);
   if (!pending.length) return false;
 
-  const first = trade.fills[0];
-  if (first.role !== "open") return false;
-  if (trade.status !== "closed") return false;
   if (trade.warnings.includes("oversell")) return false;
   if (trade.warnings.includes("incomplete_start")) return false;
-  return true;
+
+  const first = trade.fills[0];
+
+  // New position from flat — closed or still holding at batch end.
+  if (first.role === "open") return true;
+
+  // Adds/reduces/closes on a journal position we can link to.
+  if (
+    trade.linkTradeId &&
+    trade.warnings.includes("continues") &&
+    (first.role === "add" || first.role === "reduce" || first.role === "close")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function deriveSkipReason(trade) {
   if (isAutoImportEligible(trade)) return null;
   if (!trade?.fills?.some((f) => !f.alreadyImported)) return "already_imported";
 
-  const first = trade.fills[0];
-  if (first.role !== "open") {
-    if (first.role === "orphan" || trade.warnings.includes("incomplete_start")) {
-      return "no_open";
-    }
-    if (trade.warnings.includes("continues")) return "continues_journal";
-    return "no_open";
-  }
-  if (trade.status !== "closed" || trade.warnings.includes("open_at_end")) return "no_close";
   if (trade.warnings.includes("oversell")) return "oversell";
+  if (trade.warnings.includes("incomplete_start")) return "no_open";
+
+  const first = trade.fills[0];
+  if (first.role === "orphan") return "no_open";
+  if (first.role === "reduce" || first.role === "close") return "no_open";
+  if (first.role === "add" && !trade.linkTradeId) return "no_open";
+
   return "incomplete";
 }
 
@@ -407,15 +417,11 @@ export function planSummary(plan) {
 export function skipReasonLabel(code) {
   switch (code) {
     case "no_open":
-      return "No clear Open — opening buy missing or batch starts mid-trade. Add manually or load older batches.";
-    case "no_close":
-      return "No clear Close — position still open at end of batch. Add manually when you exit.";
+      return "Opening buy missing — batch starts mid-trade. Load older batches or add manually in /trades.";
     case "oversell":
-      return "Oversell detected — amounts do not line up. Add manually after checking on-chain history.";
-    case "continues_journal":
-      return "Continues an existing journal position — add fills manually to that trade.";
+      return "Oversell — amounts do not line up. Add manually after checking on-chain history.";
     case "incomplete":
-      return "Incomplete episode — add manually in /trades.";
+      return "Could not classify safely — add manually in /trades.";
     case "already_imported":
       return "Already in journal.";
     default:
@@ -426,13 +432,13 @@ export function skipReasonLabel(code) {
 export function warningLabel(code) {
   switch (code) {
     case "incomplete_start":
-      return "Batch starts mid-trade — skipped for auto-import. Load older or add manually.";
+      return "Batch starts mid-trade — skipped for auto-import.";
     case "continues":
       return "Continues an open position from your journal.";
     case "open_at_end":
-      return "Position still open — skipped until a Close is found.";
+      return "Position still open — will import as live trade.";
     case "oversell":
-      return "Sell exceeds tokens held in this episode — sync Older or exclude.";
+      return "Sell exceeds tokens held — skipped for auto-import.";
     default:
       return code;
   }
