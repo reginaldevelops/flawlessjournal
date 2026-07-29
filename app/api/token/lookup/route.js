@@ -3,19 +3,17 @@ import { fetchJson } from "../../../lib/chain/http";
 import { resolveTokenMeta } from "../../../lib/chain/tokens";
 import { isValidSolanaAddress } from "../../../lib/chain/validate";
 import { publicApiError } from "../../../lib/api/publicError";
+import {
+  mapPairToTerminalToken,
+  pickBestSolanaPair,
+} from "../../../lib/terminal/mapPair";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function pairAgeHours(pair) {
-  const created = pair?.pairCreatedAt ? Date.parse(pair.pairCreatedAt) : NaN;
-  if (!Number.isFinite(created)) return null;
-  return Math.max(0, (Date.now() - created) / 3_600_000);
-}
-
 /**
  * GET /api/token/lookup?mint=<solana-address>
- * Resolves token metadata for the swap picker (DexScreener + Jupiter).
+ * DexScreener pair stats + token meta for terminal / swap.
  */
 export async function GET(request) {
   try {
@@ -35,40 +33,28 @@ export async function GET(request) {
       resolveTokenMeta([mint]),
     ]);
 
-    const pairs = (pairsPayload?.pairs ?? []).filter((p) => p.chainId === "solana");
-    const best = pairs.sort(
-      (a, b) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0)
-    )[0];
-
+    const best = pickBestSolanaPair(pairsPayload, mint);
     const meta = metaResult.meta.get(mint);
-    const base = best?.baseToken;
-    const quote = best?.quoteToken;
-    const symbol =
-      (base?.address === mint ? base?.symbol : null) ??
-      (quote?.address === mint ? quote?.symbol : null) ??
-      meta?.symbol ??
-      "TOKEN";
-    const name =
-      (base?.address === mint ? base?.name : null) ??
-      meta?.name ??
-      "Token";
 
-    return NextResponse.json(
-      {
-        address: mint,
-        symbol,
-        name,
-        pairAddress: best?.pairAddress ?? null,
-        url: best?.url ?? `https://dexscreener.com/solana/${mint}`,
-        imageUrl: best?.info?.imageUrl ?? meta?.logo ?? null,
-        chainId: "solana",
-        ageHours: best ? pairAgeHours(best) : null,
-        changeH1: best?.priceChange?.h1 ?? null,
-      },
-      {
-        headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
-      }
-    );
+    if (!best) {
+      return NextResponse.json(
+        {
+          address: mint,
+          symbol: meta?.symbol ?? "TOKEN",
+          name: meta?.name ?? "Token",
+          imageUrl: meta?.logo ?? null,
+          chainId: "solana",
+          error: "No Solana pool found on DexScreener",
+        },
+        { status: 404 }
+      );
+    }
+
+    const token = mapPairToTerminalToken(mint, best, meta);
+
+    return NextResponse.json(token, {
+      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+    });
   } catch (error) {
     console.error("[token/lookup]", error);
     return NextResponse.json(publicApiError("Token lookup failed"), { status: 502 });
