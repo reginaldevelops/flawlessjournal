@@ -58,6 +58,7 @@ export async function GET(request) {
         address: mint,
         symbol,
         name,
+        pairAddress: best?.pairAddress ?? null,
         url: best?.url ?? `https://dexscreener.com/solana/${mint}`,
         imageUrl: best?.info?.imageUrl ?? meta?.logo ?? null,
         chainId: "solana",
