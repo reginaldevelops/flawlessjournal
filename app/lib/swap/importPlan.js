@@ -10,6 +10,8 @@ export {
   toggleTradeInPlan,
   planSummary,
   warningLabel,
+  mergeImportSwaps,
+  mergeScanData,
   JOURNAL_POSITION_KIND,
 } from "./importPlanCore";
 
@@ -21,12 +23,30 @@ export async function loadMintImportContext(tokenMints = []) {
   const mints = [...new Set(tokenMints.filter(Boolean))];
   if (!mints.length) return {};
 
-  const { data, error } = await supabase
-    .from("trades")
-    .select("id, data")
-    .order("id", { ascending: false })
-    .limit(400);
+  const mintSet = new Set(mints);
+  const rows = [];
+  const pageSize = 500;
+  let from = 0;
 
-  if (error) throw error;
-  return buildMintContextFromTrades(data ?? [], mints);
+  while (true) {
+    const { data, error } = await supabase
+      .from("trades")
+      .select("id, data")
+      .order("id", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const fj = row.data?._fj;
+      if (fj?.kind !== JOURNAL_POSITION_KIND) continue;
+      if (mintSet.has(fj.tokenMint)) rows.push(row);
+    }
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return buildMintContextFromTrades(rows, mints);
 }

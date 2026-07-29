@@ -7,6 +7,8 @@ import {
   buildImportPlan,
   buildMintContextFromTrades,
   findLinkTradeIdAtTime,
+  mergeImportSwaps,
+  mergeScanData,
   JOURNAL_POSITION_KIND,
 } from "./importPlanCore.js";
 import {
@@ -166,5 +168,45 @@ describe("dedup", () => {
     );
     assert.equal(plan.includedCount, 0);
     assert.ok(plan.trades[0].fills[0].alreadyImported);
+  });
+});
+
+describe("mergeImportSwaps", () => {
+  it("dedupes by signature+side and sorts chronologically", () => {
+    const older = [swap({ i: 0, side: "buy", qty: 100, sig: "open-b" })];
+    const current = [
+      swap({ i: 1, side: "sell", qty: 50, sig: "sell-a" }),
+      swap({ i: 0, side: "buy", qty: 100, sig: "open-b" }),
+    ];
+    const merged = mergeImportSwaps(current, older);
+    assert.equal(merged.length, 2);
+    assert.equal(merged[0].signature, "open-b");
+    assert.equal(merged[1].signature, "sell-a");
+  });
+
+  it("mergeScanData extends oldest boundary", () => {
+    const base = {
+      swaps: [swap({ i: 1, side: "sell", qty: 50, sig: "sell-a" })],
+      scanned: 100,
+      total: 100,
+      oldestTime: 2000,
+      oldestSignature: "sig-cursor",
+      hasMoreOlder: true,
+      mergedBatches: 1,
+    };
+    const older = {
+      swaps: [swap({ i: 0, side: "buy", qty: 100, sig: "open-b" })],
+      scanned: 100,
+      total: 100,
+      oldestTime: 1000,
+      oldestSignature: "sig-older",
+      hasMoreOlder: false,
+    };
+    const merged = mergeScanData(base, older);
+    assert.equal(merged.swaps.length, 2);
+    assert.equal(merged.oldestTime, 1000);
+    assert.equal(merged.oldestSignature, "sig-older");
+    assert.equal(merged.mergedBatches, 2);
+    assert.equal(merged.hasMoreOlder, false);
   });
 });
