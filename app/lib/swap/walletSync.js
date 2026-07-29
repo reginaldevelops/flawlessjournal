@@ -473,6 +473,8 @@ export async function syncWalletSwaps({
     skipped: result.skipped,
     batchLimit: result.batchLimit,
     lookbackDays: result.lookbackDays,
+    newestTime: result.newestTime,
+    oldestTime: result.oldestTime,
     hasMoreOlder: result.hasMoreOlder,
     message: `Done · scanned ${result.scanned}/${result.total} · ${enriched.length} swaps`,
   });

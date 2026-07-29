@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRobinhoodCredentials } from "../lib/wallets/robinhood";
 import { subscribePositionChanged } from "../lib/swap/positionEvents";
-import Link from "next/link";
 import {
   ExternalLink,
   Pencil,
@@ -35,9 +34,28 @@ import WalletFormModal from "./WalletFormModal";
 import {
   getWalletSyncMeta,
   runWalletSync,
+  clearWalletSyncMeta,
   formatSyncProgress,
 } from "../lib/swap/importFills";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
+import { formatDate } from "../lib/format";
+
+function formatScanSummary(result) {
+  const range =
+    result.oldestTime || result.newestTime
+      ? (() => {
+          const fmt = (ts) =>
+            formatDate(new Date(Number(ts) * 1000), "medium");
+          const oldest = result.oldestTime ? fmt(result.oldestTime) : null;
+          const newest = result.newestTime ? fmt(result.newestTime) : null;
+          if (oldest && newest && oldest !== newest) return `${oldest} – ${newest}`;
+          return oldest || newest;
+        })()
+      : null;
+  return `Scanned ${result.scanned}/${result.total ?? result.scanned} txs${
+    range ? ` (${range})` : ""
+  } · batch ≤${result.batchLimit ?? SYNC_BATCH_DEFAULT}`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
@@ -56,25 +74,37 @@ export default function WalletsPage() {
   const [syncingId, setSyncingId] = useState(null);
   const [syncTick, setSyncTick] = useState(0);
   const [syncProgress, setSyncProgress] = useState({}); // walletId -> { label, scanned, total, swapsFound, lookbackDays }
+  const [resetSyncTarget, setResetSyncTarget] = useState(null);
+  const [resetSyncLoading, setResetSyncLoading] = useState(false);
 
-  const handleSyncWallet = async (wallet, { older = false } = {}) => {
+  const handleSyncWallet = async (wallet, { older = false, resync = false, reset = false } = {}) => {
     if (wallet.chain !== "solana") return;
     setSyncingId(wallet.id);
     setSyncProgress((prev) => ({
       ...prev,
       [wallet.id]: {
-        label: older ? "Scanning older txs…" : "Starting sync…",
+        label: reset
+          ? "Resetting sync cursor…"
+          : resync
+            ? "Re-scanning recent txs…"
+            : older
+              ? "Scanning older txs…"
+              : "Starting sync…",
         scanned: 0,
         total: 0,
         swapsFound: 0,
         lookbackDays: null,
         older,
+        resync,
+        reset,
       },
     }));
     try {
       const result = await runWalletSync(wallet.address, {
         limit: SYNC_BATCH_DEFAULT,
         older,
+        resync,
+        reset,
         onProgress: (ev) => {
           const label = formatSyncProgress(ev);
           setSyncProgress((prev) => ({
@@ -87,36 +117,40 @@ export default function WalletsPage() {
               lookbackDays: ev.lookbackDays ?? prev[wallet.id]?.lookbackDays ?? null,
               batchLimit: ev.batchLimit ?? prev[wallet.id]?.batchLimit ?? SYNC_BATCH_DEFAULT,
               older,
+              resync,
+              reset,
             },
           }));
         },
       });
       setSyncTick((t) => t + 1);
       const n = result.imported?.length ?? 0;
-      const days =
-        result.lookbackDays != null && Number.isFinite(result.lookbackDays)
-          ? result.lookbackDays < 1
-            ? `~${Math.max(1, Math.round(result.lookbackDays * 24))}h`
-            : `~${result.lookbackDays < 10 ? result.lookbackDays.toFixed(1) : Math.round(result.lookbackDays)}d`
-          : null;
-      const scanLine = `Scanned ${result.scanned}/${result.total ?? result.scanned} txs${
-        days ? ` (${days})` : ""
-      } · batch ≤${result.batchLimit ?? SYNC_BATCH_DEFAULT}`;
+      const deduped = result.deduped?.length ?? 0;
+      const scanLine = formatScanSummary(result);
       if (n > 0) {
-        toast.success(`Imported ${n} fill${n === 1 ? "" : "s"}`, {
-          description: `${scanLine} · ${result.deduped?.length ?? 0} already known`,
-          action: result.imported[0]?.tradeId
-            ? {
-                label: "Open trade",
-                onClick: () => {
-                  window.location.href = `/trade/${result.imported[0].tradeId}`;
-                },
-              }
-            : undefined,
+        toast.success(
+          resync || reset ? `Re-imported ${n} fill${n === 1 ? "" : "s"}` : `Imported ${n} fill${n === 1 ? "" : "s"}`,
+          {
+            description: `${scanLine} · ${deduped} already known`,
+            action: result.imported[0]?.tradeId
+              ? {
+                  label: "Open trade",
+                  onClick: () => {
+                    window.location.href = `/trade/${result.imported[0].tradeId}`;
+                  },
+                }
+              : undefined,
+          }
+        );
+      } else if (deduped > 0) {
+        toast.info("No new swaps", {
+          description: `${scanLine} · ${deduped} already journaled`,
         });
       } else {
-        toast.info("No new swaps", {
-          description: `${scanLine} · ${result.deduped?.length ?? 0} already journaled`,
+        toast.info("No swaps in this batch", {
+          description: resync || reset
+            ? scanLine
+            : `${scanLine} · Try Re-import if you deleted trades, or Reset sync to start over`,
         });
       }
     } catch (err) {
@@ -128,6 +162,18 @@ export default function WalletsPage() {
         delete next[wallet.id];
         return next;
       });
+    }
+  };
+
+  const handleResetSyncCursor = async () => {
+    if (!resetSyncTarget) return;
+    setResetSyncLoading(true);
+    try {
+      clearWalletSyncMeta(resetSyncTarget.address);
+      setResetSyncTarget(null);
+      await handleSyncWallet(resetSyncTarget, { reset: true });
+    } finally {
+      setResetSyncLoading(false);
     }
   };
 
@@ -236,6 +282,8 @@ export default function WalletsPage() {
                     syncProgress={syncProgress[wallet.id] || null}
                     onSync={() => handleSyncWallet(wallet)}
                     onSyncOlder={() => handleSyncWallet(wallet, { older: true })}
+                    onResync={() => handleSyncWallet(wallet, { resync: true })}
+                    onResetSync={() => setResetSyncTarget(wallet)}
                     onEdit={() => setEditTarget(wallet)}
                     onDelete={() => setDeleteTarget(wallet)}
                     onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
@@ -260,6 +308,19 @@ export default function WalletsPage() {
         onSave={handleEdit}
         wallet={editTarget}
         usedColors={wallets.filter((w) => w.id !== editTarget?.id).map((w) => w.color)}
+      />
+      <ConfirmDialog
+        open={Boolean(resetSyncTarget)}
+        onClose={() => setResetSyncTarget(null)}
+        onConfirm={handleResetSyncCursor}
+        title="Reset wallet sync?"
+        description={
+          resetSyncTarget
+            ? `Clear the sync cursor for "${resetSyncTarget.label}" and re-scan the latest batch. Use this after deleting trades — then press Older repeatedly to walk further back.`
+            : undefined
+        }
+        confirmLabel="Reset & sync"
+        loading={resetSyncLoading}
       />
       <ConfirmDialog
         open={Boolean(deleteTarget)}
@@ -454,6 +515,8 @@ function WalletCard({
   syncProgress,
   onSync,
   onSyncOlder,
+  onResync,
+  onResetSync,
   onEdit,
   onDelete,
   onToggle,
@@ -520,10 +583,12 @@ function WalletCard({
               )}
               {syncMeta?.lastAt && !syncing && (
                 <span className="text-2xs text-content-subtle">
-                  Journal synced {formatRelative(syncMeta.lastAt)}
-                  {syncMeta.lastScanned != null
-                    ? ` · last batch ${syncMeta.lastScanned} tx${syncMeta.lastScanned === 1 ? "" : "s"}`
-                    : ""}
+                  Last sync {formatRelative(syncMeta.lastAt)}
+                  {syncMeta.oldestScannedAt
+                    ? ` · scanned back to ${formatDate(syncMeta.oldestScannedAt, "medium")}`
+                    : syncMeta.lastScanned != null
+                      ? ` · last batch ${syncMeta.lastScanned} tx${syncMeta.lastScanned === 1 ? "" : "s"}`
+                      : ""}
                 </span>
               )}
             </div>
@@ -557,16 +622,27 @@ function WalletCard({
           <div className="flex shrink-0 items-center gap-1">
             {wallet.chain === "solana" && (
               <>
-                <Tooltip content="Import new external swaps (one capped batch via free RPC)">
+                <Tooltip content="Import only txs newer than the last sync">
                   <Button
                     variant="subtle"
                     size="sm"
                     icon={Download}
-                    loading={syncing && !syncProgress?.older}
+                    loading={syncing && !syncProgress?.older && !syncProgress?.resync && !syncProgress?.reset}
                     disabled={syncing}
                     onClick={onSync}
                   >
                     Sync
+                  </Button>
+                </Tooltip>
+                <Tooltip content="Re-scan the latest batch — use after deleting trades">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={syncing && syncProgress?.resync}
+                    disabled={syncing}
+                    onClick={onResync}
+                  >
+                    Re-import
                   </Button>
                 </Tooltip>
                 {canScanOlder && (
@@ -579,6 +655,19 @@ function WalletCard({
                       onClick={onSyncOlder}
                     >
                       Older
+                    </Button>
+                  </Tooltip>
+                )}
+                {syncMeta?.lastSignature && (
+                  <Tooltip content="Clear sync cursor and start from the newest txs again">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={syncing && syncProgress?.reset}
+                      disabled={syncing}
+                      onClick={onResetSync}
+                    >
+                      Reset
                     </Button>
                   </Tooltip>
                 )}
@@ -646,7 +735,13 @@ function WalletCard({
             <p className="mt-1.5 text-2xs text-content-subtle">
               Free RPC · max {syncProgress.batchLimit ?? SYNC_BATCH_DEFAULT} txs per
               press
-              {syncProgress.older ? " · walking older history" : " · new txs only"}
+              {syncProgress.reset
+                ? " · reset cursor + fresh batch"
+                : syncProgress.resync
+                  ? " · re-scanning recent batch"
+                  : syncProgress.older
+                    ? " · walking older history"
+                    : " · new txs only"}
             </p>
           </div>
         )}
