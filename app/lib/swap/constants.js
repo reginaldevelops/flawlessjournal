@@ -40,6 +40,11 @@ export const QUOTE_TOKENS = [
   },
 ];
 
+/** Receive options when selling a position (no SOL). */
+export const SELL_RECEIVE_TOKENS = QUOTE_TOKENS.filter(
+  (t) => t.mint === FARTCOIN_MINT || t.mint === USDC_MINT
+);
+
 export const SWAP_SETTINGS_KEY = "flawless.swap.settings";
 
 /** Only two slippage choices in the UI. */
@@ -71,6 +76,18 @@ export const DEFAULT_SWAP_SETTINGS = {
 };
 
 export const POSITION_KIND = "solana_position";
+
+/** Live bar refresh (global header strip). */
+export const LIVE_POSITIONS_REFRESH_MS = 5000;
+
+/** Trade page refresh while a Solana position is open. */
+export const TRADE_POSITION_REFRESH_MS = 10_000;
+
+/** @deprecated use LIVE_POSITIONS_REFRESH_MS */
+export const POSITION_UI_REFRESH_MS = LIVE_POSITIONS_REFRESH_MS;
+
+/** Swap confirm polling — journal app, not a sniper bot. */
+export const SWAP_CONFIRM_POLL_MS = 2500;
 
 /** Wallet sync: free RPC is slow — hard batch caps, never full history. */
 export const SYNC_BATCH_DEFAULT = 50;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   ArrowDownUp,
   ArrowRight,
@@ -23,6 +23,7 @@ import { useTheme } from "./ThemeProvider";
 
 export default function CommandPalette({ open, onOpenChange }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -35,6 +36,11 @@ export default function CommandPalette({ open, onOpenChange }) {
   }, [onOpenChange]);
 
   const { openSwap } = useSwapFlow();
+
+  const activeTradeId = useMemo(() => {
+    const match = pathname?.match(/^\/trade\/(\d+)/);
+    return match ? Number(match[1]) : null;
+  }, [pathname]);
 
   const addJournalEntry = useCallback(async () => {
     try {
@@ -71,7 +77,7 @@ export default function CommandPalette({ open, onOpenChange }) {
         label: "Swap trade",
         description: "Execute on Solana, then journal with fills and chart",
         icon: ArrowDownUp,
-        run: () => openSwap(),
+        run: () => openSwap(activeTradeId ? { tradeId: activeTradeId } : {}),
       },
       {
         id: "theme",
@@ -97,7 +103,7 @@ export default function CommandPalette({ open, onOpenChange }) {
     }
 
     return [...nav, ...actions];
-  }, [router, addJournalEntry, openSwap, theme, setTheme]);
+  }, [router, addJournalEntry, openSwap, theme, setTheme, activeTradeId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

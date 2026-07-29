@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { parseRpcErrorMessage } from "../../../lib/swap/rpc";
-import { getServerRpcUrl } from "../../../lib/swap/rpc";
+import { JITO_TX_URL } from "../../../lib/swap/constants";
+import { parseRpcErrorMessage, getServerRpcUrl } from "../../../lib/swap/rpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,8 +78,10 @@ export async function POST(request) {
       /403|forbidden|access forbidden/i.test(message)
         ? "Solana RPC rejected the transaction. Set SOLANA_RPC_URL (Helius/QuickNode) in Vercel env, or retry in a moment."
         : /0x1771|6001|slippage/i.test(message)
-          ? "Price moved too fast (slippage exceeded). Retry the swap — a fresh quote with 4% slippage is applied automatically."
-          : message;
+          ? "Slippage tolerance exceeded — price moved before the swap landed. Retry with the live quote or raise slippage in Swap settings."
+          : /0x1900|simulation failed/i.test(message)
+            ? "Swap simulation failed — the quote may be stale, or a previous attempt already went through (check your wallet before retrying)."
+            : message;
     return NextResponse.json({ error: friendly }, { status: 502 });
   }
 }

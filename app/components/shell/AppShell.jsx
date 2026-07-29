@@ -65,6 +65,15 @@ export default function AppShell({ children }) {
 
   const { openSwap } = useSwapFlow();
 
+  const activeTradeId = useMemo(() => {
+    const match = pathname?.match(/^\/trade\/(\d+)/);
+    return match ? Number(match[1]) : null;
+  }, [pathname]);
+
+  const openSwapForContext = useCallback(() => {
+    openSwap(activeTradeId ? { tradeId: activeTradeId } : {});
+  }, [openSwap, activeTradeId]);
+
   const addJournalEntry = useCallback(async () => {
     try {
       const id = await createJournalTrade(supabase);
@@ -308,7 +317,7 @@ export default function AppShell({ children }) {
               </Button>
             </Tooltip>
             <Tooltip content="Swap on Solana → journal trade with fills">
-              <Button variant="secondary" size="sm" icon={ArrowDownUp} onClick={() => openSwap()}>
+              <Button variant="secondary" size="sm" icon={ArrowDownUp} onClick={openSwapForContext}>
                 <span className="hidden sm:inline">Swap</span>
               </Button>
             </Tooltip>
