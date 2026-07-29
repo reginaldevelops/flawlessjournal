@@ -3,6 +3,7 @@ import {
   ChartNoAxesCombined,
   Globe2,
   LayoutDashboard,
+  LineChart,
   NotebookPen,
   Radar,
   Table2,
@@ -15,6 +16,12 @@ export const NAV_ITEMS = [
     label: "Dashboard",
     icon: LayoutDashboard,
     description: "Today's session, balances and economic events",
+  },
+  {
+    href: "/terminal",
+    label: "Terminal",
+    icon: LineChart,
+    description: "Live chart + swap on any Solana token",
   },
   {
     href: "/trades",

@@ -219,6 +219,54 @@ export async function fetchPositionChartWindow({
 }
 
 /**
+ * Live chart window: last N candles from now (terminal / pair view).
+ */
+export async function fetchLiveChartWindow({
+  mint,
+  pairAddress,
+  pairUrl,
+  interval = "5m",
+  limit = 300,
+} = {}) {
+  const pair = await resolveSolanaPair({ mint, pairAddress, pairUrl });
+  if (!pair?.pairAddress) {
+    throw new Error("No Solana pool found for this token");
+  }
+
+  const tf = resolveChartTimeframe(interval) || CHART_TIMEFRAMES[1];
+  const target = Math.max(40, Math.min(1000, Number(limit) || 300));
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const raw = await fetchGeckoOhlcv({
+    pairAddress: pair.pairAddress,
+    timeframe: tf.timeframe,
+    aggregate: tf.aggregate,
+    before: nowSec,
+    limit: target,
+  });
+
+  const candles = raw.sort((a, b) => a.t - b.t);
+  const leftEdge = candles[0]?.t ?? nowSec - target * tf.seconds;
+
+  return {
+    mint: mint || null,
+    pairAddress: pair.pairAddress,
+    pairUrl: pair.pairUrl,
+    dexId: pair.dexId,
+    priceUsd: pair.priceUsd,
+    fromTs: leftEdge,
+    toTs: nowSec,
+    timeframe: tf.label,
+    interval: tf.id,
+    intervalMode: "manual",
+    candleSeconds: tf.seconds,
+    candles,
+    live: true,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Back-compat: single fill centered window.
  */
 export async function fetchFillChartWindow({

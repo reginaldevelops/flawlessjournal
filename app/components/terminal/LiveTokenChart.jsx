@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -13,12 +13,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { Segmented, cn, useChartColors } from "../ui";
-import {
-  CHART_TIMEFRAMES,
-  suggestIntervalFromTradeDuration,
-} from "../../lib/swap/chartIntervals";
+import { formatCurrency } from "../../lib/format";
+import { CHART_TIMEFRAMES } from "../../lib/swap/chartIntervals";
 import {
   CandlesLayer,
   CandleTooltip,
@@ -26,77 +24,86 @@ import {
   formatAxisPrice,
   formatTickTime,
   normalizeCandle,
-} from "./candleChartCore";
+} from "../swap/candleChartCore";
 
-const INTERVAL_OPTIONS = [
-  { value: "auto", label: "Auto" },
-  ...CHART_TIMEFRAMES.map((t) => ({
-    value: t.id,
-    label: t.id === "1d" ? "D" : t.label,
-  })),
-];
+const INTERVAL_OPTIONS = CHART_TIMEFRAMES.map((t) => ({
+  value: t.id,
+  label: t.id === "1d" ? "D" : t.label,
+}));
 
-function mergeFillSnapshots(fills = []) {
-  const byT = new Map();
-  let pairUrl = null;
-  let pairAddress = null;
-  let interval = null;
-  let timeframe = null;
-
-  for (const f of fills) {
-    const snap = f?.ohlcSnapshot;
-    if (!snap?.candles?.length) continue;
-    if (!pairUrl && snap.pairUrl) pairUrl = snap.pairUrl;
-    if (!pairAddress && snap.pairAddress) pairAddress = snap.pairAddress;
-    if (!interval && snap.interval) interval = snap.interval;
-    if (!timeframe && (snap.timeframe || snap.interval)) {
-      timeframe = snap.timeframe || snap.interval;
-    }
-    for (const raw of snap.candles) {
-      const c = normalizeCandle(raw);
-      if (!c) continue;
-      byT.set(c.t, c);
-    }
-  }
-
-  const candles = [...byT.values()].sort((a, b) => a.t - b.t);
-  if (candles.length < 2) return null;
-  return {
-    source: "snapshot",
-    pairUrl,
-    pairAddress,
-    interval,
-    timeframe: timeframe || interval,
-    candles,
-    fromSnapshot: true,
-  };
-}
+const REFRESH_MS = 30_000;
 
 /**
- * Single candlestick chart for a Solana position with all fills marked.
- * Live Gecko candles preferred; fill OHLC snapshots as fallback.
+ * DexScreener-style live candlestick chart for a Solana token mint.
+ * Session entry marks overlay buy/sell fills from the current terminal session.
  */
-export default function PositionCandlesChart({
+export default function LiveTokenChart({
   mint,
   pairUrl,
-  fills = [],
   symbol,
+  entryMarks = [],
   className,
+  defaultInterval = "5m",
 }) {
   const colors = useChartColors();
-  const [interval, setIntervalMode] = useState("auto");
+  const [interval, setInterval] = useState(defaultInterval);
   const [state, setState] = useState({ status: "idle", data: null, error: null });
+  const [lastRefresh, setLastRefresh] = useState(null);
 
-  const snapshot = useMemo(() => mergeFillSnapshots(fills), [fills]);
+  const loadChart = useCallback(
+    async (signal) => {
+      if (!mint && !pairUrl) return;
+      setState((prev) => ({ status: "loading", data: prev.data, error: null }));
+      try {
+        const params = new URLSearchParams({
+          live: "1",
+          interval,
+          limit: "300",
+        });
+        if (mint) params.set("mint", mint);
+        if (pairUrl) params.set("pairUrl", pairUrl);
 
-  const fillMarks = useMemo(() => {
-    return (fills || [])
-      .map((f) => {
-        const ms = toMs(f.ts);
+        const res = await fetch(`/api/trade/chart?${params}`, { signal });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Chart failed (${res.status})`);
+
+        const candles = (json.candles || []).map(normalizeCandle).filter(Boolean);
+        setState({ status: "ready", data: { ...json, candles }, error: null });
+        setLastRefresh(Date.now());
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        setState((prev) => ({
+          status: "error",
+          data: prev.data,
+          error: err?.message || "Chart unavailable",
+        }));
+      }
+    },
+    [mint, pairUrl, interval]
+  );
+
+  useEffect(() => {
+    if (!mint && !pairUrl) {
+      setState({ status: "idle", data: null, error: null });
+      return undefined;
+    }
+    const ctrl = new AbortController();
+    loadChart(ctrl.signal);
+    const id = setInterval(() => loadChart(ctrl.signal), REFRESH_MS);
+    return () => {
+      ctrl.abort();
+      clearInterval(id);
+    };
+  }, [mint, pairUrl, interval, loadChart]);
+
+  const marks = useMemo(() => {
+    return (entryMarks || [])
+      .map((f, i) => {
+        const ms = toMs(f.t ?? f.ts);
         if (ms == null) return null;
-        const price = Number(f.priceUsd);
+        const price = Number(f.priceUsd ?? f.price);
         return {
-          id: f.id,
+          id: f.id || f.signature || `mark-${i}`,
           side: f.side === "sell" ? "sell" : "buy",
           t: ms,
           price: Number.isFinite(price) && price > 0 ? price : null,
@@ -104,80 +111,10 @@ export default function PositionCandlesChart({
       })
       .filter(Boolean)
       .sort((a, b) => a.t - b.t);
-  }, [fills]);
-
-  const range = useMemo(() => {
-    if (!fillMarks.length) return null;
-    return {
-      from: fillMarks[0].t,
-      to: fillMarks[fillMarks.length - 1].t,
-    };
-  }, [fillMarks]);
-
-  const suggested = useMemo(() => {
-    if (!range) return "5m";
-    return suggestIntervalFromTradeDuration((range.to - range.from) / 1000);
-  }, [range]);
-
-  useEffect(() => {
-    if (!range || (!mint && !pairUrl)) {
-      setState({ status: "idle", data: null, error: null });
-      return undefined;
-    }
-    let cancelled = false;
-    const ctrl = new AbortController();
-
-    (async () => {
-      setState((prev) => ({
-        status: "loading",
-        data: prev.data,
-        error: null,
-      }));
-      try {
-        const params = new URLSearchParams({
-          from: new Date(range.from).toISOString(),
-          to: new Date(range.to).toISOString(),
-          minCandles: "100",
-        });
-        if (mint) params.set("mint", mint);
-        if (pairUrl) params.set("pairUrl", pairUrl);
-        if (interval && interval !== "auto") params.set("interval", interval);
-
-        const res = await fetch(`/api/trade/chart?${params}`, {
-          signal: ctrl.signal,
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || `Chart failed (${res.status})`);
-        const candles = (json.candles || []).map(normalizeCandle).filter(Boolean);
-        if (!cancelled) {
-          setState({
-            status: "ready",
-            data: { ...json, candles },
-            error: null,
-          });
-        }
-      } catch (err) {
-        if (cancelled || err?.name === "AbortError") return;
-        setState({
-          status: "error",
-          data: null,
-          error: err?.message || "Chart unavailable",
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-    };
-  }, [mint, pairUrl, range?.from, range?.to, interval]);
-
-  const liveReady = Boolean(state.data?.candles?.length >= 2);
-  const chartSource = liveReady ? state.data : snapshot;
-  const usingSnapshot = Boolean(snapshot) && !liveReady;
+  }, [entryMarks]);
 
   const chartData = useMemo(() => {
-    const candles = chartSource?.candles ?? [];
+    const candles = state.data?.candles ?? [];
     return candles.map((c) => ({
       t: c.t * 1000,
       o: c.o,
@@ -188,12 +125,12 @@ export default function PositionCandlesChart({
       up: c.c >= c.o,
       mid: (c.h + c.l) / 2,
     }));
-  }, [chartSource]);
+  }, [state.data]);
 
   const yDomain = useMemo(() => {
     const prices = [];
     for (const c of chartData) prices.push(c.l, c.h);
-    for (const f of fillMarks) {
+    for (const f of marks) {
       if (f.price != null) prices.push(f.price);
     }
     if (!prices.length) return ["auto", "auto"];
@@ -202,28 +139,37 @@ export default function PositionCandlesChart({
     if (!(max > min)) return [min * 0.98, max * 1.02 || 1];
     const pad = (max - min) * 0.08;
     return [min - pad, max + pad];
-  }, [chartData, fillMarks]);
+  }, [chartData, marks]);
 
-  const pairLink = chartSource?.pairUrl || pairUrl || null;
-  const activeTf =
-    chartSource?.timeframe ||
-    chartSource?.interval ||
-    (interval === "auto" ? suggested : interval);
+  const pairLink = state.data?.pairUrl || pairUrl || null;
+  const activeTf = state.data?.timeframe || state.data?.interval || interval;
+  const priceUsd = state.data?.priceUsd;
 
-  const showLoading = (state.status === "loading" || state.status === "idle") && !chartData.length;
-  const showError = state.status === "error" && !chartData.length;
+  const showLoading = state.status === "loading" && chartData.length < 2;
+  const showError = state.status === "error" && chartData.length < 2;
 
   return (
-    <div className={cn("border-b border-line", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-            Price chart
-            {activeTf ? ` · ${activeTf}` : ""}
-            {usingSnapshot ? (
-              <span className="ml-1 font-normal normal-case text-content-muted">(snapshot)</span>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <p className="text-sm font-semibold text-content">
+              {symbol || "Token"}
+              {activeTf ? (
+                <span className="ml-2 text-2xs font-normal text-content-subtle">
+                  · {activeTf}
+                </span>
+              ) : null}
+            </p>
+            {priceUsd != null && Number.isFinite(priceUsd) ? (
+              <p className="font-mono text-sm tnum text-content">
+                {formatCurrency(priceUsd, {
+                  compact: priceUsd < 0.01,
+                  decimals: priceUsd < 0.01 ? 6 : 4,
+                })}
+              </p>
             ) : null}
-          </p>
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-2xs text-content-subtle">
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-profit" aria-hidden /> Buy
@@ -231,15 +177,34 @@ export default function PositionCandlesChart({
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-loss" aria-hidden /> Sell
             </span>
+            {marks.length > 0 ? (
+              <span className="text-content-muted">
+                {marks.length} session {marks.length === 1 ? "fill" : "fills"}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-2 overflow-x-auto">
           <Segmented
             size="sm"
             value={interval}
-            onChange={setIntervalMode}
+            onChange={setInterval}
             options={INTERVAL_OPTIONS}
           />
+          <button
+            type="button"
+            onClick={() => loadChart(undefined)}
+            className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-2xs text-content-subtle hover:text-content"
+            title="Refresh chart"
+          >
+            <RefreshCw size={10} aria-hidden />
+            {lastRefresh
+              ? new Date(lastRefresh).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "Refresh"}
+          </button>
           {pairLink && (
             <a
               href={pairLink}
@@ -253,16 +218,16 @@ export default function PositionCandlesChart({
         </div>
       </div>
 
-      <div className="relative h-[18rem] w-full px-1 pb-2 sm:h-[28rem]">
+      <div className="relative min-h-[20rem] flex-1 w-full px-1 py-2 sm:min-h-[28rem]">
         {showLoading ? (
           <div className="absolute inset-3 animate-pulse rounded-lg bg-surface-raised" />
         ) : showError ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-2xs text-content-subtle">
+          <div className="flex h-full min-h-[16rem] items-center justify-center px-4 text-center text-2xs text-content-subtle">
             {state.error}
           </div>
         ) : chartData.length < 2 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-2xs text-content-subtle">
-            Not enough candle data for this position window
+          <div className="flex h-full min-h-[16rem] items-center justify-center px-4 text-center text-2xs text-content-subtle">
+            Paste a contract address to load the chart
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -295,7 +260,7 @@ export default function PositionCandlesChart({
               />
               <Tooltip
                 cursor={{ stroke: colors["line-strong"], strokeDasharray: "3 3" }}
-                content={<CandleTooltip symbol={symbol} fillMarks={fillMarks} />}
+                content={<CandleTooltip symbol={symbol} fillMarks={marks} />}
               />
 
               <Line
@@ -319,7 +284,7 @@ export default function PositionCandlesChart({
                 )}
               />
 
-              {fillMarks.map((f) => (
+              {marks.map((f) => (
                 <ReferenceLine
                   key={`line-${f.id}`}
                   x={f.t}
@@ -329,7 +294,7 @@ export default function PositionCandlesChart({
                 />
               ))}
 
-              {fillMarks
+              {marks
                 .filter((f) => f.price != null)
                 .map((f) => (
                   <ReferenceDot
@@ -352,7 +317,7 @@ export default function PositionCandlesChart({
         )}
       </div>
       {state.status === "loading" && chartData.length >= 2 ? (
-        <p className="px-4 pb-2 text-2xs text-content-subtle">Refreshing live candles…</p>
+        <p className="px-4 pb-2 text-2xs text-content-subtle">Refreshing candles…</p>
       ) : null}
     </div>
   );
@@ -366,4 +331,3 @@ function toMs(value) {
   const ms = Date.parse(String(value));
   return Number.isFinite(ms) ? ms : null;
 }
-

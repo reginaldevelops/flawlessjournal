@@ -66,6 +66,8 @@ async function fetchUsdPrices(mints) {
 export default function SwapSheet({
   open,
   onClose,
+  /** When true, renders inline (terminal panel) instead of a modal sheet */
+  embedded = false,
   /** Position token (what the trade is about) */
   token,
   /** Optional: force initial side */
@@ -79,6 +81,8 @@ export default function SwapSheet({
   const wallet = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
   const { success: toastSuccess, error: toastError } = useToast();
+
+  const isActive = embedded ? Boolean(token) : open;
 
   const [side, setSide] = useState(initialSide);
   const [settings, setSettings] = useState(() => loadSwapSettings());
@@ -116,7 +120,7 @@ export default function SwapSheet({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!isActive) return;
     setSide(initialSide);
     setAmount("");
     setAmountUnit(initialSide === "buy" ? "usd" : "quote");
@@ -141,7 +145,7 @@ export default function SwapSheet({
     saveSwapSettings(next);
     setSettings(next);
     setQuoteMint(next.defaultQuoteMint || FARTCOIN_MINT);
-  }, [open, initialSide, token?.address, token?.ageHours, token?.changeH1]);
+  }, [isActive, initialSide, token?.address, token?.ageHours, token?.changeH1]);
 
   useEffect(() => {
     if (
@@ -153,7 +157,7 @@ export default function SwapSheet({
   }, [side, quoteMint]);
 
   useEffect(() => {
-    if (!open || side !== "sell" || !wallet.publicKey || !positionMint) {
+    if (!isActive || side !== "sell" || !wallet.publicKey || !positionMint) {
       setWalletTokenBalance(null);
       return undefined;
     }
@@ -192,11 +196,11 @@ export default function SwapSheet({
       cancelled = true;
       clearInterval(id);
     };
-  }, [open, side, wallet.publicKey, positionMint, connection]);
+  }, [isActive, side, wallet.publicKey, positionMint, connection]);
 
   // Live p90 fee estimate (capped)
   useEffect(() => {
-    if (!open) return undefined;
+    if (!isActive) return undefined;
     let cancelled = false;
     const load = async () => {
       try {
@@ -215,10 +219,10 @@ export default function SwapSheet({
       cancelled = true;
       clearInterval(id);
     };
-  }, [open, settings.feeMode]);
+  }, [isActive, settings.feeMode]);
 
   useEffect(() => {
-    if (!open || !positionMint) return undefined;
+    if (!isActive || !positionMint) return undefined;
     let cancelled = false;
     fetchUsdPrices([positionMint, quoteMint, FARTCOIN_MINT]).then((p) => {
       if (!cancelled) setPrices(p);
@@ -226,7 +230,7 @@ export default function SwapSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, positionMint, quoteMint]);
+  }, [isActive, positionMint, quoteMint]);
 
   const inputMint = side === "buy" ? quoteMint : positionMint;
   const outputMint = side === "buy" ? positionMint : quoteMint;
@@ -308,7 +312,7 @@ export default function SwapSheet({
 
   // Debounced quote
   useEffect(() => {
-    if (!open || !positionMint || !wallet.publicKey) {
+    if (!isActive || !positionMint || !wallet.publicKey) {
       setQuote(null);
       return undefined;
     }
@@ -360,7 +364,7 @@ export default function SwapSheet({
       ctrl.abort();
     };
   }, [
-    open,
+    isActive,
     positionMint,
     wallet.publicKey,
     resolveHumanInput,
@@ -373,7 +377,7 @@ export default function SwapSheet({
 
   // Keep quote fresh while the sheet is open (avoids stale prices at sign time)
   useEffect(() => {
-    if (!open || !positionMint || !wallet.publicKey || swapping) return undefined;
+    if (!isActive || !positionMint || !wallet.publicKey || swapping) return undefined;
     const human = resolveHumanInput();
     if (human == null) return undefined;
     const raw = toRawAmount(human, inputDecimals);
@@ -394,7 +398,7 @@ export default function SwapSheet({
     const id = setInterval(refresh, QUOTE_REFRESH_MS);
     return () => clearInterval(id);
   }, [
-    open,
+    isActive,
     positionMint,
     wallet.publicKey,
     swapping,
@@ -507,11 +511,16 @@ export default function SwapSheet({
 
       notifyPositionChanged({ tradeId: result.tradeId, side, source: "swap" });
 
-      onClose?.();
+      if (!embedded) onClose?.();
       if (onSuccess) {
         onSuccess(result);
-      } else if (result?.tradeId) {
+      } else if (!embedded && result?.tradeId) {
         window.location.href = `/trade/${result.tradeId}`;
+      }
+      if (embedded) {
+        setAmount("");
+        setQuote(null);
+        setSellPercent(null);
       }
     } catch (err) {
       if (signature && livePreview) {
@@ -553,10 +562,10 @@ export default function SwapSheet({
 
             notifyPositionChanged({ tradeId: result.tradeId, side, source: "swap-recovery" });
 
-            onClose?.();
+            if (!embedded) onClose?.();
             if (onSuccess) {
               onSuccess(result);
-            } else if (result?.tradeId) {
+            } else if (!embedded && result?.tradeId) {
               window.location.href = `/trade/${result.tradeId}`;
             }
             return;
@@ -579,42 +588,35 @@ export default function SwapSheet({
 
   const connected = Boolean(wallet.publicKey);
 
-  return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={side === "buy" ? `Buy ${positionSymbol}` : `Sell ${positionSymbol}`}
-      description="Quote tokens (Fartcoin / SOL / USDC) are payment only — the journal trade is always this token."
-      width="max-w-md"
-      footerClassName="sticky bottom-0 z-10 shrink-0 border-t border-line bg-surface px-4 py-3 shadow-[0_-10px_28px_-14px_rgba(0,0,0,0.45)]"
-      footer={
-        <div className="flex w-full flex-col gap-2">
-          {!connected ? (
-            <Button
-              variant="primary"
-              size="lg"
-              icon={Wallet}
-              className="h-12 w-full text-base font-semibold"
-              onClick={() => setWalletModalVisible(true)}
-            >
-              Connect Phantom
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="lg"
-              loading={swapping}
-              disabled={!quote || quoting}
-              className="h-12 w-full text-base font-semibold"
-              onClick={handleSwap}
-            >
-              {side === "buy" ? "Swap · Buy" : "Swap · Sell"}
-            </Button>
-          )}
-        </div>
-      }
-    >
-      <div className="space-y-4">
+  const footer = (
+    <div className="flex w-full flex-col gap-2">
+      {!connected ? (
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Wallet}
+          className="h-12 w-full text-base font-semibold"
+          onClick={() => setWalletModalVisible(true)}
+        >
+          Connect Phantom
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          size="lg"
+          loading={swapping}
+          disabled={!quote || quoting}
+          className="h-12 w-full text-base font-semibold"
+          onClick={handleSwap}
+        >
+          {side === "buy" ? "Swap · Buy" : "Swap · Sell"}
+        </Button>
+      )}
+    </div>
+  );
+
+  const body = (
+    <div className="space-y-4">
         {/* Side toggle */}
         <div className="flex gap-1 rounded-lg border border-line bg-surface-sunken p-0.5">
           {["buy", "sell"].map((s) => (
@@ -860,11 +862,48 @@ export default function SwapSheet({
         />
 
         <p className="text-2xs leading-relaxed text-content-subtle">
-          Phantom will ask you to sign once per swap (web apps can’t silent
-          auto-sign). After confirm, Flawless journals the fill on this token’s
-          trade — Fartcoin spent is payment, not a separate trade.
+          {embedded
+            ? "Sign once per swap in Phantom. Fills appear on the chart and are journaled on this token."
+            : "Phantom will ask you to sign once per swap (web apps can’t silent auto-sign). After confirm, Flawless journals the fill on this token’s trade — Fartcoin spent is payment, not a separate trade."}
         </p>
       </div>
+  );
+
+  if (embedded) {
+    if (!token) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center px-6 text-center text-sm text-content-subtle">
+          Load a token to trade
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="text-sm font-semibold text-content">
+            {side === "buy" ? `Buy ${positionSymbol}` : `Sell ${positionSymbol}`}
+          </h2>
+          <p className="mt-0.5 text-2xs text-content-subtle">
+            Jupiter swap · quote tokens are payment only
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
+        <div className="shrink-0 border-t border-line bg-surface px-4 py-3">{footer}</div>
+      </div>
+    );
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={side === "buy" ? `Buy ${positionSymbol}` : `Sell ${positionSymbol}`}
+      description="Quote tokens (Fartcoin / SOL / USDC) are payment only — the journal trade is always this token."
+      width="max-w-md"
+      footerClassName="sticky bottom-0 z-10 shrink-0 border-t border-line bg-surface px-4 py-3 shadow-[0_-10px_28px_-14px_rgba(0,0,0,0.45)]"
+      footer={footer}
+    >
+      {body}
     </Sheet>
   );
 }

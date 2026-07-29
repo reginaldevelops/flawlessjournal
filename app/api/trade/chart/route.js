@@ -3,6 +3,7 @@ import { isValidSolanaAddress, isValidDexScreenerSolanaUrl } from "../../../lib/
 import { publicApiError } from "../../../lib/api/publicError";
 import {
   fetchFillChartWindow,
+  fetchLiveChartWindow,
   fetchPositionChartWindow,
 } from "../../../lib/swap/fillChart";
 
@@ -27,6 +28,7 @@ export async function GET(request) {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const around = searchParams.get("around");
+    const live = searchParams.get("live");
     const windowMinutes = Number(searchParams.get("window") || 60);
     const pad = searchParams.get("pad");
 
@@ -48,7 +50,15 @@ export async function GET(request) {
     }
 
     let result;
-    if (from || to) {
+    if (live === "1" || live === "true") {
+      result = await fetchLiveChartWindow({
+        mint: mint || null,
+        pairAddress: pair,
+        pairUrl,
+        interval: searchParams.get("interval") || "5m",
+        limit: Number(searchParams.get("limit") || 300),
+      });
+    } else if (from || to) {
       result = await fetchPositionChartWindow({
         mint: mint || null,
         pairAddress: pair,
@@ -69,7 +79,7 @@ export async function GET(request) {
       });
     } else {
       return NextResponse.json(
-        { error: "from/to or around timestamp required" },
+        { error: "live=1, from/to, or around timestamp required" },
         { status: 400 }
       );
     }
