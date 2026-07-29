@@ -11,6 +11,7 @@ import {
   previousRange,
 } from "../../lib/trades";
 import { fetchTrades, isMissingSchemaError } from "../../lib/supabaseTrades";
+import { subscribePositionChanged } from "../../lib/swap/positionEvents";
 
 /* ------------------------------------------------------------------ */
 /* localStorage-backed state                                           */
@@ -268,6 +269,7 @@ function normalizePortfolio(payload, walletRows) {
       usdValue: toFinite(wallet?.usdValue) ?? toFinite(wallet?.totalUSD) ?? 0,
       color: wallet?.color || source?.color || WALLET_PALETTE[i % WALLET_PALETTE.length],
       error: wallet?.error ? String(wallet.error) : null,
+      assets: Array.isArray(wallet?.assets) ? wallet.assets : [],
     };
   });
 
@@ -456,6 +458,18 @@ export function usePortfolio() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    let timer;
+    const unsub = subscribePositionChanged(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => load(), 1500);
+    });
+    return () => {
+      unsub();
+      clearTimeout(timer);
+    };
+  }, [load]);
+
   return { ...state, reload: load };
 }
 
@@ -468,12 +482,16 @@ export function useBalances() {
 
   const venues = useMemo(() => {
     return (portfolio.wallets ?? []).map((wallet) => {
-      const holdings = (portfolio.assets ?? [])
-        .filter((asset) => {
-          if (!asset) return false;
-          if (wallet.chain && asset.chain && asset.chain !== wallet.chain) return false;
-          return (asset.usdValue ?? 0) > 0;
-        })
+      const walletAssets =
+        wallet.assets?.length > 0
+          ? wallet.assets
+          : (portfolio.assets ?? []).filter(
+              (asset) =>
+                asset &&
+                (!wallet.chain || !asset.chain || asset.chain === wallet.chain)
+            );
+      const holdings = walletAssets
+        .filter((asset) => (asset.usdValue ?? 0) > 0)
         .slice(0, 4)
         .map((asset) => ({
           symbol: asset.symbol,

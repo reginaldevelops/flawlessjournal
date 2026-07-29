@@ -12,6 +12,7 @@
 
 import { SOL_MINT, USDC_MINT } from "../chain/constants";
 import { fetchJson } from "../chain/http";
+import { postServerRpc } from "./rpc";
 import {
   DEFAULT_RPC,
   FARTCOIN_MINT,
@@ -37,18 +38,11 @@ function sleep(ms) {
 }
 
 async function rpc(rpcUrl, method, params) {
-  const json = await fetchJson(rpcUrl, {
-    label: `rpc:${method}`,
-    method: "POST",
+  const json = await postServerRpc(method, params, {
+    preferredUrl: rpcUrl,
     timeout: 20_000,
-    retries: 2,
-    retryDelay: 400,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    label: `rpc:${method}`,
   });
-  if (json?.error) {
-    throw new Error(json.error.message || JSON.stringify(json.error));
-  }
   return json.result;
 }
 
@@ -305,6 +299,8 @@ export async function syncWalletSwaps({
   const swaps = [];
   const skipped = [];
   let scanned = 0;
+  let newestConfirmedSignature = null;
+  let blockedByMissingHead = false;
 
   for (const row of list) {
     if (!row?.signature) continue;
@@ -312,6 +308,7 @@ export async function syncWalletSwaps({
     if (row.err) {
       skipped.push({ signature: row.signature, reason: "failed_tx" });
       scanned += 1;
+      if (!newestConfirmedSignature) newestConfirmedSignature = row.signature;
       emit({
         type: "progress",
         scanned,
@@ -332,6 +329,13 @@ export async function syncWalletSwaps({
         row.signature,
         { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
       ]);
+      if (!tx) {
+        await sleep(1500);
+        tx = await rpc(rpcUrl, "getTransaction", [
+          row.signature,
+          { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
+        ]);
+      }
     } catch (error) {
       skipped.push({ signature: row.signature, reason: error.message });
       scanned += 1;
@@ -351,6 +355,7 @@ export async function syncWalletSwaps({
 
     if (!tx) {
       skipped.push({ signature: row.signature, reason: "missing" });
+      if (!newestConfirmedSignature) blockedByMissingHead = true;
       emit({
         type: "progress",
         scanned,
@@ -362,6 +367,8 @@ export async function syncWalletSwaps({
       });
       continue;
     }
+
+    if (!newestConfirmedSignature) newestConfirmedSignature = row.signature;
 
     const deltas = extractBalanceDeltas(tx, address);
     const classified = classifySwap(deltas);
@@ -449,6 +456,7 @@ export async function syncWalletSwaps({
     newestTime,
     oldestTime,
     newestSignature: list[0]?.signature ?? null,
+    newestConfirmedSignature: blockedByMissingHead ? null : newestConfirmedSignature,
     oldestSignature: list[list.length - 1]?.signature ?? null,
     hasMoreOlder: (signatures ?? []).length >= batchLimit,
     stoppedAtCursor,

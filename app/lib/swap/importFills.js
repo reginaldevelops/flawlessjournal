@@ -225,7 +225,11 @@ export async function runWalletSync(address, opts = {}) {
     }
   } else {
     const newestSig =
-      data.newestSignature || data.swaps?.[0]?.signature || meta?.lastSignature || null;
+      data.newestConfirmedSignature ||
+      data.newestSignature ||
+      data.swaps?.[0]?.signature ||
+      meta?.lastSignature ||
+      null;
     if (newestSig) patch.lastSignature = newestSig;
     // Establish oldest cursor once (first sync) so "Older" can page back
     if (!meta?.oldestSignature && data.oldestSignature) {

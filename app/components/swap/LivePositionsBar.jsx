@@ -118,13 +118,20 @@ export default function LivePositionsBar() {
   useVisibleInterval(load, LIVE_POSITIONS_REFRESH_MS, true);
 
   useEffect(() => {
-    const unsub = subscribePositionChanged(() => {
+    const unsub = subscribePositionChanged((ev) => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         load();
       }
+      const source = ev?.detail?.source;
+      if (
+        (source === "swap" || source === "wallet-sync") &&
+        wallet.publicKey
+      ) {
+        maybeSyncExternalClose(wallet.publicKey.toBase58());
+      }
     });
     return unsub;
-  }, [load]);
+  }, [load, wallet.publicKey, maybeSyncExternalClose]);
 
   if (loading || rows.length === 0) return null;
 
