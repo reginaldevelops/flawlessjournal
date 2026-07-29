@@ -11,6 +11,7 @@ export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const HL_PERP_ASSET = "hl:perp-equity";
 export const hlSpotAsset = (coin) => `hl:spot:${coin}`;
 export const evmAsset = (symbol) => `evm:${symbol.toLowerCase()}`;
+export const rhAsset = (code) => `rh:${String(code ?? "").toUpperCase()}`;
 
 export const CHAINS = {
   solana: {
@@ -34,6 +35,20 @@ export const CHAINS = {
     addressHint: "The EVM address you trade Hyperliquid with.",
     explorerName: "Hyperliquid",
     explorer: (address) => `https://app.hyperliquid.xyz/explorer/address/${address}`,
+  },
+  robinhood: {
+    id: "robinhood",
+    label: "Robinhood Crypto",
+    short: "RH",
+    tone: "profit",
+    description:
+      "Custodial Robinhood Crypto account via API — holdings sync like Solana balances.",
+    addressPlaceholder: "Connected after API verify",
+    addressHint:
+      "Create API credentials in Robinhood web → Crypto settings → API. Paste API key + base64 private key below.",
+    explorerName: "Robinhood",
+    explorer: () => "https://robinhood.com/account/crypto",
+    usesApiCredentials: true,
   },
   evm: {
     id: "evm",

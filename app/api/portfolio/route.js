@@ -5,13 +5,17 @@ import { createCache } from "../../lib/chain/cache";
 import { fetchJson, postJson, toNum } from "../../lib/chain/http";
 import { getSolanaPrices } from "../../lib/chain/prices";
 import { resolveTokenMeta, fallbackMeta } from "../../lib/chain/tokens";
-import { isValidSolanaAddress, isValidEvmAddress } from "../../lib/chain/validate";
+import { isValidSolanaAddress, isValidEvmAddress, isValidRobinhoodAccountId } from "../../lib/chain/validate";
 import {
   SOL_MINT,
   HL_PERP_ASSET,
   hlSpotAsset,
   USDC_MINT,
+  rhAsset,
 } from "../../lib/chain/constants";
+import { fetchRobinhoodHoldings } from "../../lib/robinhood/client";
+import { coingeckoIdForRhAsset } from "../../lib/robinhood/assets";
+import { getCoinGeckoPrices } from "../../lib/chain/prices";
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
@@ -263,6 +267,70 @@ async function fetchSolanaWallet(address) {
   const filtered = assets.filter((a) => a.usdValue >= DUST_USD || a.symbol === "SOL");
   const total = filtered.reduce((s, a) => s + (a.usdValue ?? 0), 0);
 
+  return { assets, usdValue: total, errors: [...new Set(errors)] };
+}
+
+/* ------------------------------------------------------------------ */
+/* Robinhood Crypto (custodial API)                                    */
+/* ------------------------------------------------------------------ */
+
+async function fetchRobinhoodWallet(wallet) {
+  const errors = [];
+  const creds = wallet.credentials ?? {};
+  const apiKey = String(creds.apiKey ?? "").trim();
+  const privateKeyBase64 = String(creds.privateKeyBase64 ?? "").trim();
+
+  if (!apiKey || !privateKeyBase64) {
+    return {
+      assets: [],
+      usdValue: 0,
+      errors: ["Robinhood credentials missing — edit wallet and reconnect API keys."],
+    };
+  }
+
+  let holdings = [];
+  try {
+    holdings = await fetchRobinhoodHoldings({ apiKey, privateKeyBase64 });
+  } catch (e) {
+    return {
+      assets: [],
+      usdValue: 0,
+      errors: [e.message ?? "Could not fetch Robinhood holdings"],
+    };
+  }
+
+  const rows = holdings.filter((h) => Number(h.total_quantity) > 0);
+  const geckoIds = [
+    ...new Set(rows.map((h) => coingeckoIdForRhAsset(h.asset_code)).filter(Boolean)),
+  ];
+  const { prices, errors: priceErrors } = await getCoinGeckoPrices(geckoIds);
+  errors.push(...priceErrors);
+
+  const assets = [];
+  for (const row of rows) {
+    const code = String(row.asset_code ?? "").toUpperCase();
+    const amount = Number(row.total_quantity) || 0;
+    if (amount <= 0) continue;
+
+    const geckoId = coingeckoIdForRhAsset(code);
+    const px = geckoId ? prices.get(geckoId) : null;
+    const price = code === "USD" ? 1 : px?.price ?? null;
+    const usdValue = price != null ? amount * price : 0;
+
+    assets.push({
+      symbol: code,
+      name: code,
+      chain: "robinhood",
+      mint: rhAsset(code),
+      amount,
+      price,
+      usdValue,
+      priceChange24h: px?.change24h ?? null,
+    });
+  }
+
+  const filtered = assets.filter((a) => (a.usdValue ?? 0) >= DUST_USD || a.symbol === "USD");
+  const total = filtered.reduce((s, a) => s + (a.usdValue ?? 0), 0);
   return { assets: filtered, usdValue: total, errors: [...new Set(errors)] };
 }
 
@@ -370,6 +438,8 @@ async function fetchWallet(wallet) {
   try {
     if (chain === "solana" && isValidSolanaAddress(wallet.address)) {
       result = await fetchSolanaWallet(wallet.address);
+    } else if (chain === "robinhood" && isValidRobinhoodAccountId(wallet.address)) {
+      result = await fetchRobinhoodWallet(wallet);
     } else if (chain === "hyperliquid" && isValidEvmAddress(wallet.address)) {
       result = await fetchHyperliquidWallet(wallet.address);
     } else if (chain === "evm" && isValidEvmAddress(wallet.address)) {
@@ -505,7 +575,10 @@ export async function POST(request) {
     if ((chain === "hyperliquid" || chain === "evm") && !isValidEvmAddress(address)) {
       return NextResponse.json({ error: "Invalid EVM wallet address" }, { status: 400 });
     }
-    if (!["solana", "hyperliquid", "evm"].includes(chain)) {
+    if (chain === "robinhood" && !isValidRobinhoodAccountId(address)) {
+      return NextResponse.json({ error: "Invalid Robinhood account id" }, { status: 400 });
+    }
+    if (!["solana", "hyperliquid", "evm", "robinhood"].includes(chain)) {
       return NextResponse.json({ error: `Unsupported chain "${w?.chain}"` }, { status: 400 });
     }
   }

@@ -50,6 +50,37 @@ export function isValidEvmAddress(value) {
   return /^0x[0-9a-fA-F]{40}$/.test(String(value ?? "").trim());
 }
 
+export function isValidRobinhoodAccountId(value) {
+  const v = String(value ?? "").trim();
+  return v.length >= 4 && v.length <= 80;
+}
+
+export function validateRobinhoodCredentials({ apiKey, privateKeyBase64 }) {
+  const key = String(apiKey ?? "").trim();
+  const pk = String(privateKeyBase64 ?? "").trim();
+  if (!key.startsWith("rh-api-")) {
+    return { ok: false, error: "Robinhood API key should start with rh-api-." };
+  }
+  if (!pk) {
+    return { ok: false, error: "Paste the base64 private key from Robinhood API setup." };
+  }
+  try {
+    const normalized = pk.replace(/\s/g, "");
+    let byteLen = 0;
+    if (typeof atob === "function") {
+      byteLen = atob(normalized).length;
+    } else if (typeof Buffer !== "undefined") {
+      byteLen = Buffer.from(normalized, "base64").length;
+    }
+    if (byteLen !== 32) {
+      return { ok: false, error: "Private key must decode to 32 bytes (Ed25519 seed)." };
+    }
+  } catch {
+    return { ok: false, error: "Private key is not valid base64." };
+  }
+  return { ok: true, error: null };
+}
+
 /**
  * Validates an address for a chain.
  * Returns `{ ok, error }` so forms can show the message inline.
@@ -81,6 +112,12 @@ export function validateAddress(chain, address) {
       }
       return { ok: true, error: null };
 
+    case "robinhood":
+      if (!isValidRobinhoodAccountId(value)) {
+        return { ok: false, error: "Robinhood account id missing — reconnect API credentials." };
+      }
+      return { ok: true, error: null };
+
     default:
       return { ok: false, error: "Pick a chain first." };
   }
@@ -91,6 +128,10 @@ export function addressKey(chain, address) {
   const value = String(address ?? "").trim();
   const id = String(chain ?? "").toLowerCase();
   return `${id}:${id === "solana" ? value : value.toLowerCase()}`;
+}
+
+export function isRobinhoodChain(chain) {
+  return String(chain ?? "").toLowerCase() === "robinhood";
 }
 
 export function validateLabel(label) {

@@ -11,6 +11,7 @@ import {
   previousRange,
 } from "../../lib/trades";
 import { fetchTrades, isMissingSchemaError } from "../../lib/supabaseTrades";
+import { attachRobinhoodCredentials } from "../../lib/wallets/robinhood";
 import { subscribePositionChanged } from "../../lib/swap/positionEvents";
 
 /* ------------------------------------------------------------------ */
@@ -339,12 +340,13 @@ async function requestPortfolio(wallets, signal) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      wallets: wallets.map((w) => ({
+      wallets: (await attachRobinhoodCredentials(wallets)).map((w) => ({
         id: w.id,
         label: w.label,
         chain: w.chain,
         address: w.address,
         color: w.color,
+        ...(w.credentials ? { credentials: w.credentials } : {}),
       })),
     }),
   });
