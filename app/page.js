@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { supabase, isDemoMode } from "./lib/supabaseClient";
 import {
   completeOAuthFromUrl,
+  oauthRedirectMisconfiguredMessage,
   subscribeOAuthSignIn,
+  urlHasOAuthReturn,
 } from "./lib/auth/completeOAuth";
 import styled, { keyframes } from "styled-components";
 
@@ -19,12 +21,13 @@ export default function HomePage() {
     let cancelled = false;
 
     async function tryFinishOAuth() {
-      const hasHash =
-        typeof window !== "undefined" &&
-        (window.location.hash.includes("access_token=") ||
-          window.location.hash.includes("error="));
+      if (!urlHasOAuthReturn()) return;
 
-      if (!hasHash) return;
+      const misconfigured = oauthRedirectMisconfiguredMessage();
+      if (misconfigured) {
+        setError(misconfigured);
+        return;
+      }
 
       setFinishingOAuth(true);
       const { session, error: oauthError } = await completeOAuthFromUrl();
