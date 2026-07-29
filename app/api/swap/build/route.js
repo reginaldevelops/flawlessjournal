@@ -43,7 +43,7 @@ export async function POST(request) {
       userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
-      dynamicSlippage: false,
+      dynamicSlippage: settings.slippageAuto !== false,
     };
 
     if (feeMode === "jito") {

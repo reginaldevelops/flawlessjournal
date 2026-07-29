@@ -7,8 +7,12 @@ import { SLIPPAGE_PRESETS } from "./constants";
 export function suggestSlippageBps({ ageHours, changeH1 } = {}) {
   const age = Number.isFinite(ageHours) ? ageHours : null;
   const chg = Math.abs(Number(changeH1));
+  // Pasted CA / no DexScreener context — assume memecoin volatility
+  if (age == null && !Number.isFinite(Number(changeH1))) {
+    return SLIPPAGE_PRESETS.loose;
+  }
   const fresh = age != null && age < 12;
   const volatile = Number.isFinite(chg) && chg >= 12;
-  if (fresh || volatile) return SLIPPAGE_PRESETS.loose; // 4%
-  return SLIPPAGE_PRESETS.tight; // 0.5%
+  if (fresh || volatile) return SLIPPAGE_PRESETS.loose;
+  return SLIPPAGE_PRESETS.tight;
 }
