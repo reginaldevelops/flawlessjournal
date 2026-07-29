@@ -90,5 +90,5 @@ export const POSITION_UI_REFRESH_MS = LIVE_POSITIONS_REFRESH_MS;
 export const SWAP_CONFIRM_POLL_MS = 2500;
 
 /** Wallet sync: free RPC is slow — hard batch caps, never full history. */
-export const SYNC_BATCH_DEFAULT = 50;
-export const SYNC_BATCH_MAX = 100;
+export const SYNC_BATCH_DEFAULT = 150;
+export const SYNC_BATCH_MAX = 200;

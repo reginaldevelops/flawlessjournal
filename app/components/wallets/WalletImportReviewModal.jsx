@@ -167,9 +167,13 @@ export default function WalletImportReviewModal({
                   </div>
                 )}
 
-                {hasWarn && trade.linkTradeId && (
+                {trade.linkTradeId && trade.warnings.includes("continues") && (
                   <p className="border-b border-line/40 px-4 py-1.5 text-2xs text-content-subtle">
-                    Will link to existing live trade in journal.
+                    Links to existing journal trade
+                    {trade.openAtBatchStart > 0
+                      ? ` (~${Math.round(trade.openAtBatchStart).toLocaleString()} tokens held before batch)`
+                      : ""}
+                    .
                   </p>
                 )}
 
@@ -216,11 +220,16 @@ export default function WalletImportReviewModal({
                             ? formatRelative(fill.executedAt)
                             : "—"}
                         </span>
-                        {disabled && (
-                          <Badge tone="neutral" size="xs">
-                            In journal
-                          </Badge>
-                        )}
+                    {disabled && (
+                      <Badge tone="neutral" size="xs">
+                        In journal
+                      </Badge>
+                    )}
+                    {fill.oversell && (
+                      <Badge tone="warn" size="xs">
+                        Oversell
+                      </Badge>
+                    )}
                       </li>
                     );
                   })}
