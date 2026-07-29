@@ -34,6 +34,41 @@ export function saveWalletSyncMeta(address, patch) {
   return all[address];
 }
 
+/** Drop sync cursors so the next Sync scans from the newest txs again. */
+export function clearWalletSyncMeta(address) {
+  if (typeof window === "undefined" || !address) return;
+  const all = loadSyncState();
+  delete all[address];
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify(all));
+  } catch {
+    /* ignore */
+  }
+}
+
+function blockTimeToIso(blockTime) {
+  const ts = Number(blockTime);
+  if (!Number.isFinite(ts) || ts <= 0) return null;
+  return new Date(ts * 1000).toISOString();
+}
+
+function blockTimeLabel(blockTime) {
+  const ts = Number(blockTime);
+  if (!Number.isFinite(ts) || ts <= 0) return null;
+  return new Date(ts * 1000).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatScanRange(newestTime, oldestTime) {
+  const oldest = blockTimeLabel(oldestTime);
+  const newest = blockTimeLabel(newestTime);
+  if (oldest && newest && oldest !== newest) return `${oldest} – ${newest}`;
+  return oldest || newest || null;
+}
+
 export function shouldAutoSync(address) {
   const meta = getWalletSyncMeta(address);
   if (!meta?.lastAt) return true;
@@ -52,8 +87,8 @@ export function formatSyncProgress(ev) {
   if (!ev || typeof ev !== "object") return "";
   if (ev.type === "phase") return ev.message || "";
   if (ev.type === "start") {
-    const days = formatDays(ev.lookbackDays);
-    const span = days ? ` spanning ~${days}` : "";
+    const range = formatScanRange(ev.newestTime, ev.oldestTime);
+    const span = range ? ` · ${range}` : formatDays(ev.lookbackDays) ? ` · ~${formatDays(ev.lookbackDays)} batch span` : "";
     if (!ev.total) return ev.message || "No new transactions in this batch";
     return `Scanning ${ev.total} tx${ev.total === 1 ? "" : "s"}${span} (batch ≤${ev.batchLimit ?? "?"})`;
   }
@@ -65,8 +100,8 @@ export function formatSyncProgress(ev) {
     return `${scanned}/${total} (${pct}%) · ${swaps} swap${swaps === 1 ? "" : "s"} found`;
   }
   if (ev.type === "done") {
-    const days = formatDays(ev.lookbackDays);
-    const span = days ? ` · ~${days} lookback` : "";
+    const range = formatScanRange(ev.newestTime, ev.oldestTime);
+    const span = range ? ` · ${range}` : "";
     return `Done · ${ev.scanned ?? 0}/${ev.total ?? 0} scanned · ${ev.swaps?.length ?? ev.swapsFound ?? 0} swaps${span}`;
   }
   return ev.message || "";
@@ -136,6 +171,8 @@ async function readSyncStream(res, onProgress) {
  *   limit?: number,
  *   quiet?: boolean,
  *   older?: boolean,
+ *   resync?: boolean,
+ *   reset?: boolean,
  *   onProgress?: (ev: object) => void,
  * }} [opts]
  */
@@ -144,11 +181,16 @@ export async function runWalletSync(address, opts = {}) {
     limit = SYNC_BATCH_DEFAULT,
     quiet = false,
     older = false,
+    resync = false,
+    reset = false,
     onProgress,
   } = opts;
 
-  const meta = getWalletSyncMeta(address);
-  const untilSignature = older ? null : meta?.lastSignature || null;
+  if (reset) clearWalletSyncMeta(address);
+
+  const meta = reset ? null : getWalletSyncMeta(address);
+  const untilSignature =
+    older || resync || reset ? null : meta?.lastSignature || null;
   const before = older ? meta?.oldestSignature || null : null;
 
   if (older && !before) {
@@ -216,6 +258,14 @@ export async function runWalletSync(address, opts = {}) {
     lastLookbackDays: data.lookbackDays ?? null,
   };
 
+  const oldestAt = blockTimeToIso(data.oldestTime);
+  if (newestAt) patch.newestScannedAt = newestAt;
+  if (oldestAt) {
+    if (older || reset || !meta?.oldestScannedAt) {
+      patch.oldestScannedAt = oldestAt;
+    }
+  }
+
   if (older) {
     // Keep newest cursor; walk oldest further back
     if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
@@ -232,8 +282,8 @@ export async function runWalletSync(address, opts = {}) {
       null;
     if (newestSig) patch.lastSignature = newestSig;
     // Establish oldest cursor once (first sync) so "Older" can page back
-    if (!meta?.oldestSignature && data.oldestSignature) {
-      patch.oldestSignature = data.oldestSignature;
+    if (reset || !meta?.oldestSignature) {
+      if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
       patch.hasMoreOlder = Boolean(data.hasMoreOlder);
     } else if (meta?.hasMoreOlder == null) {
       patch.hasMoreOlder = Boolean(data.hasMoreOlder);
@@ -249,5 +299,7 @@ export async function runWalletSync(address, opts = {}) {
     errors,
     quiet,
     older,
+    resync,
+    reset,
   };
 }
