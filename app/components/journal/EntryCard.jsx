@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Clock, Pencil, Trash2 } from "lucide-react";
-import { Button, ConfirmDialog, cn } from "../ui";
+import { Button, ConfirmDialog, cn, useToast } from "../ui";
 import { formatDate, formatTime } from "../../lib/format";
 import { parseEntry, serializeEntry } from "./frontmatter";
 import { highlightParts } from "./helpers";
@@ -37,6 +37,7 @@ export default function EntryCard({
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const toast = useToast();
 
   const isLong = (parsed.body?.length ?? 0) > COLLAPSE_AT;
 
@@ -46,12 +47,19 @@ export default function EntryCard({
   };
 
   const saveEdit = async () => {
-    const content = serializeEntry(draft);
-    if (!content.trim()) return;
+    if (!draft) return;
+    const content = serializeEntry({ mood: draft.mood, tags: draft.tags, body: draft.text });
+    if (!content.trim()) {
+      toast.warning("Entry is empty", { description: "Write something before saving." });
+      return;
+    }
     setSaving(true);
     const ok = await onSave(entry.id, content);
     setSaving(false);
-    if (ok !== false) setEditing(false);
+    if (ok !== false) {
+      setEditing(false);
+      setDraft(null);
+    }
   };
 
   if (editing) {
