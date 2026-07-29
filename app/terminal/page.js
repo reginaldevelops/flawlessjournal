@@ -18,7 +18,6 @@ import TerminalSidebar, { WatchlistToggle } from "../components/terminal/Termina
 import TokenInfoPanel from "../components/terminal/TokenInfoPanel";
 import { useTerminalLayout } from "../components/terminal/useTerminalLayout";
 import {
-  isValidTerminalTokenAddress,
   normalizeTerminalQuery,
   terminalAddressError,
 } from "../lib/terminal/validate";
