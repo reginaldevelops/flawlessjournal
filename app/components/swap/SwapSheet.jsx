@@ -119,6 +119,7 @@ export default function SwapSheet({
     if (!open) return;
     setSide(initialSide);
     setAmount("");
+    setAmountUnit(initialSide === "buy" ? "usd" : "quote");
     setQuote(null);
     setQuoteUpdatedAt(null);
     setError(null);
@@ -585,16 +586,15 @@ export default function SwapSheet({
       title={side === "buy" ? `Buy ${positionSymbol}` : `Sell ${positionSymbol}`}
       description="Quote tokens (Fartcoin / SOL / USDC) are payment only — the journal trade is always this token."
       width="max-w-md"
+      footerClassName="sticky bottom-0 z-10 shrink-0 border-t border-line bg-surface px-4 py-3 shadow-[0_-10px_28px_-14px_rgba(0,0,0,0.45)]"
       footer={
-        <>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={swapping}>
-            Cancel
-          </Button>
+        <div className="flex w-full flex-col gap-2">
           {!connected ? (
             <Button
               variant="primary"
-              size="sm"
+              size="lg"
               icon={Wallet}
+              className="h-12 w-full text-base font-semibold"
               onClick={() => setWalletModalVisible(true)}
             >
               Connect Phantom
@@ -602,15 +602,16 @@ export default function SwapSheet({
           ) : (
             <Button
               variant="primary"
-              size="sm"
+              size="lg"
               loading={swapping}
               disabled={!quote || quoting}
+              className="h-12 w-full text-base font-semibold"
               onClick={handleSwap}
             >
               {side === "buy" ? "Swap · Buy" : "Swap · Sell"}
             </Button>
           )}
-        </>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -620,7 +621,10 @@ export default function SwapSheet({
             <button
               key={s}
               type="button"
-              onClick={() => setSide(s)}
+              onClick={() => {
+                setSide(s);
+                if (s === "buy") setAmountUnit("usd");
+              }}
               className={cn(
                 "flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition",
                 side === s

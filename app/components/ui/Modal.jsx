@@ -129,6 +129,7 @@ export function Sheet({
   side = "right",
   width = "max-w-md",
   footer,
+  footerClassName,
   children,
   className,
 }) {
@@ -177,7 +178,12 @@ export function Sheet({
           {children}
         </div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          <div
+            className={cn(
+              "flex items-center justify-end gap-2 border-t border-line px-5 py-3.5",
+              footerClassName
+            )}
+          >
             {footer}
           </div>
         )}

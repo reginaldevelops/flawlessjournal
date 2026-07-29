@@ -2,61 +2,62 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "./lib/supabaseClient";
+import { supabase, isDemoMode } from "./lib/supabaseClient";
 import styled, { keyframes } from "styled-components";
 
 export default function HomePage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setError(null);
+    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/auth/callback`
+        : undefined;
+
+    const { data, error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
     });
 
-    if (error) {
-      setError(error.message);
-    } else {
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (isDemoMode) {
       router.push("/dashboard");
+      return;
+    }
+
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      setLoading(false);
     }
   };
 
   return (
     <Hero>
       <FormWrapper>
-        <form
-          onSubmit={handleLogin}
-          className="bg-black/60 backdrop-blur-md p-6 rounded-xl shadow-lg w-full max-w-sm"
-        >
+        <div className="bg-black/60 backdrop-blur-md p-6 rounded-xl shadow-lg w-full max-w-sm">
           {error && (
             <p className="text-red-400 text-sm mb-3 text-center">{error}</p>
           )}
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-gray-500 bg-black/40 text-white rounded px-3 py-2 mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-gray-500 bg-black/40 text-white rounded px-3 py-2 mb-5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            required
-          />
+          <GlitchButton type="button" onClick={handleGoogleLogin} disabled={loading}>
+            {loading ? "Redirecting…" : "Continue with Google"}
+          </GlitchButton>
 
-          <GlitchButton type="submit">Login</GlitchButton>
-        </form>
+          <p className="mt-4 text-center text-xs text-gray-400">
+            Sign in with your Google account to open your journal.
+          </p>
+        </div>
       </FormWrapper>
     </Hero>
   );
@@ -66,7 +67,7 @@ export default function HomePage() {
 const Hero = styled.div`
   height: 100vh;
   display: flex;
-  align-items: flex-end; /* zet form onderaan */
+  align-items: flex-end;
   justify-content: center;
   background: url("/flawless-logo.png") no-repeat center center;
   background-size: cover;
@@ -74,7 +75,7 @@ const Hero = styled.div`
 `;
 
 const FormWrapper = styled.div`
-  margin-bottom: 3rem; /* afstand van onderkant */
+  margin-bottom: 3rem;
 `;
 
 const glitch = keyframes`
@@ -103,7 +104,13 @@ const GlitchButton = styled.button`
     0 0 6px rgba(255, 0, 128, 0.5);
   transition: all 0.25s ease;
 
-  &:hover {
+  &:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+  }
+
+  &:hover:not(:disabled) {
     animation: ${glitch} 0.6s infinite;
     border-color: #ff0080;
     box-shadow:

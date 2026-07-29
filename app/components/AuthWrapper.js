@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { LogoMark } from "./shell/Logo";
 
-const PUBLIC_ROUTES = ["/"];
+const PUBLIC_ROUTES = ["/", "/auth/callback"];
 
 async function userHasVariables(userId) {
   // Prefer scoped rows, but legacy databases often left user_id NULL.
