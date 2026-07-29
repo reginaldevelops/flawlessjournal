@@ -17,7 +17,7 @@ import {
 /* Constants                                                           */
 /* ------------------------------------------------------------------ */
 
-const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+import { getServerRpcUrl } from "../../lib/swap/rpc";
 const HL_API = "https://api.hyperliquid.xyz/info";
 const SOL_DECIMALS = 9;
 const DUST_USD = 0.05;
@@ -128,7 +128,7 @@ function demoFallback(wallet) {
 /* ------------------------------------------------------------------ */
 
 async function rpc(method, params) {
-  return fetchJson(SOLANA_RPC, {
+  return fetchJson(getServerRpcUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),

@@ -4,6 +4,7 @@ import { isValidSolanaAddress } from "../../../lib/chain/validate";
 import { publicApiError } from "../../../lib/api/publicError";
 import { DEFAULT_RPC, JUPITER_SWAP_API } from "../../../lib/swap/constants";
 import { estimateSwapFees } from "../../../lib/swap/fees";
+import { getServerRpcUrl } from "../../../lib/swap/rpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function POST(request) {
 
     const feeMode = settings.feeMode === "jito" ? "jito" : "priority";
     const fees = await estimateSwapFees({
-      rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_RPC,
+      rpcUrl: getServerRpcUrl(),
       feeMode,
     });
 

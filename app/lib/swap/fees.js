@@ -1,13 +1,13 @@
 import { SOL_MINT } from "../chain/constants";
 import { fetchJson } from "../chain/http";
 import {
-  DEFAULT_RPC,
   JITO_TIP_FLOOR_URL,
   JUPITER_PRICE_API,
   MAX_JITO_TIP_USD,
   MAX_PRIORITY_FEE_USD,
   SWAP_CU_ESTIMATE,
 } from "./constants";
+import { getServerRpcUrl } from "./rpc";
 
 /** Linear percentile (0–100) over a sorted numeric array. */
 export function percentile(sorted, p) {
@@ -107,7 +107,7 @@ async function fetchJitoTipSolP90() {
  * Live fee quote used by /api/swap/fees and enforced again in /api/swap/build.
  */
 export async function estimateSwapFees({
-  rpcUrl = DEFAULT_RPC,
+  rpcUrl = getServerRpcUrl(),
   feeMode = "priority",
 } = {}) {
   const [solPriceUsd, priority, jito] = await Promise.all([

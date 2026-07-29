@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { DEFAULT_RPC } from "../../../lib/swap/constants";
 import { estimateSwapFees } from "../../../lib/swap/fees";
+import { getServerRpcUrl } from "../../../lib/swap/rpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const feeMode = searchParams.get("feeMode") === "jito" ? "jito" : "priority";
     const fees = await estimateSwapFees({
-      rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_RPC,
+      rpcUrl: getServerRpcUrl(),
       feeMode,
     });
     return NextResponse.json(fees, {
