@@ -70,6 +70,7 @@ function TerminalPageInner() {
 
         setToken(data);
         setQuery(trimmed);
+        setSessionFills([]);
         router.replace(`/terminal?mint=${encodeURIComponent(trimmed)}`, { scroll: false });
 
         const entry = tokenListEntry(data);
@@ -93,12 +94,13 @@ function TerminalPageInner() {
     [router, setRecent, setWatchlist]
   );
 
+  // Sync from URL only when ?mint= changes — never when `token` state updates,
+  // otherwise a new load gets overwritten by the stale URL (e.g. stuck on Fartcoin).
   useEffect(() => {
-    if (mintFromUrl && mintFromUrl !== token?.address) {
-      setQuery(mintFromUrl);
-      loadToken(mintFromUrl);
-    }
-  }, [mintFromUrl, loadToken, token?.address]);
+    if (!mintFromUrl) return;
+    setQuery(mintFromUrl);
+    loadToken(mintFromUrl);
+  }, [mintFromUrl, loadToken]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -216,6 +218,7 @@ function TerminalPageInner() {
               style={{ height: chartHeight }}
             >
               <DexScreenerChart
+                key={token?.address || "empty"}
                 pairAddress={token?.pairAddress}
                 pairUrl={token?.url}
                 symbol={token?.symbol}
@@ -259,6 +262,7 @@ function TerminalPageInner() {
                 {token ? (
                   <div className="max-h-[28rem] min-h-[18rem] overflow-y-auto">
                     <SwapSheet
+                      key={token.address}
                       embedded
                       token={token}
                       initialSide="buy"
@@ -278,6 +282,7 @@ function TerminalPageInner() {
             <TokenInfoPanel token={token} />
             {token ? (
               <SwapSheet
+                key={token.address}
                 embedded
                 token={token}
                 initialSide="buy"
