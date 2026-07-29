@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { attachRobinhoodCredentials } from "../lib/wallets/robinhood";
+import {
+  attachRobinhoodCredentials,
+  fetchRobinhoodTransactionsForWallet,
+  loadRobinhoodTxCache,
+  saveRobinhoodTxCache,
+} from "../lib/wallets/robinhood";
 import { subscribePositionChanged } from "../lib/swap/positionEvents";
 import {
   ExternalLink,
@@ -28,7 +33,7 @@ import {
   useToast,
 } from "../components/ui";
 import { chainMeta, explorerUrl } from "../lib/chain/constants";
-import { formatCurrency, formatRelative, truncateMiddle } from "../lib/format";
+import { formatCurrency, formatDate, formatRelative, truncateMiddle } from "../lib/format";
 import { useWallets } from "./hooks";
 import WalletFormModal from "./WalletFormModal";
 import {
@@ -38,7 +43,6 @@ import {
   formatSyncProgress,
 } from "../lib/swap/importFills";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
-import { formatDate } from "../lib/format";
 
 function formatScanSummary(result) {
   const range =
@@ -73,9 +77,43 @@ export default function WalletsPage() {
   const [deleting, setDeleting] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
   const [syncTick, setSyncTick] = useState(0);
-  const [syncProgress, setSyncProgress] = useState({}); // walletId -> { label, scanned, total, swapsFound, lookbackDays }
+  const [syncProgress, setSyncProgress] = useState({});
   const [resetSyncTarget, setResetSyncTarget] = useState(null);
   const [resetSyncLoading, setResetSyncLoading] = useState(false);
+  const [rhTxLoadingId, setRhTxLoadingId] = useState(null);
+  const [rhTxByWallet, setRhTxByWallet] = useState({});
+  const [rhTxExpanded, setRhTxExpanded] = useState({});
+
+  useEffect(() => {
+    if (!wallets.length) return;
+    const cached = {};
+    for (const w of wallets) {
+      if (w.chain !== "robinhood") continue;
+      const row = loadRobinhoodTxCache(w.id);
+      if (row?.orders) cached[w.id] = row;
+    }
+    if (Object.keys(cached).length) {
+      setRhTxByWallet((prev) => ({ ...cached, ...prev }));
+    }
+  }, [wallets]);
+
+  const handleLoadRobinhoodTx = async (wallet) => {
+    if (wallet.chain !== "robinhood") return;
+    setRhTxLoadingId(wallet.id);
+    try {
+      const data = await fetchRobinhoodTransactionsForWallet(wallet);
+      saveRobinhoodTxCache(wallet.id, data);
+      setRhTxByWallet((prev) => ({ ...prev, [wallet.id]: data }));
+      setRhTxExpanded((prev) => ({ ...prev, [wallet.id]: true }));
+      toast.success(`Loaded ${data.orderCount ?? data.orders?.length ?? 0} Robinhood orders`, {
+        description: "Read-only — balances and order history from Robinhood Crypto API.",
+      });
+    } catch (err) {
+      toast.error("Could not load Robinhood transactions", { description: err.message });
+    } finally {
+      setRhTxLoadingId(null);
+    }
+  };
 
   const handleSyncWallet = async (wallet, { older = false, resync = false, reset = false } = {}) => {
     if (wallet.chain !== "solana") return;
@@ -208,7 +246,7 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track on-chain balances across Solana and Hyperliquid. Sync imports external Solana swaps in capped batches (not full history) so large wallets stay usable."
+        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync imports swaps to your journal; Robinhood shows read-only order history."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -253,7 +291,7 @@ export default function WalletsPage() {
           <EmptyState
             icon={Wallet}
             title="No wallets yet"
-            description="Add a Solana or Hyperliquid address to see live balances on your dashboard."
+            description="Add a Solana, Robinhood Crypto, or Hyperliquid wallet to see live balances."
             action={
               <Button variant="primary" size="sm" icon={Plus} onClick={() => setAddOpen(true)}>
                 Add your first wallet
@@ -284,6 +322,16 @@ export default function WalletsPage() {
                     onSyncOlder={() => handleSyncWallet(wallet, { older: true })}
                     onResync={() => handleSyncWallet(wallet, { resync: true })}
                     onResetSync={() => setResetSyncTarget(wallet)}
+                    rhTxLoading={rhTxLoadingId === wallet.id}
+                    rhTxData={rhTxByWallet[wallet.id] ?? null}
+                    rhTxExpanded={Boolean(rhTxExpanded[wallet.id])}
+                    onLoadRhTx={() => handleLoadRobinhoodTx(wallet)}
+                    onToggleRhTx={() =>
+                      setRhTxExpanded((prev) => ({
+                        ...prev,
+                        [wallet.id]: !prev[wallet.id],
+                      }))
+                    }
                     onEdit={() => setEditTarget(wallet)}
                     onDelete={() => setDeleteTarget(wallet)}
                     onToggle={() => toggleInclude(wallet.id, wallet.include_in_balance)}
@@ -517,6 +565,11 @@ function WalletCard({
   onSyncOlder,
   onResync,
   onResetSync,
+  rhTxLoading,
+  rhTxData,
+  rhTxExpanded,
+  onLoadRhTx,
+  onToggleRhTx,
   onEdit,
   onDelete,
   onToggle,
@@ -529,6 +582,9 @@ function WalletCard({
   const showAssets = !balancesLoading && assets.length > 0;
   const syncMeta =
     wallet.chain === "solana" ? getWalletSyncMeta(wallet.address) : null;
+  const isRobinhood = wallet.chain === "robinhood";
+  const rhOrders = rhTxData?.orders ?? [];
+  const showRhTx = isRobinhood && rhTxExpanded && rhOrders.length > 0;
   const canScanOlder =
     wallet.chain === "solana" &&
     Boolean(syncMeta?.oldestSignature) &&
@@ -589,6 +645,12 @@ function WalletCard({
                     : syncMeta.lastScanned != null
                       ? ` · last batch ${syncMeta.lastScanned} tx${syncMeta.lastScanned === 1 ? "" : "s"}`
                       : ""}
+                </span>
+              )}
+              {isRobinhood && rhTxData?.fetchedAt && !rhTxLoading && (
+                <span className="text-2xs text-content-subtle">
+                  Orders loaded {formatRelative(rhTxData.fetchedAt)}
+                  {rhOrders.length ? ` · ${rhOrders.length} rows` : ""}
                 </span>
               )}
             </div>
@@ -673,6 +735,32 @@ function WalletCard({
                 )}
               </>
             )}
+            {isRobinhood && (
+              <>
+                <Tooltip content="Fetch read-only order history from Robinhood Crypto API">
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    icon={Download}
+                    loading={rhTxLoading}
+                    disabled={rhTxLoading}
+                    onClick={onLoadRhTx}
+                  >
+                    {rhOrders.length ? "Refresh orders" : "Load orders"}
+                  </Button>
+                </Tooltip>
+                {rhOrders.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={rhTxLoading}
+                    onClick={onToggleRhTx}
+                  >
+                    {rhTxExpanded ? "Hide orders" : "Show orders"}
+                  </Button>
+                )}
+              </>
+            )}
             <Tooltip
               content={
                 wallet.include_in_balance ? "Exclude from balance" : "Include in balance"
@@ -743,6 +831,49 @@ function WalletCard({
                     ? " · walking older history"
                     : " · new txs only"}
             </p>
+          </div>
+        )}
+
+        {/* Robinhood order history (read-only) */}
+        {showRhTx && (
+          <div className="border-t border-line/40 px-5 py-3">
+            <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+              Recent orders
+            </p>
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto thin-scrollbar">
+              {rhOrders.slice(0, 100).map((order) => (
+                <li
+                  key={order.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface-raised px-3 py-2 text-xs"
+                >
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <Badge
+                      tone={order.side === "buy" ? "profit" : order.side === "sell" ? "loss" : "neutral"}
+                      size="xs"
+                    >
+                      {order.side ?? "—"}
+                    </Badge>
+                    <span className="font-semibold text-content">{order.asset}</span>
+                    <span className="font-mono tnum text-content-muted">
+                      {order.quantity > 0
+                        ? order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })
+                        : "—"}
+                    </span>
+                    <Badge tone={order.state === "filled" ? "neutral" : "warn"} size="xs">
+                      {order.state ?? order.type ?? "—"}
+                    </Badge>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5 text-2xs text-content-subtle">
+                    {order.usdValue > 0 && (
+                      <span className="font-mono tnum text-content">
+                        {formatCurrency(order.usdValue, { compact: true })}
+                      </span>
+                    )}
+                    <span>{order.createdAt ? formatRelative(order.createdAt) : "—"}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
