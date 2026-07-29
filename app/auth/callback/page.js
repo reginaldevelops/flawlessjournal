@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import {
+  completeOAuthFromUrl,
+  subscribeOAuthSignIn,
+} from "../../lib/auth/completeOAuth";
 import { LogoMark } from "../../components/shell/Logo";
 
 export default function AuthCallbackPage() {
@@ -13,35 +16,7 @@ export default function AuthCallbackPage() {
     let cancelled = false;
 
     async function finishSignIn() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const authError = params.get("error_description") || params.get("error");
-
-      if (authError) {
-        if (!cancelled) {
-          setMessage(authError);
-          setTimeout(() => router.replace("/"), 2500);
-        }
-        return;
-      }
-
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (cancelled) return;
-        if (error) {
-          setMessage(error.message);
-          setTimeout(() => router.replace("/"), 2500);
-          return;
-        }
-        router.replace("/dashboard");
-        return;
-      }
-
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
+      const { session, error } = await completeOAuthFromUrl();
       if (cancelled) return;
 
       if (error) {
@@ -60,8 +35,14 @@ export default function AuthCallbackPage() {
     }
 
     finishSignIn();
+
+    const subscription = subscribeOAuthSignIn(() => {
+      if (!cancelled) router.replace("/dashboard");
+    });
+
     return () => {
       cancelled = true;
+      subscription.unsubscribe();
     };
   }, [router]);
 

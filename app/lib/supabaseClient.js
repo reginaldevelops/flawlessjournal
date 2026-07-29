@@ -21,6 +21,7 @@ export const supabase = isDemoMode
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: "pkce",
       },
     });
 

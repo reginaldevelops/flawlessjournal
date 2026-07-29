@@ -1,14 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, isDemoMode } from "./lib/supabaseClient";
+import {
+  completeOAuthFromUrl,
+  subscribeOAuthSignIn,
+} from "./lib/auth/completeOAuth";
 import styled, { keyframes } from "styled-components";
 
 export default function HomePage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [finishingOAuth, setFinishingOAuth] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tryFinishOAuth() {
+      const hasHash =
+        typeof window !== "undefined" &&
+        (window.location.hash.includes("access_token=") ||
+          window.location.hash.includes("error="));
+
+      if (!hasHash) return;
+
+      setFinishingOAuth(true);
+      const { session, error: oauthError } = await completeOAuthFromUrl();
+      if (cancelled) return;
+
+      if (oauthError) {
+        setError(oauthError.message);
+        setFinishingOAuth(false);
+        return;
+      }
+
+      if (session) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      setFinishingOAuth(false);
+    }
+
+    tryFinishOAuth();
+
+    const subscription = subscribeOAuthSignIn(() => {
+      if (!cancelled) router.replace("/dashboard");
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -50,8 +96,16 @@ export default function HomePage() {
             <p className="text-red-400 text-sm mb-3 text-center">{error}</p>
           )}
 
-          <GlitchButton type="button" onClick={handleGoogleLogin} disabled={loading}>
-            {loading ? "Redirecting…" : "Continue with Google"}
+          <GlitchButton
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || finishingOAuth}
+          >
+            {finishingOAuth
+              ? "Signing you in…"
+              : loading
+                ? "Redirecting…"
+                : "Continue with Google"}
           </GlitchButton>
 
           <p className="mt-4 text-center text-xs text-gray-400">
