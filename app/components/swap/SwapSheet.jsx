@@ -25,10 +25,12 @@ import {
   FARTCOIN_MINT,
   QUOTE_TOKENS,
   SLIPPAGE_OPTIONS,
+  SLIPPAGE_PRESETS,
 } from "../../lib/swap/constants";
 import { loadSwapSettings, saveSwapSettings } from "../../lib/swap/settings";
 import { suggestSlippageBps } from "../../lib/swap/slippage";
 import { appendFillToPosition } from "../../lib/swap/journal";
+import { formatSwapExecutionError, isSlippageRpcError } from "../../lib/swap/errors";
 import { formatCurrency } from "../../lib/format";
 
 function toRawAmount(human, decimals) {
@@ -188,6 +190,55 @@ export default function SwapSheet({
     return rawNum;
   }, [amount, amountUnit, side, prices, quoteMint, positionMint]);
 
+  const fetchQuoteAtSlippage = useCallback(
+    async (slippageBps) => {
+      const human = resolveHumanInput();
+      if (human == null) throw new Error("Enter an amount");
+      const raw = toRawAmount(human, inputDecimals);
+      if (!raw || raw === "0") throw new Error("Enter an amount");
+      const params = new URLSearchParams({
+        inputMint,
+        outputMint,
+        amount: raw,
+        slippageBps: String(slippageBps),
+        swapMode: "ExactIn",
+      });
+      const res = await fetch(`/api/swap/quote?${params}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Quote failed");
+      return data;
+    },
+    [resolveHumanInput, inputDecimals, inputMint, outputMint]
+  );
+
+  const computePreviewFromQuote = useCallback(
+    (q) => {
+      if (!q) return null;
+      const inAmt = fromRawAmount(q.inAmount, inputDecimals);
+      const outDec = side === "buy" ? tokenDecimals : quoteToken.decimals;
+      const outAmt = fromRawAmount(q.outAmount, outDec);
+      const tokenAmt = side === "buy" ? outAmt : inAmt;
+      const quoteAmt = side === "buy" ? inAmt : outAmt;
+      const tokenPx = prices[positionMint];
+      const quotePx = prices[quoteMint];
+      const usdFromQuote = quotePx != null ? quoteAmt * quotePx : null;
+      const usdFromToken = tokenPx != null ? tokenAmt * tokenPx : null;
+      const usdValue = usdFromQuote ?? usdFromToken ?? 0;
+      const priceUsd =
+        tokenAmt > 0 && usdValue > 0 ? usdValue / tokenAmt : tokenPx ?? 0;
+      return { inAmt, outAmt, tokenAmt, quoteAmt, usdValue, priceUsd };
+    },
+    [
+      inputDecimals,
+      side,
+      tokenDecimals,
+      quoteToken.decimals,
+      prices,
+      positionMint,
+      quoteMint,
+    ]
+  );
+
   // Debounced quote
   useEffect(() => {
     if (!open || !positionMint || !wallet.publicKey) {
@@ -252,31 +303,10 @@ export default function SwapSheet({
     side,
   ]);
 
-  const preview = useMemo(() => {
-    if (!quote) return null;
-    const inAmt = fromRawAmount(quote.inAmount, inputDecimals);
-    const outDec = side === "buy" ? tokenDecimals : quoteToken.decimals;
-    const outAmt = fromRawAmount(quote.outAmount, outDec);
-    const tokenAmt = side === "buy" ? outAmt : inAmt;
-    const quoteAmt = side === "buy" ? inAmt : outAmt;
-    const tokenPx = prices[positionMint];
-    const quotePx = prices[quoteMint];
-    const usdFromQuote = quotePx != null ? quoteAmt * quotePx : null;
-    const usdFromToken = tokenPx != null ? tokenAmt * tokenPx : null;
-    const usdValue = usdFromQuote ?? usdFromToken ?? 0;
-    const priceUsd =
-      tokenAmt > 0 && usdValue > 0 ? usdValue / tokenAmt : tokenPx ?? 0;
-    return { inAmt, outAmt, tokenAmt, quoteAmt, usdValue, priceUsd };
-  }, [
-    quote,
-    inputDecimals,
-    side,
-    tokenDecimals,
-    quoteToken.decimals,
-    prices,
-    positionMint,
-    quoteMint,
-  ]);
+  const preview = useMemo(
+    () => computePreviewFromQuote(quote),
+    [quote, computePreviewFromQuote]
+  );
 
   const handleSwap = async () => {
     if (!wallet.publicKey || !wallet.signTransaction) {
@@ -295,88 +325,122 @@ export default function SwapSheet({
     setSwapping(true);
     setError(null);
     try {
-      const buildRes = await fetch("/api/swap/build", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          quoteResponse: quote,
-          userPublicKey: wallet.publicKey.toBase58(),
-          settings,
-        }),
-      });
-      const built = await buildRes.json();
-      if (!buildRes.ok) throw new Error(built.error || "Could not build swap");
+      const slippageSteps = [
+        ...new Set([
+          Number(settings.slippageBps) || SLIPPAGE_PRESETS.tight,
+          SLIPPAGE_PRESETS.loose,
+        ]),
+      ];
 
-      const tx = VersionedTransaction.deserialize(
-        b64ToBytes(built.swapTransaction)
-      );
-      const signed = await wallet.signTransaction(tx);
-      const raw = signed.serialize();
+      let freshQuote = null;
+      let livePreview = null;
+      let lastError = null;
 
-      let signature;
-      const b64 = bytesToB64(raw);
-      const broadcastRes = await fetch("/api/solana/broadcast", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          transaction: b64,
-          mode: settings.feeMode === "jito" ? "jito" : "priority",
-        }),
-      });
-      const broadcastJson = await broadcastRes.json();
-      if (!broadcastRes.ok || !broadcastJson.signature) {
-        throw new Error(broadcastJson.error || "Transaction broadcast failed");
+      for (let i = 0; i < slippageSteps.length; i += 1) {
+        const slippageBps = slippageSteps[i];
+        try {
+          if (i > 0) {
+            setError("Price moved — refreshing quote with 4% slippage…");
+          }
+
+          freshQuote = await fetchQuoteAtSlippage(slippageBps);
+          livePreview = computePreviewFromQuote(freshQuote);
+          if (!livePreview) throw new Error("Could not compute swap preview");
+
+          setQuote(freshQuote);
+
+          const buildRes = await fetch("/api/swap/build", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              quoteResponse: freshQuote,
+              userPublicKey: wallet.publicKey.toBase58(),
+              settings: { ...settings, slippageBps },
+            }),
+          });
+          const built = await buildRes.json();
+          if (!buildRes.ok) throw new Error(built.error || "Could not build swap");
+
+          const tx = VersionedTransaction.deserialize(
+            b64ToBytes(built.swapTransaction)
+          );
+          const signed = await wallet.signTransaction(tx);
+          const raw = signed.serialize();
+
+          const b64 = bytesToB64(raw);
+          const broadcastRes = await fetch("/api/solana/broadcast", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              transaction: b64,
+              mode: settings.feeMode === "jito" ? "jito" : "priority",
+            }),
+          });
+          const broadcastJson = await broadcastRes.json();
+          if (!broadcastRes.ok || !broadcastJson.signature) {
+            throw new Error(broadcastJson.error || "Transaction broadcast failed");
+          }
+          const signature = broadcastJson.signature;
+
+          const latest = await connection.getLatestBlockhash();
+          await connection.confirmTransaction(
+            { signature, ...latest },
+            "confirmed"
+          );
+
+          let blockTime = Math.floor(Date.now() / 1000);
+          try {
+            const parsed = await connection.getTransaction(signature, {
+              maxSupportedTransactionVersion: 0,
+            });
+            if (parsed?.blockTime) blockTime = parsed.blockTime;
+          } catch {
+            /* keep wall-clock fallback */
+          }
+
+          const result = await appendFillToPosition({
+            tradeId,
+            tokenMint: positionMint,
+            tokenSymbol: positionSymbol,
+            tokenName: token?.name,
+            pairUrl: token?.url,
+            imageUrl: token?.imageUrl,
+            side,
+            signature,
+            quoteMint,
+            quoteSymbol: quoteToken.symbol,
+            quoteAmount: livePreview.quoteAmt,
+            tokenAmount: livePreview.tokenAmt,
+            priceUsd: livePreview.priceUsd,
+            usdValue: livePreview.usdValue,
+            wallet: wallet.publicKey.toBase58(),
+            blockTime,
+          });
+
+          toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
+            description: `${livePreview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(livePreview.usdValue, { compact: true })}`,
+          });
+
+          onClose?.();
+          if (onSuccess) {
+            onSuccess(result);
+          } else if (result?.tradeId) {
+            window.location.href = `/trade/${result.tradeId}`;
+          }
+          return;
+        } catch (stepErr) {
+          lastError = stepErr;
+          if (isSlippageRpcError(stepErr?.message) && i < slippageSteps.length - 1) {
+            continue;
+          }
+          throw stepErr;
+        }
       }
-      signature = broadcastJson.signature;
 
-      const latest = await connection.getLatestBlockhash();
-      await connection.confirmTransaction(
-        { signature, ...latest },
-        "confirmed"
-      );
-
-      let blockTime = Math.floor(Date.now() / 1000);
-      try {
-        const parsed = await connection.getTransaction(signature, {
-          maxSupportedTransactionVersion: 0,
-        });
-        if (parsed?.blockTime) blockTime = parsed.blockTime;
-      } catch {
-        /* keep wall-clock fallback */
-      }
-
-      const result = await appendFillToPosition({
-        tradeId,
-        tokenMint: positionMint,
-        tokenSymbol: positionSymbol,
-        tokenName: token?.name,
-        pairUrl: token?.url,
-        imageUrl: token?.imageUrl,
-        side,
-        signature,
-        quoteMint,
-        quoteSymbol: quoteToken.symbol,
-        quoteAmount: preview.quoteAmt,
-        tokenAmount: preview.tokenAmt,
-        priceUsd: preview.priceUsd,
-        usdValue: preview.usdValue,
-        wallet: wallet.publicKey.toBase58(),
-        blockTime,
-      });
-
-      toastSuccess(side === "buy" ? "Buy filled" : "Sell filled", {
-        description: `${preview.tokenAmt.toPrecision(6)} ${positionSymbol} · ${formatCurrency(preview.usdValue, { compact: true })}`,
-      });
-
-      onClose?.();
-      if (onSuccess) {
-        onSuccess(result);
-      } else if (result?.tradeId) {
-        window.location.href = `/trade/${result.tradeId}`;
-      }
+      throw lastError ?? new Error("Swap failed");
     } catch (err) {
       console.error(err);
-      const message = formatSwapError(err);
+      const message = formatSwapExecutionError(err);
       setError(message);
       toastError("Swap failed", { description: message });
     } finally {
@@ -613,17 +677,6 @@ export default function SwapSheet({
       </div>
     </Sheet>
   );
-}
-
-function formatSwapError(err) {
-  const raw = String(err?.message ?? err ?? "Swap failed");
-  if (/403|access forbidden|forbidden/i.test(raw)) {
-    return "Solana RPC blocked the transaction (403). Retry in a moment — if it persists, add SOLANA_RPC_URL (Helius/QuickNode) in Vercel env.";
-  }
-  if (/blockhash|expired/i.test(raw)) {
-    return "Transaction expired — try the swap again.";
-  }
-  return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
 }
 
 function normalizeSlippage(bps) {
