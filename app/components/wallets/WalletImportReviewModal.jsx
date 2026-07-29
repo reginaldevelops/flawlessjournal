@@ -15,10 +15,10 @@ import {
 import { commitImportPlan } from "../../lib/swap/importFills";
 
 function TradeCard({ trade, plan, setPlan, manual = false }) {
+  const openFills = trade.fills.filter((f) => !f.alreadyImported && f.role === "open");
   const activeCount = trade.fills.filter((f) => f.included && !f.excluded).length;
-  const allIncluded = trade.fills.every(
-    (f) => f.alreadyImported || (f.included && !f.excluded)
-  );
+  const allOpensIncluded =
+    openFills.length > 0 && openFills.every((f) => f.included && !f.excluded);
 
   return (
     <div
@@ -46,11 +46,11 @@ function TradeCard({ trade, plan, setPlan, manual = false }) {
         <label className="flex cursor-pointer items-center gap-2 text-2xs text-content-muted">
           <input
             type="checkbox"
-            checked={allIncluded && activeCount > 0}
+            checked={allOpensIncluded}
             onChange={(e) => setPlan(toggleTradeInPlan(plan, trade.id, e.target.checked))}
             className="rounded border-line"
           />
-          {manual ? "Force include" : "Include trade"}
+          {manual ? "Force include fills" : "Include opens"}
         </label>
       </div>
 
@@ -235,7 +235,7 @@ export default function WalletImportReviewModal({
       open={open}
       onClose={committing ? undefined : onClose}
       title="Review wallet import"
-      description={`${summary.ready} complete trade${summary.ready === 1 ? "" : "s"} ready · ${summary.manualOnly} manual`}
+      description={`${summary.included} open${summary.included === 1 ? "" : "s"} to import · ${summary.manualOnly} without open`}
       icon={Download}
       size="xl"
       footer={
@@ -263,7 +263,7 @@ export default function WalletImportReviewModal({
             onClick={handleCommit}
             disabled={summary.included === 0 || loadingOlder}
           >
-            Import {summary.included} fill{summary.included === 1 ? "" : "s"}
+            Import {summary.included} open{summary.included === 1 ? "" : "s"}
           </Button>
         </>
       }
@@ -272,11 +272,12 @@ export default function WalletImportReviewModal({
       <div className="space-y-4 py-1">
         <div className="rounded-lg border border-line bg-surface-sunken/40 px-3 py-2.5 text-xs">
           <p className="text-content">
-            Auto-imports new positions (Open) and journal continuations (Add/Reduce/Close).
+            Only <strong>Open</strong> fills (new buys) are imported — each creates a journal trade
+            you can build on.
           </p>
           <p className="mt-1 text-content-muted">
-            Skips mid-batch orphans and oversells — use Load older or add those manually in{" "}
-            <span className="font-mono">/trades</span>.
+            Add / Reduce / Close are shown for context but skipped — journal those manually if you
+            want full detail.
           </p>
         </div>
 
@@ -295,7 +296,7 @@ export default function WalletImportReviewModal({
             {readyTrades.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-content-muted">
-                  Ready to import ({readyTrades.length})
+                  Opens to import ({readyTrades.length})
                 </h3>
                 {readyTrades.map((trade) => (
                   <TradeCard key={trade.id} trade={trade} plan={plan} setPlan={setPlan} />
@@ -307,7 +308,7 @@ export default function WalletImportReviewModal({
               <section className="space-y-2">
                 <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-warn-fg">
                   <AlertTriangle size={12} aria-hidden />
-                  Manual only ({manualTrades.length})
+                  Manual only — no Open ({manualTrades.length})
                 </h3>
                 {manualTrades.map((trade) => (
                   <TradeCard

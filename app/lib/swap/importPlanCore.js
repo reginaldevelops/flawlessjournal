@@ -162,55 +162,29 @@ function episodeWarnings(fills, { continuesFromJournal = false, hasOversell = fa
   return warnings;
 }
 
-/** Auto-import when episode is trustworthy; skip orphans/oversells/mid-batch gaps. */
+/** Trade has at least one Open fill we can journal (add/reduce/close are optional). */
 export function isAutoImportEligible(trade) {
   if (!trade?.fills?.length) return false;
-  const pending = trade.fills.filter((f) => !f.alreadyImported);
-  if (!pending.length) return false;
-
-  if (trade.warnings.includes("oversell")) return false;
-  if (trade.warnings.includes("incomplete_start")) return false;
-
-  const first = trade.fills[0];
-
-  // New position from flat — closed or still holding at batch end.
-  if (first.role === "open") return true;
-
-  // Adds/reduces/closes on a journal position we can link to.
-  if (
-    trade.linkTradeId &&
-    trade.warnings.includes("continues") &&
-    (first.role === "add" || first.role === "reduce" || first.role === "close")
-  ) {
-    return true;
-  }
-
-  return false;
+  return trade.fills.some((f) => f.role === "open" && !f.alreadyImported);
 }
 
 export function deriveSkipReason(trade) {
   if (isAutoImportEligible(trade)) return null;
   if (!trade?.fills?.some((f) => !f.alreadyImported)) return "already_imported";
-
-  if (trade.warnings.includes("oversell")) return "oversell";
-  if (trade.warnings.includes("incomplete_start")) return "no_open";
-
-  const first = trade.fills[0];
-  if (first.role === "orphan") return "no_open";
-  if (first.role === "reduce" || first.role === "close") return "no_open";
-  if (first.role === "add" && !trade.linkTradeId) return "no_open";
-
-  return "incomplete";
+  if (trade.fills.every((f) => f.role === "orphan" || f.alreadyImported)) return "no_open";
+  if (!trade.fills.some((f) => f.role === "open")) return "no_open";
+  return "already_imported";
 }
 
+/** Only Open fills are selected for import; add/reduce/close shown for context. */
 function applyAutoImportPolicy(trade) {
-  const autoImportEligible = isAutoImportEligible(trade);
-  const skipReason = autoImportEligible ? null : deriveSkipReason(trade);
   const fills = trade.fills.map((f) => {
     if (f.alreadyImported) return f;
-    if (autoImportEligible) return { ...f, excluded: false, included: true };
+    if (f.role === "open") return { ...f, excluded: false, included: true };
     return { ...f, excluded: true, included: false };
   });
+  const autoImportEligible = fills.some((f) => f.role === "open" && !f.alreadyImported);
+  const skipReason = autoImportEligible ? null : deriveSkipReason(trade);
   return { ...trade, fills, autoImportEligible, skipReason };
 }
 
@@ -383,9 +357,12 @@ export function toggleTradeInPlan(plan, tradeId, included) {
       if (trade.id !== tradeId) return trade;
       return {
         ...trade,
-        fills: trade.fills.map((fill) =>
-          fill.alreadyImported ? fill : { ...fill, excluded: !included, included }
-        ),
+        fills: trade.fills.map((fill) => {
+          if (fill.alreadyImported) return fill;
+          if (!included) return { ...fill, excluded: true, included: false };
+          if (fill.role === "open") return { ...fill, excluded: false, included: true };
+          return { ...fill, excluded: true, included: false };
+        }),
       };
     }),
   };
@@ -417,11 +394,7 @@ export function planSummary(plan) {
 export function skipReasonLabel(code) {
   switch (code) {
     case "no_open":
-      return "Opening buy missing — batch starts mid-trade. Load older batches or add manually in /trades.";
-    case "oversell":
-      return "Oversell — amounts do not line up. Add manually after checking on-chain history.";
-    case "incomplete":
-      return "Could not classify safely — add manually in /trades.";
+      return "No Open (new buy) in this group — add/reduce/close only. Add manually in /trades if needed.";
     case "already_imported":
       return "Already in journal.";
     default:
@@ -432,13 +405,13 @@ export function skipReasonLabel(code) {
 export function warningLabel(code) {
   switch (code) {
     case "incomplete_start":
-      return "Batch starts mid-trade — skipped for auto-import.";
+      return "Batch starts mid-trade — only Open fills import; add rest manually.";
     case "continues":
-      return "Continues an open position from your journal.";
+      return "Continues journal position — Add/Reduce/Close not auto-imported.";
     case "open_at_end":
-      return "Position still open — will import as live trade.";
+      return "Position still open — Open imported; journal exits manually.";
     case "oversell":
-      return "Sell exceeds tokens held — skipped for auto-import.";
+      return "Oversell in episode — Open still imports; verify amounts manually.";
     default:
       return code;
   }
