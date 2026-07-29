@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
@@ -10,6 +10,7 @@ import ExecuteSolanaStrip from "../../components/swap/ExecuteSolanaStrip";
 import ChartField from "../../components/trade/ChartField";
 import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
 import FieldShell from "../../components/trade/FieldShell";
+import { repairTradeEpisodes } from "../../lib/swap/journal";
 import { isPositionLive } from "../../lib/swap/position";
 import { TRADE_POSITION_REFRESH_MS } from "../../lib/swap/constants";
 import { subscribePositionChanged } from "../../lib/swap/positionEvents";
@@ -570,6 +571,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
 /* ---------- Page ---------- */
 export default function TradeViewPage() {
   const { id } = useParams();
+  const router = useRouter();
   const [trade, setTrade] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -582,6 +584,19 @@ export default function TradeViewPage() {
       setLoading(true);
       setLoadError(null);
     }
+
+    if (id) {
+      try {
+        const repair = await repairTradeEpisodes(id);
+        if (repair.repaired && repair.tradeId && String(repair.tradeId) !== String(id)) {
+          router.replace(`/trade/${repair.tradeId}`);
+          return;
+        }
+      } catch (err) {
+        console.warn("[trade] episode repair:", err?.message || err);
+      }
+    }
+
     const { data, error } = await supabase
       .from("trades")
       .select("*")
