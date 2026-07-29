@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { AlertTriangle, Download } from "lucide-react";
+import { AlertTriangle, Download, History } from "lucide-react";
 import { Modal, Button, Badge, useToast } from "../ui";
 import { formatCurrency, formatDate, formatRelative } from "../../lib/format";
 import { FILL_ROLE_META } from "../../lib/swap/position";
@@ -17,21 +17,54 @@ export default function WalletImportReviewModal({
   open,
   onClose,
   wallet,
-  scanData,
+  scanData: initialScanData,
   initialPlan,
   onCommitted,
+  onLoadOlder,
+  onReviewUpdated,
 }) {
   const toast = useToast();
   const [plan, setPlan] = useState(initialPlan);
+  const [scanData, setScanData] = useState(initialScanData);
   const [committing, setCommitting] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   useEffect(() => {
     if (open && initialPlan) setPlan(initialPlan);
-  }, [open, initialPlan]);
+    if (open && initialScanData) setScanData(initialScanData);
+  }, [open, initialPlan, initialScanData]);
 
   const summary = useMemo(() => planSummary(plan ?? { trades: [] }), [plan]);
+  const canLoadOlder =
+    Boolean(onLoadOlder) &&
+    scanData?.hasMoreOlder !== false &&
+    Boolean(scanData?.oldestSignature);
+  const showLoadOlder = canLoadOlder && summary.warnings > 0;
 
   if (!open || !wallet || !scanData || !plan) return null;
+
+  const handleLoadOlder = async () => {
+    if (!onLoadOlder || loadingOlder || committing) return;
+    setLoadingOlder(true);
+    try {
+      const next = await onLoadOlder({ scanData, plan });
+      if (!next?.scanData || !next?.plan) return;
+      setScanData(next.scanData);
+      setPlan(next.plan);
+      onReviewUpdated?.(next);
+      const nextSummary = planSummary(next.plan);
+      toast.success("Older batch loaded", {
+        description:
+          nextSummary.warnings > 0
+            ? `${next.scanData.mergedBatches ?? 2} batches · ${nextSummary.warnings} trade(s) still start mid-position — load again or exclude`
+            : `${next.scanData.mergedBatches ?? 2} batches merged · orphan warnings cleared`,
+      });
+    } catch (err) {
+      toast.error("Could not load older batch", { description: err.message });
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const handleCommit = async () => {
     if (summary.included === 0) {
@@ -85,7 +118,20 @@ export default function WalletImportReviewModal({
       size="xl"
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={committing}>
+          {showLoadOlder && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={History}
+              loading={loadingOlder}
+              onClick={handleLoadOlder}
+              disabled={committing}
+              className="mr-auto"
+            >
+              Load older batch
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={committing || loadingOlder}>
             Cancel
           </Button>
           <Button
@@ -93,7 +139,7 @@ export default function WalletImportReviewModal({
             size="sm"
             loading={committing}
             onClick={handleCommit}
-            disabled={summary.included === 0}
+            disabled={summary.included === 0 || loadingOlder}
           >
             Import {summary.included} fill{summary.included === 1 ? "" : "s"}
           </Button>
@@ -102,11 +148,24 @@ export default function WalletImportReviewModal({
       bodyClassName="max-h-[70vh] overflow-y-auto"
     >
       <div className="space-y-4 py-1">
-        {(summary.skipped > 0 || summary.excluded > 0) && (
+        {(summary.skipped > 0 || summary.excluded > 0 || (scanData.mergedBatches ?? 1) > 1) && (
           <p className="text-xs text-content-muted">
+            {(scanData.mergedBatches ?? 1) > 1
+              ? `${scanData.mergedBatches} batches merged · `
+              : ""}
             {summary.skipped > 0 ? `${summary.skipped} already in journal · ` : ""}
             {summary.excluded > 0 ? `${summary.excluded} excluded` : ""}
           </p>
+        )}
+
+        {summary.warnings > 0 && canLoadOlder && (
+          <div className="rounded-lg border border-warn/40 bg-warn-soft/40 px-3 py-2 text-xs text-warn-fg">
+            <p className="font-medium">Mid-trade start detected</p>
+            <p className="mt-0.5 text-content-muted">
+              The opening buy is probably in an older batch. Use &ldquo;Load older batch&rdquo; below
+              to pull it in before importing — repeat until warnings clear.
+            </p>
+          </div>
         )}
 
         {plan.trades.length === 0 ? (

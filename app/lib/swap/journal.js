@@ -64,19 +64,79 @@ async function insertPositionTrade(seed) {
   };
 }
 
-async function listMintTrades(tokenMint) {
-  const { data: rows, error } = await supabase
-    .from("trades")
-    .select("id, data, trade_number")
-    .order("id", { ascending: false })
-    .limit(400);
+/** Merge swap lists from multiple scan batches (dedupe by signature+side). */
+export function mergeImportSwaps(existing = [], older = []) {
+  const byKey = new Map();
+  for (const swap of [...older, ...existing]) {
+    const key = swap.signature
+      ? `${swap.signature}:${swap.side}`
+      : `${swap.blockTime ?? 0}:${swap.side}:${swap.tokenMint ?? ""}`;
+    if (!byKey.has(key)) byKey.set(key, swap);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => Number(a.blockTime ?? 0) - Number(b.blockTime ?? 0)
+  );
+}
 
-  if (error) throw error;
+/** Combine scan metadata after loading an older batch into a pending review. */
+export function mergeScanData(base, olderScan) {
+  const mergedSwaps = mergeImportSwaps(base.swaps ?? [], olderScan.swaps ?? []);
+  return {
+    ...base,
+    swaps: mergedSwaps,
+    scanned: (base.scanned ?? 0) + (olderScan.scanned ?? 0),
+    total: (base.total ?? 0) + (olderScan.total ?? 0),
+    oldestTime: olderScan.oldestTime ?? base.oldestTime,
+    oldestSignature: olderScan.oldestSignature ?? base.oldestSignature,
+    hasMoreOlder: Boolean(olderScan.hasMoreOlder),
+    mergedBatches: (base.mergedBatches ?? 1) + 1,
+  };
+}
 
-  return (rows ?? []).filter((row) => {
-    const fj = row.data?._fj;
-    return fj?.kind === POSITION_KIND && fj?.tokenMint === tokenMint;
-  });
+async function listAllMintTrades(tokenMint) {
+  const rows = [];
+  const pageSize = 500;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("trades")
+      .select("id, data, trade_number")
+      .order("id", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const fj = row.data?._fj;
+      if (fj?.kind === POSITION_KIND && fj?.tokenMint === tokenMint) {
+        rows.push(row);
+      }
+    }
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return rows;
+}
+
+async function findTradeWithFillSignature(tokenMint, signature, side) {
+  if (!signature || !side) return null;
+
+  const rows = await listAllMintTrades(tokenMint);
+  for (const row of rows) {
+    const fills = row.data?._fj?.fills ?? [];
+    if (fills.some((f) => f.signature === signature && f.side === side)) {
+      return {
+        id: row.id,
+        trade_number: row.trade_number,
+        data: row.data ?? {},
+      };
+    }
+  }
+  return null;
 }
 
 function buildTradePayload(trade, fj, fills) {
@@ -117,7 +177,7 @@ export async function findTradeForFill({
   imageUrl,
   executedAt,
 }) {
-  const matching = await listMintTrades(tokenMint);
+  const matching = await listAllMintTrades(tokenMint);
   const fillTs = executedAt ?? new Date().toISOString();
   const fillTime = Date.parse(fillTs);
 
@@ -347,8 +407,14 @@ export async function appendFillToPosition({
       ? new Date(blockTime > 1e12 ? blockTime : blockTime * 1000).toISOString()
       : undefined);
 
+  let resolvedTradeId = tradeId;
+  if (!resolvedTradeId && signature && side) {
+    const existingTrade = await findTradeWithFillSignature(tokenMint, signature, side);
+    if (existingTrade) resolvedTradeId = existingTrade.id;
+  }
+
   const trade = await resolveTradeForFill({
-    tradeId,
+    tradeId: resolvedTradeId,
     side,
     tokenMint,
     tokenSymbol,

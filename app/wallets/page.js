@@ -46,6 +46,7 @@ import {
   savePendingImportReview,
   loadPendingImportReview,
   clearPendingImportReview,
+  loadOlderIntoReview,
 } from "../lib/swap/importFills";
 import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
@@ -273,6 +274,45 @@ export default function WalletsPage() {
     setImportReview(null);
   };
 
+  const handleReviewUpdated = useCallback(({ scanData, plan }) => {
+    if (!importReview?.wallet) return;
+    savePendingImportReview({
+      walletId: importReview.wallet.id,
+      scanData,
+      plan,
+      syncMode: scanData.syncMode ?? importReview.scanData?.syncMode ?? {},
+    });
+    setImportReview((prev) =>
+      prev ? { ...prev, scanData, plan } : prev
+    );
+  }, [importReview?.wallet, importReview?.scanData?.syncMode]);
+
+  const handleLoadOlderInReview = useCallback(
+    async ({ scanData }) => {
+      if (!importReview?.wallet) return null;
+      const controller = new AbortController();
+      syncAbortRef.current = controller;
+      return loadOlderIntoReview(importReview.wallet.address, scanData, {
+        signal: controller.signal,
+        onProgress: (ev) => {
+          if (!mountedRef.current) return;
+          const label = formatSyncProgress(ev);
+          setSyncProgress((prev) => ({
+            ...prev,
+            [importReview.wallet.id]: {
+              label: label || "Loading older batch…",
+              scanned: ev.scanned ?? prev[importReview.wallet.id]?.scanned ?? 0,
+              total: ev.total ?? prev[importReview.wallet.id]?.total ?? 0,
+              swapsFound: ev.swapsFound ?? prev[importReview.wallet.id]?.swapsFound ?? 0,
+              older: true,
+            },
+          }));
+        },
+      });
+    },
+    [importReview?.wallet]
+  );
+
   const handleResetSyncCursor = async () => {
     if (!resetSyncTarget) return;
     setResetSyncLoading(true);
@@ -460,6 +500,8 @@ export default function WalletsPage() {
         scanData={importReview?.scanData ?? null}
         initialPlan={importReview?.plan ?? null}
         onCommitted={handleImportCommitted}
+        onLoadOlder={handleLoadOlderInReview}
+        onReviewUpdated={handleReviewUpdated}
       />
     </>
   );

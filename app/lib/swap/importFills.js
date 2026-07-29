@@ -4,7 +4,10 @@
 
 import { appendFillToPosition } from "./journal";
 import { buildImportPlan } from "./importPlan";
+import { mergeImportSwaps, mergeScanData } from "./importPlanCore";
 import { SYNC_BATCH_DEFAULT } from "./constants";
+
+export { mergeImportSwaps, mergeScanData };
 
 const STATE_KEY = "flawless.walletSync.state";
 const PENDING_REVIEW_KEY = "flawless.walletSync.pendingReview";
@@ -267,7 +270,8 @@ function buildSyncMetaPatch(data, meta, { older = false, reset = false } = {}) {
       meta?.lastSignature ||
       null;
     if (newestSig) patch.lastSignature = newestSig;
-    if (reset || !meta?.oldestSignature) {
+    const mergedReview = (data.mergedBatches ?? 1) > 1;
+    if (reset || !meta?.oldestSignature || mergedReview) {
       if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
       patch.hasMoreOlder = Boolean(data.hasMoreOlder);
     } else if (meta?.hasMoreOlder == null) {
@@ -287,6 +291,7 @@ export async function scanWalletSync(address, opts = {}) {
     older = false,
     resync = false,
     reset = false,
+    beforeSignature = null,
     onProgress,
     signal,
   } = opts;
@@ -296,7 +301,7 @@ export async function scanWalletSync(address, opts = {}) {
   const meta = reset ? null : getWalletSyncMeta(address);
   const untilSignature =
     older || resync || reset ? null : meta?.lastSignature || null;
-  const before = older ? meta?.oldestSignature || null : null;
+  const before = older ? beforeSignature ?? meta?.oldestSignature ?? null : null;
 
   if (older && !before) {
     throw new Error("Nothing older to scan yet — run Sync once first");
@@ -334,6 +339,30 @@ export async function scanWalletSync(address, opts = {}) {
     reset,
     syncMode: { older, resync, reset },
   };
+}
+
+/**
+ * Load the next older batch and merge into a pending review scan (no cursor advance).
+ */
+export async function loadOlderIntoReview(address, scanData, opts = {}) {
+  const before = scanData?.oldestSignature;
+  if (!before) {
+    throw new Error("No older transactions in this batch — nothing to load");
+  }
+
+  const olderScan = await scanWalletSync(address, {
+    ...opts,
+    older: true,
+    beforeSignature: before,
+  });
+
+  const merged = mergeScanData(scanData, olderScan);
+  const mints = [...new Set((merged.swaps ?? []).map((s) => s.tokenMint).filter(Boolean))];
+  const { loadMintImportContext } = await import("./importPlan");
+  const mintContext = await loadMintImportContext(mints);
+  const plan = buildImportPlan(merged.swaps ?? [], mintContext);
+
+  return { scanData: merged, plan, olderScan };
 }
 
 /** Import approved fills from a review plan (explicit trade grouping). */

@@ -17,6 +17,35 @@ import {
 /** Must match POSITION_KIND in constants.js */
 export const JOURNAL_POSITION_KIND = "solana_position";
 
+/** Merge swap lists from multiple scan batches (dedupe by signature+side). */
+export function mergeImportSwaps(existing = [], older = []) {
+  const byKey = new Map();
+  for (const swap of [...older, ...existing]) {
+    const key = swap.signature
+      ? `${swap.signature}:${swap.side}`
+      : `${swap.blockTime ?? 0}:${swap.side}:${swap.tokenMint ?? ""}`;
+    if (!byKey.has(key)) byKey.set(key, swap);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => Number(a.blockTime ?? 0) - Number(b.blockTime ?? 0)
+  );
+}
+
+/** Combine scan metadata after loading an older batch into a pending review. */
+export function mergeScanData(base, olderScan) {
+  const mergedSwaps = mergeImportSwaps(base.swaps ?? [], olderScan.swaps ?? []);
+  return {
+    ...base,
+    swaps: mergedSwaps,
+    scanned: (base.scanned ?? 0) + (olderScan.scanned ?? 0),
+    total: (base.total ?? 0) + (olderScan.total ?? 0),
+    oldestTime: olderScan.oldestTime ?? base.oldestTime,
+    oldestSignature: olderScan.oldestSignature ?? base.oldestSignature,
+    hasMoreOlder: Boolean(olderScan.hasMoreOlder),
+    mergedBatches: (base.mergedBatches ?? 1) + 1,
+  };
+}
+
 function blockTimeToIso(blockTime) {
   const ts = Number(blockTime);
   if (!Number.isFinite(ts) || ts <= 0) return null;
@@ -332,7 +361,7 @@ export function planSummary(plan) {
 export function warningLabel(code) {
   switch (code) {
     case "incomplete_start":
-      return "Batch starts mid-trade — sync Older first for the open, or exclude these fills.";
+      return "Batch starts mid-trade — load an older batch below, or exclude these fills.";
     case "continues":
       return "Continues an open position from your journal.";
     case "open_at_end":
