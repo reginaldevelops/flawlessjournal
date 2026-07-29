@@ -3,12 +3,15 @@
 import { useEffect, useId, useReducer } from "react";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
 import { CHAIN_LIST, WALLET_COLORS, nextWalletColor } from "../lib/chain/constants";
-import { validateAddress, validateLabel } from "../lib/chain/validate";
+import { validateAddress, validateLabel, validateRobinhoodCredentials } from "../lib/chain/validate";
+import { verifyRobinhoodCredentials } from "../lib/wallets/robinhood";
 
 const INITIAL = {
   label: "",
   chain: "",
   address: "",
+  apiKey: "",
+  privateKeyBase64: "",
   color: "",
   include_in_balance: true,
   errors: {},
@@ -44,6 +47,8 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
               label: wallet.label ?? "",
               chain: wallet.chain ?? "",
               address: wallet.address ?? "",
+              apiKey: "",
+              privateKeyBase64: "",
               color: wallet.color ?? nextWalletColor(usedColors),
               include_in_balance: wallet.include_in_balance ?? true,
             }
@@ -63,8 +68,18 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
     const labelCheck = validateLabel(state.label);
     if (!labelCheck.ok) errs.label = labelCheck.error;
 
-    const addrCheck = validateAddress(state.chain, state.address);
-    if (!addrCheck.ok) errs.address = addrCheck.error;
+    const isRobinhood = state.chain === "robinhood";
+
+    if (isRobinhood && !isEdit) {
+      const credCheck = validateRobinhoodCredentials({
+        apiKey: state.apiKey,
+        privateKeyBase64: state.privateKeyBase64,
+      });
+      if (!credCheck.ok) errs.apiKey = credCheck.error;
+    } else if (!isRobinhood) {
+      const addrCheck = validateAddress(state.chain, state.address);
+      if (!addrCheck.ok) errs.address = addrCheck.error;
+    }
 
     if (!state.chain) errs.chain = "Pick a chain.";
 
@@ -74,12 +89,37 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
     }
 
     dispatch({ type: "SET_SUBMITTING", value: true });
+
+    let address = state.address.trim();
+    let credentials = null;
+
+    if (isRobinhood && !isEdit) {
+      try {
+        const verified = await verifyRobinhoodCredentials(
+          state.apiKey.trim(),
+          state.privateKeyBase64.trim()
+        );
+        address = verified.accountNumber;
+        credentials = {
+          apiKey: state.apiKey.trim(),
+          privateKeyBase64: state.privateKeyBase64.trim(),
+        };
+      } catch (err) {
+        dispatch({
+          type: "SET_ERRORS",
+          errors: { apiKey: err.message || "Could not verify Robinhood API credentials." },
+        });
+        return;
+      }
+    }
+
     const result = await onSave({
       label: state.label.trim(),
       chain: state.chain,
-      address: state.address.trim(),
+      address,
       color: state.color || WALLET_COLORS[0],
       include_in_balance: state.include_in_balance,
+      ...(credentials ? { credentials } : {}),
     });
     if (result?.ok !== false) {
       onClose();
@@ -89,6 +129,7 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
   };
 
   const selectedChain = CHAIN_LIST.find((c) => c.id === state.chain);
+  const isRobinhood = state.chain === "robinhood";
 
   return (
     <Modal
@@ -98,7 +139,7 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
       description={
         isEdit
           ? "Update the label, colour or balance inclusion."
-          : "Connect a Solana or Hyperliquid address to track your on-chain equity."
+          : "Connect Solana, Robinhood Crypto, or Hyperliquid to track balances."
       }
       size="md"
       footer={
@@ -156,26 +197,67 @@ export default function WalletFormModal({ open, onClose, onSave, wallet, usedCol
           )}
         </Field>
 
-        {/* Address */}
-        <Field
-          label="Address"
-          required
-          error={state.errors.address}
-          hint={selectedChain?.addressHint ?? "Select a chain first."}
-        >
-          {(id) => (
-            <Input
-              id={id}
-              value={state.address}
-              onChange={set("address")}
-              placeholder={selectedChain?.addressPlaceholder ?? ""}
-              spellCheck={false}
-              autoComplete="off"
-              invalid={Boolean(state.errors.address)}
-              disabled={isEdit}
-            />
-          )}
-        </Field>
+        {/* Address or Robinhood API credentials */}
+        {isRobinhood && !isEdit ? (
+          <>
+            <Field label="API key" required error={state.errors.apiKey}>
+              {(id) => (
+                <Input
+                  id={id}
+                  value={state.apiKey}
+                  onChange={set("apiKey")}
+                  placeholder="rh-api-…"
+                  spellCheck={false}
+                  autoComplete="off"
+                  invalid={Boolean(state.errors.apiKey)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Private key (base64)"
+              required
+              error={state.errors.privateKeyBase64}
+              hint="From Robinhood Crypto → Settings → API. Never share this key."
+            >
+              {(id) => (
+                <Input
+                  id={id}
+                  type="password"
+                  value={state.privateKeyBase64}
+                  onChange={set("privateKeyBase64")}
+                  placeholder="Base64 Ed25519 seed"
+                  spellCheck={false}
+                  autoComplete="off"
+                  invalid={Boolean(state.errors.privateKeyBase64)}
+                />
+              )}
+            </Field>
+          </>
+        ) : (
+          <Field
+            label={isRobinhood ? "Account" : "Address"}
+            required={!isRobinhood}
+            error={state.errors.address}
+            hint={
+              isRobinhood
+                ? "Robinhood account id (set when you connected API)."
+                : selectedChain?.addressHint ?? "Select a chain first."
+            }
+          >
+            {(id) => (
+              <Input
+                id={id}
+                value={state.address}
+                onChange={set("address")}
+                placeholder={selectedChain?.addressPlaceholder ?? ""}
+                spellCheck={false}
+                autoComplete="off"
+                invalid={Boolean(state.errors.address)}
+                disabled={isEdit || isRobinhood}
+              />
+            )}
+          </Field>
+        )}
 
         {/* Color picker */}
         <Field label="Colour">

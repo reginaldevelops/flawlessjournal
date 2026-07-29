@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { attachRobinhoodCredentials } from "../lib/wallets/robinhood";
 import { subscribePositionChanged } from "../lib/swap/positionEvents";
 import Link from "next/link";
 import {
@@ -369,16 +370,18 @@ function usePortfolioBalances(wallets, walletsLoading) {
     setLoading(true);
 
     try {
+      const withCreds = await attachRobinhoodCredentials(wals);
       const res = await fetch("/api/portfolio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          wallets: wals.map((w) => ({
+          wallets: withCreds.map((w) => ({
             id: w.id,
             label: w.label,
             chain: w.chain,
             address: w.address,
             color: w.color,
+            ...(w.credentials ? { credentials: w.credentials } : {}),
           })),
         }),
         signal: controller.signal,
