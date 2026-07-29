@@ -8,7 +8,7 @@ export const JUPITER_PRICE_API = "https://lite-api.jup.ag/price/v3";
 export const JUPITER_TOKEN_API = "https://lite-api.jup.ag/tokens/v2/search";
 
 export const DEFAULT_RPC =
-  process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://solana-rpc.publicnode.com";
 
 /** Jito JSON-RPC for tip-mode broadcasts. */
 export const JITO_TX_URL =

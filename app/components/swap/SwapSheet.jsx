@@ -23,7 +23,6 @@ import {
 import SwapSettingsPanel from "./SwapSettingsPanel";
 import {
   FARTCOIN_MINT,
-  JITO_TX_URL,
   QUOTE_TOKENS,
   SLIPPAGE_OPTIONS,
 } from "../../lib/swap/constants";
@@ -315,14 +314,20 @@ export default function SwapSheet({
       const raw = signed.serialize();
 
       let signature;
-      if (settings.feeMode === "jito") {
-        signature = await sendViaJito(raw);
-      } else {
-        signature = await connection.sendRawTransaction(raw, {
-          skipPreflight: false,
-          maxRetries: 3,
-        });
+      const b64 = bytesToB64(raw);
+      const broadcastRes = await fetch("/api/solana/broadcast", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transaction: b64,
+          mode: settings.feeMode === "jito" ? "jito" : "priority",
+        }),
+      });
+      const broadcastJson = await broadcastRes.json();
+      if (!broadcastRes.ok || !broadcastJson.signature) {
+        throw new Error(broadcastJson.error || "Transaction broadcast failed");
       }
+      signature = broadcastJson.signature;
 
       const latest = await connection.getLatestBlockhash();
       await connection.confirmTransaction(
@@ -371,10 +376,9 @@ export default function SwapSheet({
       }
     } catch (err) {
       console.error(err);
-      setError(err?.message ?? "Swap failed");
-      toastError("Swap failed", {
-        description: err?.message ?? "Unknown error",
-      });
+      const message = formatSwapError(err);
+      setError(message);
+      toastError("Swap failed", { description: message });
     } finally {
       setSwapping(false);
     }
@@ -611,6 +615,17 @@ export default function SwapSheet({
   );
 }
 
+function formatSwapError(err) {
+  const raw = String(err?.message ?? err ?? "Swap failed");
+  if (/403|access forbidden|forbidden/i.test(raw)) {
+    return "Solana RPC blocked the transaction (403). Retry in a moment — if it persists, add SOLANA_RPC_URL (Helius/QuickNode) in Vercel env.";
+  }
+  if (/blockhash|expired/i.test(raw)) {
+    return "Transaction expired — try the swap again.";
+  }
+  return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
+}
+
 function normalizeSlippage(bps) {
   const n = Number(bps);
   if (n === SLIPPAGE_OPTIONS[1].bps) return SLIPPAGE_OPTIONS[1].bps;
@@ -624,25 +639,6 @@ function Stat({ label, value }) {
       <p className="mt-0.5 font-mono tnum text-sm text-content">{value}</p>
     </div>
   );
-}
-
-async function sendViaJito(rawTx) {
-  const b64 = bytesToB64(rawTx);
-  const res = await fetch(JITO_TX_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "sendTransaction",
-      params: [b64, { encoding: "base64" }],
-    }),
-  });
-  const json = await res.json();
-  if (json.error) {
-    throw new Error(json.error.message || "Jito broadcast failed");
-  }
-  return json.result;
 }
 
 function b64ToBytes(b64) {

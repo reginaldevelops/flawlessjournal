@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { isValidSolanaAddress } from "../../../lib/chain/validate";
 import { publicApiError } from "../../../lib/api/publicError";
+import { getServerRpcUrl } from "../../../lib/swap/rpc";
 import {
-  DEFAULT_RPC,
   SYNC_BATCH_DEFAULT,
   SYNC_BATCH_MAX,
 } from "../../../lib/swap/constants";
@@ -70,7 +70,7 @@ export async function POST(request) {
           limit: Math.min(SYNC_BATCH_MAX, limit),
           untilSignature,
           before,
-          rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_RPC,
+          rpcUrl: getServerRpcUrl(),
           onProgress: send,
         });
         send({ type: "result", ...result });
