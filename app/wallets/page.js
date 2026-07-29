@@ -43,6 +43,9 @@ import {
   finalizeSyncScan,
   clearWalletSyncMeta,
   formatSyncProgress,
+  savePendingImportReview,
+  loadPendingImportReview,
+  clearPendingImportReview,
 } from "../lib/swap/importFills";
 import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
@@ -88,6 +91,39 @@ export default function WalletsPage() {
   const [rhTxByWallet, setRhTxByWallet] = useState({});
   const [rhTxExpanded, setRhTxExpanded] = useState({});
 
+  const syncAbortRef = useRef(null);
+  const mountedRef = useRef(true);
+  const restoredPendingRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      syncAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (restoredPendingRef.current || loading || !wallets.length) return;
+    const pending = loadPendingImportReview();
+    if (!pending?.walletId || !pending?.plan) return;
+    const wallet = wallets.find((w) => String(w.id) === String(pending.walletId));
+    if (!wallet) return;
+
+    restoredPendingRef.current = true;
+    setImportReview({
+      wallet,
+      scanData: {
+        ...pending.scanData,
+        syncMode: pending.syncMode ?? {},
+      },
+      plan: pending.plan,
+    });
+    toast.info("Import klaar om te reviewen", {
+      description: "Scan hervat van voordat je de pagina verliet.",
+    });
+  }, [loading, wallets, toast]);
+
   useEffect(() => {
     if (!wallets.length) return;
     const cached = {};
@@ -121,6 +157,11 @@ export default function WalletsPage() {
 
   const handleSyncWallet = async (wallet, { older = false, resync = false, reset = false } = {}) => {
     if (wallet.chain !== "solana") return;
+
+    syncAbortRef.current?.abort();
+    const controller = new AbortController();
+    syncAbortRef.current = controller;
+
     setSyncingId(wallet.id);
     const syncMode = { older, resync, reset };
     setSyncProgress((prev) => ({
@@ -148,7 +189,9 @@ export default function WalletsPage() {
         older,
         resync,
         reset,
+        signal: controller.signal,
         onProgress: (ev) => {
+          if (!mountedRef.current) return;
           const label = formatSyncProgress(ev);
           setSyncProgress((prev) => ({
             ...prev,
@@ -171,6 +214,7 @@ export default function WalletsPage() {
       const swaps = scanData.swaps ?? [];
       if (!swaps.length) {
         finalizeSyncScan(wallet.address, scanData, syncMode);
+        if (!mountedRef.current) return;
         const scanLine = formatScanSummary(scanData);
         toast.info("No swaps in this batch", {
           description: resync || reset
@@ -186,26 +230,45 @@ export default function WalletsPage() {
 
       if (plan.includedCount === 0) {
         finalizeSyncScan(wallet.address, scanData, syncMode);
+        if (!mountedRef.current) return;
         toast.info("No new swaps", {
           description: `${formatScanSummary(scanData)} · ${plan.fillCount} already in journal`,
         });
         return;
       }
 
+      savePendingImportReview({
+        walletId: wallet.id,
+        scanData,
+        plan,
+        syncMode,
+      });
+
+      if (!mountedRef.current) return;
       setImportReview({ wallet, scanData, plan });
     } catch (err) {
-      toast.error("Wallet sync failed", { description: err.message });
+      if (err?.name === "AbortError") return;
+      if (mountedRef.current) {
+        toast.error("Wallet sync failed", { description: err.message });
+      }
     } finally {
-      setSyncingId(null);
-      setSyncProgress((prev) => {
-        const next = { ...prev };
-        delete next[wallet.id];
-        return next;
-      });
+      if (mountedRef.current) {
+        setSyncingId(null);
+        setSyncProgress((prev) => {
+          const next = { ...prev };
+          delete next[wallet.id];
+          return next;
+        });
+      }
     }
   };
 
+  const handleCloseImportReview = () => {
+    setImportReview(null);
+  };
+
   const handleImportCommitted = () => {
+    clearPendingImportReview();
     setSyncTick((t) => t + 1);
     setImportReview(null);
   };
@@ -392,7 +455,7 @@ export default function WalletsPage() {
       />
       <WalletImportReviewModal
         open={Boolean(importReview)}
-        onClose={() => setImportReview(null)}
+        onClose={handleCloseImportReview}
         wallet={importReview?.wallet ?? null}
         scanData={importReview?.scanData ?? null}
         initialPlan={importReview?.plan ?? null}
