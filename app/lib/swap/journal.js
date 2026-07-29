@@ -77,9 +77,95 @@ export async function findOrCreatePositionTrade({
 }
 
 /**
+ * Resolve the trade row to attach a fill to.
+ * When `tradeId` is set, use that journal row (initialize _fj if needed).
+ */
+async function resolveTradeForFill({
+  tradeId,
+  tokenMint,
+  tokenSymbol,
+  tokenName,
+  pairUrl,
+  imageUrl,
+  executedAt,
+}) {
+  if (!tradeId) {
+    return findOrCreatePositionTrade({
+      tokenMint,
+      tokenSymbol,
+      tokenName,
+      pairUrl,
+      imageUrl,
+      executedAt,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from("trades")
+    .select("id, data, trade_number")
+    .eq("id", tradeId)
+    .single();
+
+  if (error) throw error;
+
+  const existingFj = data.data?._fj;
+  if (
+    existingFj?.kind === POSITION_KIND &&
+    existingFj.tokenMint &&
+    existingFj.tokenMint !== tokenMint
+  ) {
+    throw new Error(
+      `This trade is linked to ${existingFj.tokenSymbol || "another token"}. Use Swap from the header for a new token.`
+    );
+  }
+
+  if (existingFj?.kind === POSITION_KIND) {
+    return {
+      id: data.id,
+      trade_number: data.trade_number,
+      data: data.data ?? {},
+    };
+  }
+
+  const when = executedAt ? new Date(executedAt) : new Date();
+  const safeWhen = Number.isNaN(when.getTime()) ? new Date() : when;
+  const pad = (n) => String(n).padStart(2, "0");
+  const seeded = {
+    ...(data.data ?? {}),
+    Coin: tokenSymbol,
+    Coins: tokenSymbol,
+    Direction: data.data?.Direction || "Long",
+    Datum:
+      data.data?.Datum ??
+      `${safeWhen.getFullYear()}-${pad(safeWhen.getMonth() + 1)}-${pad(safeWhen.getDate())}`,
+    Entreetijd:
+      data.data?.Entreetijd ??
+      `${pad(safeWhen.getHours())}:${pad(safeWhen.getMinutes())}`,
+    _fj: {
+      kind: POSITION_KIND,
+      chain: "solana",
+      tokenMint,
+      tokenSymbol,
+      tokenName: tokenName || tokenSymbol,
+      pairUrl: pairUrl || null,
+      imageUrl: imageUrl || null,
+      fills: [],
+      computed: computePosition([]),
+    },
+  };
+
+  return {
+    id: data.id,
+    trade_number: data.trade_number,
+    data: seeded,
+  };
+}
+
+/**
  * Append a buy/sell fill and refresh avg entry / invested / PnL mirrors.
  */
 export async function appendFillToPosition({
+  tradeId,
   tokenMint,
   tokenSymbol,
   tokenName,
@@ -103,7 +189,8 @@ export async function appendFillToPosition({
       ? new Date(blockTime > 1e12 ? blockTime : blockTime * 1000).toISOString()
       : undefined);
 
-  const trade = await findOrCreatePositionTrade({
+  const trade = await resolveTradeForFill({
+    tradeId,
     tokenMint,
     tokenSymbol,
     tokenName,

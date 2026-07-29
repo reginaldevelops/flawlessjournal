@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowDownUp,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { NAV_ITEMS, routeMeta } from "../../lib/nav";
 import { isDemoMode, supabase } from "../../lib/supabaseClient";
+import { createJournalTrade } from "../../lib/trades/createJournalTrade";
 import Button from "../ui/Button";
 import { Badge, Kbd } from "../ui/Badge";
 import { Tooltip, Popover, MenuItem, MenuSeparator, MenuLabel } from "../ui/Overlays";
@@ -26,6 +28,7 @@ import { LogoMark, Wordmark } from "./Logo";
 import { useTheme } from "./ThemeProvider";
 import CommandPalette from "./CommandPalette";
 import LivePositionsBar from "../swap/LivePositionsBar";
+import { useSwapFlow } from "../swap/SwapFlowContext";
 
 const COLLAPSE_KEY = "flawless.sidebar.collapsed";
 
@@ -60,21 +63,15 @@ export default function AppShell({ children }) {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  const addTrade = useCallback(async () => {
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    const { data, error } = await supabase
-      .from("trades")
-      .insert([
-        {
-          data: {
-            Datum: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-            Entreetijd: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-          },
-        },
-      ])
-      .select();
-    if (!error && data?.[0]?.id) router.push(`/trade/${data[0].id}`);
+  const { openSwap } = useSwapFlow();
+
+  const addJournalEntry = useCallback(async () => {
+    try {
+      const id = await createJournalTrade(supabase);
+      if (id) router.push(`/trade/${id}`);
+    } catch (err) {
+      console.error("Create journal trade failed:", err);
+    }
   }, [router]);
 
   useEffect(() => {
@@ -94,12 +91,12 @@ export default function AppShell({ children }) {
         e.target?.isContentEditable;
       if (!mod && !typing && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        addTrade();
+        addJournalEntry();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [addTrade, toggleCollapsed]);
+  }, [addJournalEntry, toggleCollapsed]);
 
   const meta = useMemo(() => routeMeta(pathname), [pathname]);
 
@@ -304,11 +301,18 @@ export default function AppShell({ children }) {
             onClick={() => setPaletteOpen(true)}
           />
 
-          <Tooltip content={<span className="flex items-center gap-1.5">New trade <Kbd>N</Kbd></span>}>
-            <Button variant="primary" size="sm" icon={Plus} onClick={addTrade}>
-              <span className="hidden sm:inline">New trade</span>
-            </Button>
-          </Tooltip>
+          <div className="flex items-center gap-1.5">
+            <Tooltip content={<span className="flex items-center gap-1.5">Journal entry <Kbd>N</Kbd></span>}>
+              <Button variant="primary" size="sm" icon={Plus} onClick={addJournalEntry}>
+                <span className="hidden sm:inline">Journal entry</span>
+              </Button>
+            </Tooltip>
+            <Tooltip content="Swap on Solana → journal trade with fills">
+              <Button variant="secondary" size="sm" icon={ArrowDownUp} onClick={() => openSwap()}>
+                <span className="hidden sm:inline">Swap</span>
+              </Button>
+            </Tooltip>
+          </div>
 
           <Tooltip content={theme === "dark" ? "Light theme" : "Dark theme"}>
             <Button

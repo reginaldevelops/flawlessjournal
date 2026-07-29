@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabaseClient";
 import CreatableSelect from "react-select/creatable";
 import ManageVariablesModal from "../../components/ManageVariablesModal";
 import PositionPanel from "../../components/swap/PositionPanel";
+import ExecuteSolanaStrip from "../../components/swap/ExecuteSolanaStrip";
 import ChartField from "../../components/trade/ChartField";
 import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
 import FieldShell from "../../components/trade/FieldShell";
@@ -760,6 +761,10 @@ export default function TradeViewPage() {
           onChange={(tags) => saveTrade({ ...trade, Tags: tags })}
         />
       </div>
+
+      {trade._fj?.kind !== "solana_position" && (
+        <ExecuteSolanaStrip tradeId={trade.id} onComplete={loadTrade} />
+      )}
 
       <PositionPanel trade={trade} onRefresh={loadTrade} />
 
