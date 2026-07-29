@@ -82,3 +82,73 @@ export async function fetchRobinhoodHoldings({ apiKey, privateKeyBase64 }) {
   });
   return Array.isArray(data?.results) ? data.results : [];
 }
+
+function extractCursor(nextUrl) {
+  if (!nextUrl || typeof nextUrl !== "string") return null;
+  try {
+    const url = new URL(nextUrl, ROBINHOOD_API_BASE);
+    return url.searchParams.get("cursor");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One page of Robinhood crypto orders (newest first).
+ */
+export async function fetchRobinhoodOrdersPage({
+  apiKey,
+  privateKeyBase64,
+  limit = 50,
+  cursor = null,
+  state = null,
+}) {
+  const params = new URLSearchParams();
+  if (limit) params.set("limit", String(Math.min(100, Math.max(1, limit))));
+  if (cursor) params.set("cursor", cursor);
+  if (state) params.set("state", state);
+  const qs = params.toString();
+  const path = `/api/v1/crypto/trading/orders/${qs ? `?${qs}` : ""}`;
+
+  const data = await robinhoodRequest({
+    apiKey,
+    privateKeyBase64,
+    path,
+    label: "Robinhood orders",
+  });
+
+  return {
+    results: Array.isArray(data?.results) ? data.results : [],
+    nextCursor: extractCursor(data?.next),
+    previous: data?.previous ?? null,
+  };
+}
+
+/** Walk cursor pages up to `maxPages`. */
+export async function fetchRobinhoodOrders({
+  apiKey,
+  privateKeyBase64,
+  limit = 50,
+  maxPages = 6,
+  state = null,
+}) {
+  const all = [];
+  let cursor = null;
+  let pages = 0;
+
+  while (pages < maxPages) {
+    const page = await fetchRobinhoodOrdersPage({
+      apiKey,
+      privateKeyBase64,
+      limit,
+      cursor,
+      state,
+    });
+    all.push(...page.results);
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+    pages += 1;
+  }
+
+  return all;
+}
