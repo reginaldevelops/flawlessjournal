@@ -589,6 +589,19 @@ const auth = {
     emitAuth("SIGNED_IN");
     return { data: { user: DEMO_USER, session: readSession() }, error: null };
   },
+  async signInWithOAuth() {
+    writeSession(true);
+    emitAuth("SIGNED_IN");
+    return {
+      data: { provider: "google", url: null },
+      error: null,
+    };
+  },
+  async exchangeCodeForSession() {
+    writeSession(true);
+    emitAuth("SIGNED_IN");
+    return { data: { session: readSession() }, error: null };
+  },
   async signUp() {
     writeSession(true);
     emitAuth("SIGNED_IN");

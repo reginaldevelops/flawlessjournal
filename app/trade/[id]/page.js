@@ -577,9 +577,11 @@ export default function TradeViewPage() {
   const [variables, setVariables] = useState([]);
   const [showManageModal, setShowManageModal] = useState(false);
 
-  const loadTrade = async () => {
-    setLoading(true);
-    setLoadError(null);
+  const loadTrade = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError(null);
+    }
     const { data, error } = await supabase
       .from("trades")
       .select("*")
@@ -613,7 +615,9 @@ export default function TradeViewPage() {
       setLoadError(error?.message || "Could not load this trade. Check your connection and try again.");
       console.error("❌ Load trade error:", error);
     }
-    setLoading(false);
+    if (!silent) {
+      setLoading(false);
+    }
   };
 
   // Load trade
@@ -628,7 +632,7 @@ export default function TradeViewPage() {
 
   useVisibleInterval(
     () => {
-      loadTrade();
+      loadTrade({ silent: true });
     },
     TRADE_POSITION_REFRESH_MS,
     Boolean(id && positionLive)
@@ -638,7 +642,7 @@ export default function TradeViewPage() {
     if (!positionLive) return undefined;
     const unsub = subscribePositionChanged(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        loadTrade();
+        loadTrade({ silent: true });
       }
     });
     return unsub;
@@ -792,7 +796,10 @@ export default function TradeViewPage() {
         <ExecuteSolanaStrip tradeId={trade.id} onComplete={loadTrade} />
       )}
 
-      <PositionPanel trade={trade} onRefresh={loadTrade} />
+      <PositionPanel
+        trade={trade}
+        onRefresh={() => loadTrade({ silent: true })}
+      />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,340px),1fr]">
         {/* Sidebar */}
