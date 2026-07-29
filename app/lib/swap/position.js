@@ -88,6 +88,39 @@ export function isPositionLive(computed) {
   return n(computed?.tokensOpen) > 1e-12;
 }
 
+/** Classify a fill's role relative to position size before this fill. */
+export function classifyFillRole(tokensOpenBefore, side) {
+  const open = n(tokensOpenBefore);
+  if (side === "buy") {
+    return open <= 1e-12 ? "open" : "add";
+  }
+  if (side === "sell") {
+    if (open <= 1e-12) return "orphan";
+    return "reduce"; // refined to close after applying qty in plan builder
+  }
+  return "unknown";
+}
+
+export function classifyFillRoleAfter(tokensOpenBefore, side, tokenAmount) {
+  if (side === "buy") {
+    return classifyFillRole(tokensOpenBefore, side);
+  }
+  const open = n(tokensOpenBefore);
+  const qty = n(tokenAmount);
+  if (open <= 1e-12) return "orphan";
+  const after = open - qty;
+  return after <= 1e-12 ? "close" : "reduce";
+}
+
+export const FILL_ROLE_META = {
+  open: { label: "Open", tone: "profit" },
+  add: { label: "Add", tone: "neutral" },
+  reduce: { label: "Reduce", tone: "warn" },
+  close: { label: "Close", tone: "loss" },
+  orphan: { label: "Orphan", tone: "loss" },
+  unknown: { label: "?", tone: "neutral" },
+};
+
 /** Sort fills oldest → newest. */
 export function sortFillsChrono(fills = []) {
   return [...fills].sort(

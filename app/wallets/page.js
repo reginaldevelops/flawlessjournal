@@ -36,12 +36,15 @@ import { chainMeta, explorerUrl } from "../lib/chain/constants";
 import { formatCurrency, formatDate, formatRelative, truncateMiddle } from "../lib/format";
 import { useWallets } from "./hooks";
 import WalletFormModal from "./WalletFormModal";
+import WalletImportReviewModal from "../components/wallets/WalletImportReviewModal";
 import {
   getWalletSyncMeta,
-  runWalletSync,
+  scanWalletSync,
+  finalizeSyncScan,
   clearWalletSyncMeta,
   formatSyncProgress,
 } from "../lib/swap/importFills";
+import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
 
 function formatScanSummary(result) {
@@ -80,6 +83,7 @@ export default function WalletsPage() {
   const [syncProgress, setSyncProgress] = useState({});
   const [resetSyncTarget, setResetSyncTarget] = useState(null);
   const [resetSyncLoading, setResetSyncLoading] = useState(false);
+  const [importReview, setImportReview] = useState(null);
   const [rhTxLoadingId, setRhTxLoadingId] = useState(null);
   const [rhTxByWallet, setRhTxByWallet] = useState({});
   const [rhTxExpanded, setRhTxExpanded] = useState({});
@@ -118,6 +122,7 @@ export default function WalletsPage() {
   const handleSyncWallet = async (wallet, { older = false, resync = false, reset = false } = {}) => {
     if (wallet.chain !== "solana") return;
     setSyncingId(wallet.id);
+    const syncMode = { older, resync, reset };
     setSyncProgress((prev) => ({
       ...prev,
       [wallet.id]: {
@@ -138,7 +143,7 @@ export default function WalletsPage() {
       },
     }));
     try {
-      const result = await runWalletSync(wallet.address, {
+      const scanData = await scanWalletSync(wallet.address, {
         limit: SYNC_BATCH_DEFAULT,
         older,
         resync,
@@ -161,36 +166,33 @@ export default function WalletsPage() {
           }));
         },
       });
-      setSyncTick((t) => t + 1);
-      const n = result.imported?.length ?? 0;
-      const deduped = result.deduped?.length ?? 0;
-      const scanLine = formatScanSummary(result);
-      if (n > 0) {
-        toast.success(
-          resync || reset ? `Re-imported ${n} fill${n === 1 ? "" : "s"}` : `Imported ${n} fill${n === 1 ? "" : "s"}`,
-          {
-            description: `${scanLine} · ${deduped} already known`,
-            action: result.imported[0]?.tradeId
-              ? {
-                  label: "Open trade",
-                  onClick: () => {
-                    window.location.href = `/trade/${result.imported[0].tradeId}`;
-                  },
-                }
-              : undefined,
-          }
-        );
-      } else if (deduped > 0) {
-        toast.info("No new swaps", {
-          description: `${scanLine} · ${deduped} already journaled`,
-        });
-      } else {
+      scanData.syncMode = syncMode;
+
+      const swaps = scanData.swaps ?? [];
+      if (!swaps.length) {
+        finalizeSyncScan(wallet.address, scanData, syncMode);
+        const scanLine = formatScanSummary(scanData);
         toast.info("No swaps in this batch", {
           description: resync || reset
             ? scanLine
             : `${scanLine} · Try Re-import if you deleted trades, or Reset sync to start over`,
         });
+        return;
       }
+
+      const mints = [...new Set(swaps.map((s) => s.tokenMint).filter(Boolean))];
+      const mintContext = await loadMintImportContext(mints);
+      const plan = buildImportPlan(swaps, mintContext);
+
+      if (plan.includedCount === 0) {
+        finalizeSyncScan(wallet.address, scanData, syncMode);
+        toast.info("No new swaps", {
+          description: `${formatScanSummary(scanData)} · ${plan.fillCount} already in journal`,
+        });
+        return;
+      }
+
+      setImportReview({ wallet, scanData, plan });
     } catch (err) {
       toast.error("Wallet sync failed", { description: err.message });
     } finally {
@@ -201,6 +203,11 @@ export default function WalletsPage() {
         return next;
       });
     }
+  };
+
+  const handleImportCommitted = () => {
+    setSyncTick((t) => t + 1);
+    setImportReview(null);
   };
 
   const handleResetSyncCursor = async () => {
@@ -246,7 +253,7 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync imports swaps to your journal; Robinhood shows read-only order history."
+        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync scans swaps first — you review detected trades (open/add/reduce/close) before importing."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -382,6 +389,14 @@ export default function WalletsPage() {
         }
         confirmLabel="Remove"
         loading={deleting}
+      />
+      <WalletImportReviewModal
+        open={Boolean(importReview)}
+        onClose={() => setImportReview(null)}
+        wallet={importReview?.wallet ?? null}
+        scanData={importReview?.scanData ?? null}
+        initialPlan={importReview?.plan ?? null}
+        onCommitted={handleImportCommitted}
       />
     </>
   );
@@ -684,7 +699,7 @@ function WalletCard({
           <div className="flex shrink-0 items-center gap-1">
             {wallet.chain === "solana" && (
               <>
-                <Tooltip content="Import only txs newer than the last sync">
+                <Tooltip content="Scan wallet txs and review detected trades before importing">
                   <Button
                     variant="subtle"
                     size="sm"

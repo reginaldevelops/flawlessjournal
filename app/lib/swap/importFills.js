@@ -3,6 +3,7 @@
  */
 
 import { appendFillToPosition } from "./journal";
+import { buildImportPlan } from "./importPlan";
 import { SYNC_BATCH_DEFAULT } from "./constants";
 
 const STATE_KEY = "flawless.walletSync.state";
@@ -164,22 +165,54 @@ async function readSyncStream(res, onProgress) {
   return result;
 }
 
+function buildSyncMetaPatch(data, meta, { older = false, reset = false } = {}) {
+  const patch = {
+    lastAt: new Date().toISOString(),
+    lastScanned: data.scanned,
+    lastTotal: data.total,
+    lastLookbackDays: data.lookbackDays ?? null,
+  };
+
+  const newestAt = blockTimeToIso(data.newestTime);
+  const oldestAt = blockTimeToIso(data.oldestTime);
+  if (newestAt) patch.newestScannedAt = newestAt;
+  if (oldestAt) {
+    if (older || reset || !meta?.oldestScannedAt) {
+      patch.oldestScannedAt = oldestAt;
+    }
+  }
+
+  if (older) {
+    if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
+    patch.hasMoreOlder = Boolean(data.hasMoreOlder);
+    if (!meta?.lastSignature && data.newestSignature) {
+      patch.lastSignature = data.newestSignature;
+    }
+  } else {
+    const newestSig =
+      data.newestConfirmedSignature ||
+      data.newestSignature ||
+      data.swaps?.[0]?.signature ||
+      meta?.lastSignature ||
+      null;
+    if (newestSig) patch.lastSignature = newestSig;
+    if (reset || !meta?.oldestSignature) {
+      if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
+      patch.hasMoreOlder = Boolean(data.hasMoreOlder);
+    } else if (meta?.hasMoreOlder == null) {
+      patch.hasMoreOlder = Boolean(data.hasMoreOlder);
+    }
+  }
+
+  return patch;
+}
+
 /**
- * Fetch classified swaps from the API then journal them.
- * @param {string} address
- * @param {{
- *   limit?: number,
- *   quiet?: boolean,
- *   older?: boolean,
- *   resync?: boolean,
- *   reset?: boolean,
- *   onProgress?: (ev: object) => void,
- * }} [opts]
+ * Scan wallet for swaps without importing or advancing sync cursor.
  */
-export async function runWalletSync(address, opts = {}) {
+export async function scanWalletSync(address, opts = {}) {
   const {
     limit = SYNC_BATCH_DEFAULT,
-    quiet = false,
     older = false,
     resync = false,
     reset = false,
@@ -218,82 +251,108 @@ export async function runWalletSync(address, opts = {}) {
 
   const data = await readSyncStream(res, onProgress);
 
+  return {
+    ...data,
+    meta,
+    older,
+    resync,
+    reset,
+    syncMode: { older, resync, reset },
+  };
+}
+
+/** Import approved fills from a review plan (explicit trade grouping). */
+export async function commitImportPlan(plan, walletAddress, scanData, syncOpts = {}) {
   const imported = [];
   const deduped = [];
   const errors = [];
 
-  // Oldest first so avg entry builds chronologically
-  const ordered = [...(data.swaps ?? [])].reverse();
+  for (const trade of plan.trades ?? []) {
+    const activeFills = trade.fills.filter((f) => f.included && !f.excluded);
+    if (!activeFills.length) continue;
 
-  for (const swap of ordered) {
-    try {
-      const result = await appendFillToPosition({
-        tokenMint: swap.tokenMint,
-        tokenSymbol: swap.tokenSymbol,
-        tokenName: swap.tokenName,
-        imageUrl: swap.imageUrl,
-        side: swap.side,
-        signature: swap.signature,
-        quoteMint: swap.quoteMint,
-        quoteSymbol: swap.quoteSymbol,
-        quoteAmount: swap.quoteAmount,
-        tokenAmount: swap.tokenAmount,
-        priceUsd: swap.priceUsd,
-        usdValue: swap.usdValue,
-        wallet: address,
-        blockTime: swap.blockTime,
-      });
-      if (result.deduped) deduped.push(swap);
-      else imported.push({ ...swap, tradeId: result.tradeId });
-    } catch (err) {
-      errors.push({ signature: swap.signature, message: err.message });
+    let tradeId = trade.linkTradeId ?? null;
+
+    for (const fill of activeFills) {
+      try {
+        const result = await appendFillToPosition({
+          tradeId: tradeId ?? undefined,
+          tokenMint: trade.tokenMint,
+          tokenSymbol: trade.tokenSymbol ?? fill.tokenSymbol,
+          tokenName: trade.tokenName ?? fill.tokenName,
+          imageUrl: trade.imageUrl ?? fill.imageUrl,
+          side: fill.side,
+          signature: fill.signature,
+          quoteMint: fill.quoteMint,
+          quoteSymbol: fill.quoteSymbol,
+          quoteAmount: fill.quoteAmount,
+          tokenAmount: fill.tokenAmount,
+          priceUsd: fill.priceUsd,
+          usdValue: fill.usdValue,
+          wallet: walletAddress,
+          blockTime: fill.blockTime,
+          ts: fill.executedAt,
+        });
+        tradeId = result.tradeId;
+        if (result.deduped) deduped.push(fill);
+        else imported.push({ ...fill, tradeId: result.tradeId });
+      } catch (err) {
+        errors.push({ signature: fill.signature, message: err.message });
+      }
     }
   }
 
-  const patch = {
-    lastAt: new Date().toISOString(),
-    lastImported: imported.length,
-    lastScanned: data.scanned,
-    lastTotal: data.total,
-    lastLookbackDays: data.lookbackDays ?? null,
-  };
+  const meta = syncOpts.reset ? null : getWalletSyncMeta(walletAddress);
+  const patch = buildSyncMetaPatch(scanData, meta, syncOpts);
+  patch.lastImported = imported.length;
+  saveWalletSyncMeta(walletAddress, patch);
 
-  const oldestAt = blockTimeToIso(data.oldestTime);
-  if (newestAt) patch.newestScannedAt = newestAt;
-  if (oldestAt) {
-    if (older || reset || !meta?.oldestScannedAt) {
-      patch.oldestScannedAt = oldestAt;
-    }
-  }
+  return { imported, deduped, errors };
+}
 
-  if (older) {
-    // Keep newest cursor; walk oldest further back
-    if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
-    patch.hasMoreOlder = Boolean(data.hasMoreOlder);
-    if (!meta?.lastSignature && data.newestSignature) {
-      patch.lastSignature = data.newestSignature;
-    }
-  } else {
-    const newestSig =
-      data.newestConfirmedSignature ||
-      data.newestSignature ||
-      data.swaps?.[0]?.signature ||
-      meta?.lastSignature ||
-      null;
-    if (newestSig) patch.lastSignature = newestSig;
-    // Establish oldest cursor once (first sync) so "Older" can page back
-    if (reset || !meta?.oldestSignature) {
-      if (data.oldestSignature) patch.oldestSignature = data.oldestSignature;
-      patch.hasMoreOlder = Boolean(data.hasMoreOlder);
-    } else if (meta?.hasMoreOlder == null) {
-      patch.hasMoreOlder = Boolean(data.hasMoreOlder);
-    }
-  }
-
+/** Advance sync cursor when scan found no new swaps to import. */
+export function finalizeSyncScan(address, scanData, syncOpts = {}) {
+  const meta = syncOpts.reset ? null : getWalletSyncMeta(address);
+  const patch = buildSyncMetaPatch(scanData, meta, syncOpts);
+  patch.lastImported = 0;
   saveWalletSyncMeta(address, patch);
+}
+
+/**
+ * Fetch classified swaps from the API then journal them (direct import, no review).
+ */
+export async function runWalletSync(address, opts = {}) {
+  const {
+    limit = SYNC_BATCH_DEFAULT,
+    quiet = false,
+    older = false,
+    resync = false,
+    reset = false,
+    onProgress,
+  } = opts;
+
+  const scanData = await scanWalletSync(address, {
+    limit,
+    older,
+    resync,
+    reset,
+    onProgress,
+  });
+
+  const mints = [...new Set((scanData.swaps ?? []).map((s) => s.tokenMint).filter(Boolean))];
+  const { loadMintImportContext } = await import("./importPlan");
+  const mintContext = await loadMintImportContext(mints);
+  const plan = buildImportPlan(scanData.swaps ?? [], mintContext);
+
+  const { imported, deduped, errors } = await commitImportPlan(
+    plan,
+    address,
+    scanData,
+    { older, resync, reset }
+  );
 
   return {
-    ...data,
+    ...scanData,
     imported,
     deduped,
     errors,
