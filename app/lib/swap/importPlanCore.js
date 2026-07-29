@@ -162,6 +162,48 @@ function episodeWarnings(fills, { continuesFromJournal = false, hasOversell = fa
   return warnings;
 }
 
+/** True when episode has a clear Open (buy from flat) and Close (flat at end). */
+export function isAutoImportEligible(trade) {
+  if (!trade?.fills?.length) return false;
+  const pending = trade.fills.filter((f) => !f.alreadyImported);
+  if (!pending.length) return false;
+
+  const first = trade.fills[0];
+  if (first.role !== "open") return false;
+  if (trade.status !== "closed") return false;
+  if (trade.warnings.includes("oversell")) return false;
+  if (trade.warnings.includes("incomplete_start")) return false;
+  return true;
+}
+
+export function deriveSkipReason(trade) {
+  if (isAutoImportEligible(trade)) return null;
+  if (!trade?.fills?.some((f) => !f.alreadyImported)) return "already_imported";
+
+  const first = trade.fills[0];
+  if (first.role !== "open") {
+    if (first.role === "orphan" || trade.warnings.includes("incomplete_start")) {
+      return "no_open";
+    }
+    if (trade.warnings.includes("continues")) return "continues_journal";
+    return "no_open";
+  }
+  if (trade.status !== "closed" || trade.warnings.includes("open_at_end")) return "no_close";
+  if (trade.warnings.includes("oversell")) return "oversell";
+  return "incomplete";
+}
+
+function applyAutoImportPolicy(trade) {
+  const autoImportEligible = isAutoImportEligible(trade);
+  const skipReason = autoImportEligible ? null : deriveSkipReason(trade);
+  const fills = trade.fills.map((f) => {
+    if (f.alreadyImported) return f;
+    if (autoImportEligible) return { ...f, excluded: false, included: true };
+    return { ...f, excluded: true, included: false };
+  });
+  return { ...trade, fills, autoImportEligible, skipReason };
+}
+
 export function buildImportPlan(swaps = [], mintContext = {}) {
   const byMint = new Map();
 
@@ -228,18 +270,20 @@ export function buildImportPlan(swaps = [], mintContext = {}) {
         })
       );
       const computed = computePosition(episodeFills);
-      trades.push({
-        id: `${tokenMint}-${episodeIndex}`,
-        tokenMint,
-        tokenSymbol: episode[0]?.tokenSymbol ?? tokenMint.slice(0, 4),
-        tokenName: episode[0]?.tokenName ?? null,
-        imageUrl: episode[0]?.imageUrl ?? null,
-        linkTradeId,
-        openAtBatchStart: episodeIndex === 0 ? openAtBatchStart : 0,
-        warnings,
-        status: isPositionLive(computed) ? "open" : "closed",
-        fills: episode,
-      });
+      trades.push(
+        applyAutoImportPolicy({
+          id: `${tokenMint}-${episodeIndex}`,
+          tokenMint,
+          tokenSymbol: episode[0]?.tokenSymbol ?? tokenMint.slice(0, 4),
+          tokenName: episode[0]?.tokenName ?? null,
+          imageUrl: episode[0]?.imageUrl ?? null,
+          linkTradeId,
+          openAtBatchStart: episodeIndex === 0 ? openAtBatchStart : 0,
+          warnings,
+          status: isPositionLive(computed) ? "open" : "closed",
+          fills: episode,
+        })
+      );
       episode = [];
       episodeIndex += 1;
       episodeHasOversell = false;
@@ -298,11 +342,10 @@ export function buildImportPlan(swaps = [], mintContext = {}) {
     (n, t) => n + t.fills.filter((f) => f.included && !f.excluded).length,
     0
   );
-  const warningCount = trades.filter((t) =>
-    t.warnings.some((w) => w === "incomplete_start")
-  ).length;
+  const warningCount = trades.filter((t) => !t.autoImportEligible && t.skipReason).length;
+  const autoImportCount = trades.filter((t) => t.autoImportEligible).length;
 
-  return { trades, fillCount, includedCount, warningCount };
+  return { trades, fillCount, includedCount, warningCount, autoImportCount };
 }
 
 export function toggleFillInPlan(plan, tradeId, fillId) {
@@ -351,21 +394,43 @@ export function planSummary(plan) {
     (n, t) => n + t.fills.filter((f) => f.excluded && !f.alreadyImported).length,
     0
   );
-  const warnings = plan.trades.filter((t) =>
-    t.warnings.includes("incomplete_start") &&
-    t.fills.some((f) => f.included && !f.excluded)
+  const warnings = plan.trades.filter(
+    (t) => !t.autoImportEligible && t.fills.some((f) => f.included && !f.excluded)
   ).length;
-  return { included, skipped, excluded, warnings };
+  const manualOnly = plan.trades.filter(
+    (t) => !t.autoImportEligible && t.skipReason && t.skipReason !== "already_imported"
+  ).length;
+  const ready = plan.trades.filter((t) => t.autoImportEligible).length;
+  return { included, skipped, excluded, warnings, manualOnly, ready };
+}
+
+export function skipReasonLabel(code) {
+  switch (code) {
+    case "no_open":
+      return "No clear Open — opening buy missing or batch starts mid-trade. Add manually or load older batches.";
+    case "no_close":
+      return "No clear Close — position still open at end of batch. Add manually when you exit.";
+    case "oversell":
+      return "Oversell detected — amounts do not line up. Add manually after checking on-chain history.";
+    case "continues_journal":
+      return "Continues an existing journal position — add fills manually to that trade.";
+    case "incomplete":
+      return "Incomplete episode — add manually in /trades.";
+    case "already_imported":
+      return "Already in journal.";
+    default:
+      return code ?? "";
+  }
 }
 
 export function warningLabel(code) {
   switch (code) {
     case "incomplete_start":
-      return "Batch starts mid-trade — load an older batch below, or exclude these fills.";
+      return "Batch starts mid-trade — skipped for auto-import. Load older or add manually.";
     case "continues":
       return "Continues an open position from your journal.";
     case "open_at_end":
-      return "Position still open at end of batch — OK if you are still holding.";
+      return "Position still open — skipped until a Close is found.";
     case "oversell":
       return "Sell exceeds tokens held in this episode — sync Older or exclude.";
     default:
