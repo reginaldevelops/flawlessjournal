@@ -2,15 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import {
-  runWalletSync,
-  shouldAutoSync,
-} from "../../lib/swap/importFills";
-import { SYNC_BATCH_DEFAULT } from "../../lib/swap/constants";
+import { shouldAutoSync } from "../../lib/swap/importFills";
+import { syncOpenPositions, SYNC_BATCH_DEFAULT } from "../../lib/swap/openSync";
 
 /**
  * On app load: quietly sync Solana wallets that haven't synced in 24h.
- * Manual sync should call `runWalletSync` directly from the Wallets UI.
+ * Journals only true opens (0 → buy). Manual sync uses the same path.
  */
 export default function WalletSyncScheduler() {
   const ran = useRef(false);
@@ -33,7 +30,7 @@ export default function WalletSyncScheduler() {
       setStatus(`Auto-syncing ${due.length} wallet${due.length > 1 ? "s" : ""}…`);
       for (const w of due) {
         try {
-          await runWalletSync(w.address, { limit: SYNC_BATCH_DEFAULT, quiet: true });
+          await syncOpenPositions(w.address, { limit: SYNC_BATCH_DEFAULT });
         } catch (err) {
           console.warn("[wallet-auto-sync]", w.address, err.message);
         }
