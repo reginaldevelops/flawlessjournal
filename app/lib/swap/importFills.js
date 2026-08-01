@@ -3,7 +3,7 @@
  */
 
 import { appendFillToPosition } from "./journal";
-import { buildImportPlan } from "./importPlan";
+import { buildImportPlan, loadMintImportContext } from "./importPlan";
 import { mergeImportSwaps, mergeScanData } from "./importPlanCore";
 import { SYNC_BATCH_DEFAULT } from "./constants";
 
@@ -358,7 +358,6 @@ export async function loadOlderIntoReview(address, scanData, opts = {}) {
 
   const merged = mergeScanData(scanData, olderScan);
   const mints = [...new Set((merged.swaps ?? []).map((s) => s.tokenMint).filter(Boolean))];
-  const { loadMintImportContext } = await import("./importPlan");
   const mintContext = await loadMintImportContext(mints);
   const plan = buildImportPlan(merged.swaps ?? [], mintContext);
 
@@ -446,7 +445,6 @@ export async function runWalletSync(address, opts = {}) {
   });
 
   const mints = [...new Set((scanData.swaps ?? []).map((s) => s.tokenMint).filter(Boolean))];
-  const { loadMintImportContext } = await import("./importPlan");
   const mintContext = await loadMintImportContext(mints);
   const plan = buildImportPlan(scanData.swaps ?? [], mintContext);
 
