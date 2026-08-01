@@ -48,6 +48,7 @@ import {
 import {
   syncOpenPositions,
   formatSyncProgress,
+  getWalletSyncMeta,
   SYNC_BATCH_DEFAULT,
 } from "../lib/swap/openSync";
 
