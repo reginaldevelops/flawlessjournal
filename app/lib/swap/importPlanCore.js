@@ -162,30 +162,54 @@ function episodeWarnings(fills, { continuesFromJournal = false, hasOversell = fa
   return warnings;
 }
 
-/** Trade has at least one Open fill we can journal (add/reduce/close are optional). */
+/**
+ * True open: buy while wallet held ~0 of the token.
+ * Prefer on-chain tokenPre when present; else reconstructed role.
+ */
+export function isTrueOpenFill(fill) {
+  if (!fill || fill.side !== "buy") return false;
+  if (fill.alreadyImported) return false;
+  if (fill.tokenPre != null && Number.isFinite(Number(fill.tokenPre))) {
+    return Number(fill.tokenPre) <= 1e-12;
+  }
+  return fill.role === "open";
+}
+
+/** Trade has at least one Open (0 → buy) fill we can journal. */
 export function isAutoImportEligible(trade) {
   if (!trade?.fills?.length) return false;
-  return trade.fills.some((f) => f.role === "open" && !f.alreadyImported);
+  return trade.fills.some((f) => isTrueOpenFill(f));
 }
 
 export function deriveSkipReason(trade) {
   if (isAutoImportEligible(trade)) return null;
   if (!trade?.fills?.some((f) => !f.alreadyImported)) return "already_imported";
   if (trade.fills.every((f) => f.role === "orphan" || f.alreadyImported)) return "no_open";
-  if (!trade.fills.some((f) => f.role === "open")) return "no_open";
+  if (!trade.fills.some((f) => f.role === "open" || isTrueOpenFill(f))) return "no_open";
   return "already_imported";
 }
 
-/** Only Open fills are selected for import; add/reduce/close shown for context. */
+/** Only true Opens (flat → buy) are selected; everything else is excluded. */
 function applyAutoImportPolicy(trade) {
   const fills = trade.fills.map((f) => {
     if (f.alreadyImported) return f;
-    if (f.role === "open") return { ...f, excluded: false, included: true };
+    if (isTrueOpenFill(f)) return { ...f, excluded: false, included: true };
     return { ...f, excluded: true, included: false };
   });
-  const autoImportEligible = fills.some((f) => f.role === "open" && !f.alreadyImported);
+  const autoImportEligible = fills.some((f) => isTrueOpenFill(f));
   const skipReason = autoImportEligible ? null : deriveSkipReason(trade);
   return { ...trade, fills, autoImportEligible, skipReason };
+}
+
+/**
+ * Classify role; on-chain tokenPre overrides journal reconstruction for buys.
+ * tokenPre ≈ 0 → open, tokenPre > 0 → add.
+ */
+export function classifySwapRole(tokensOpen, swap) {
+  if (swap?.side === "buy" && swap.tokenPre != null && Number.isFinite(Number(swap.tokenPre))) {
+    return Number(swap.tokenPre) <= 1e-12 ? "open" : "add";
+  }
+  return classifyFillRoleAfter(tokensOpen, swap.side, swap.tokenAmount);
 }
 
 export function buildImportPlan(swaps = [], mintContext = {}) {
@@ -278,7 +302,7 @@ export function buildImportPlan(swaps = [], mintContext = {}) {
       const sigKey = swap.signature ? `${swap.signature}:${swap.side}` : null;
       const alreadyImported = sigKey ? ctx.signatures?.has(sigKey) : false;
 
-      const role = classifyFillRoleAfter(tokensOpen, swap.side, swap.tokenAmount);
+      const role = classifySwapRole(tokensOpen, swap);
       const oversell = isOversell(tokensOpen, swap.side, swap.tokenAmount);
       if (oversell) episodeHasOversell = true;
 
@@ -291,6 +315,7 @@ export function buildImportPlan(swaps = [], mintContext = {}) {
         quoteSymbol: swap.quoteSymbol,
         quoteAmount: swap.quoteAmount,
         tokenAmount: swap.tokenAmount,
+        tokenPre: swap.tokenPre ?? null,
         priceUsd: swap.priceUsd,
         usdValue: swap.usdValue,
         executedAt,
@@ -342,6 +367,10 @@ export function toggleFillInPlan(plan, tradeId, fillId) {
         fills: trade.fills.map((fill) => {
           if (fill.id !== fillId) return fill;
           if (fill.alreadyImported) return fill;
+          // Only Opens can be toggled — never force-import add/reduce/close
+          if (fill.role !== "open") {
+            return { ...fill, excluded: true, included: false };
+          }
           const excluded = !fill.excluded;
           return { ...fill, excluded, included: !excluded };
         }),
@@ -394,7 +423,7 @@ export function planSummary(plan) {
 export function skipReasonLabel(code) {
   switch (code) {
     case "no_open":
-      return "No Open (new buy) in this group — add/reduce/close only. Add manually in /trades if needed.";
+      return "No Open here (wallet already held this token, or only sells). Sync only journals 0 → buy.";
     case "already_imported":
       return "Already in journal.";
     default:

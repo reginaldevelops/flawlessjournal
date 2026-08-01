@@ -112,6 +112,8 @@ export function extractBalanceDeltas(tx, owner) {
       mint: mint === NATIVE_SOL ? SOL_MINT : mint,
       rawMint: mint,
       delta,
+      pre: row.pre,
+      post: row.post,
       decimals: row.decimals,
       isNativeSol: mint === NATIVE_SOL,
     });
@@ -154,6 +156,8 @@ export function classifySwap(deltas) {
       side: "buy",
       tokenMint: gained.mint,
       tokenAmount: Math.abs(gained.delta),
+      /** Wallet balance of the position token before this tx (0 = true open). */
+      tokenPre: Number.isFinite(gained.pre) ? gained.pre : null,
       quoteMint: spent.mint,
       quoteAmount: Math.abs(spent.delta),
       quoteSymbol: QUOTE_META[spent.rawMint]?.symbol || QUOTE_META[spent.mint]?.symbol || "QUOTE",
@@ -164,6 +168,7 @@ export function classifySwap(deltas) {
       side: "sell",
       tokenMint: spent.mint,
       tokenAmount: Math.abs(spent.delta),
+      tokenPre: Number.isFinite(spent.pre) ? spent.pre : null,
       quoteMint: gained.mint,
       quoteAmount: Math.abs(gained.delta),
       quoteSymbol: QUOTE_META[gained.rawMint]?.symbol || QUOTE_META[gained.mint]?.symbol || "QUOTE",

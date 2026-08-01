@@ -12,6 +12,8 @@ export {
   warningLabel,
   skipReasonLabel,
   isAutoImportEligible,
+  isTrueOpenFill,
+  classifySwapRole,
   deriveSkipReason,
   mergeImportSwaps,
   mergeScanData,

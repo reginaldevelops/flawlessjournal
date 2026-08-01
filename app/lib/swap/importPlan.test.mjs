@@ -185,6 +185,25 @@ describe("open-only import policy", () => {
     const plan = buildImportPlan(jimothy, ctx);
     assert.equal(isAutoImportEligible(plan.trades[0]), false);
   });
+
+  it("on-chain tokenPre>0 forces Add even if journal is flat", () => {
+    const plan = buildImportPlan([
+      swap({ i: 0, side: "buy", qty: 100, tokenPre: 50 }),
+    ]);
+    assert.equal(plan.trades[0].fills[0].role, "add");
+    assert.equal(plan.includedCount, 0);
+    assert.equal(plan.trades[0].autoImportEligible, false);
+  });
+
+  it("on-chain tokenPre=0 marks Open and auto-imports", () => {
+    const plan = buildImportPlan([
+      swap({ i: 0, side: "buy", qty: 100, tokenPre: 0 }),
+      swap({ i: 1, side: "buy", qty: 50, tokenPre: 100 }),
+    ]);
+    assert.deepEqual(roles(plan.trades[0]), ["open", "add"]);
+    assert.equal(plan.includedCount, 1);
+    assert.deepEqual(includedRoles(plan), ["open"]);
+  });
 });
 
 describe("dedup", () => {
