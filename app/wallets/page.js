@@ -7,7 +7,10 @@ import {
   loadRobinhoodTxCache,
   saveRobinhoodTxCache,
 } from "../lib/wallets/robinhood";
-import { subscribePositionChanged } from "../lib/swap/positionEvents";
+import {
+  notifyPositionChanged,
+  subscribePositionChanged,
+} from "../lib/swap/positionEvents";
 import {
   ExternalLink,
   Pencil,
@@ -47,6 +50,7 @@ import {
   loadPendingImportReview,
   clearPendingImportReview,
   loadOlderIntoReview,
+  commitImportPlan,
 } from "../lib/swap/importFills";
 import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
 import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
@@ -109,20 +113,45 @@ export default function WalletsPage() {
     const pending = loadPendingImportReview();
     if (!pending?.walletId || !pending?.plan) return;
     const wallet = wallets.find((w) => String(w.id) === String(pending.walletId));
-    if (!wallet) return;
+    if (!wallet) {
+      clearPendingImportReview();
+      return;
+    }
 
     restoredPendingRef.current = true;
-    setImportReview({
-      wallet,
-      scanData: {
-        ...pending.scanData,
-        syncMode: pending.syncMode ?? {},
-      },
-      plan: pending.plan,
-    });
-    toast.info("Import klaar om te reviewen", {
-      description: "Scan hervat van voordat je de pagina verliet.",
-    });
+    // Legacy pending reviews: auto-commit Opens, drop the old modal flow.
+    (async () => {
+      try {
+        const plan = pending.plan;
+        if ((plan.includedCount ?? 0) > 0) {
+          const { imported } = await commitImportPlan(
+            plan,
+            wallet.address,
+            pending.scanData ?? {},
+            pending.syncMode ?? {}
+          );
+          if (mountedRef.current) {
+            toast.success(
+              imported.length === 1
+                ? "1 open journaled"
+                : `${imported.length} opens journaled`,
+              { description: "Finished a pending sync from last session." }
+            );
+            notifyPositionChanged({ source: "wallet-sync" });
+            setSyncTick((t) => t + 1);
+          }
+        } else {
+          clearPendingImportReview();
+        }
+      } catch (err) {
+        clearPendingImportReview();
+        if (mountedRef.current) {
+          toast.error("Could not finish pending sync", {
+            description: err.message,
+          });
+        }
+      }
+    })();
   }, [loading, wallets, toast]);
 
   useEffect(() => {
@@ -229,41 +258,51 @@ export default function WalletsPage() {
       const mintContext = await loadMintImportContext(mints);
       const plan = buildImportPlan(swaps, mintContext);
 
+      // Open-only: journal 0→buy fills immediately (no review modal).
       if (plan.includedCount === 0) {
-        const manualOnly = plan.trades.filter(
-          (t) => !t.autoImportEligible && t.skipReason && t.skipReason !== "already_imported"
-        ).length;
-        if (manualOnly > 0) {
-          savePendingImportReview({
-            walletId: wallet.id,
-            scanData,
-            plan,
-            syncMode,
-          });
-          if (!mountedRef.current) return;
-          setImportReview({ wallet, scanData, plan });
-          toast.info(`${manualOnly} trade(s) need manual entry`, {
-            description: "No complete Open+Close found — review skipped trades in the modal.",
-          });
-          return;
-        }
         finalizeSyncScan(wallet.address, scanData, syncMode);
         if (!mountedRef.current) return;
-        toast.info("No new swaps", {
-          description: `${formatScanSummary(scanData)} · ${plan.fillCount} already in journal`,
+        const skippedOpens = plan.trades.filter(
+          (t) => !t.autoImportEligible && t.skipReason === "no_open"
+        ).length;
+        toast.info("No new opens", {
+          description: skippedOpens
+            ? `${formatScanSummary(scanData)} · ${swaps.length} swap(s) scanned, none were 0→buy opens`
+            : `${formatScanSummary(scanData)} · ${plan.fillCount} already in journal`,
         });
         return;
       }
 
-      savePendingImportReview({
-        walletId: wallet.id,
-        scanData,
+      const { imported, deduped, errors } = await commitImportPlan(
         plan,
-        syncMode,
-      });
+        wallet.address,
+        scanData,
+        syncMode
+      );
 
       if (!mountedRef.current) return;
-      setImportReview({ wallet, scanData, plan });
+
+      if (errors.length) {
+        toast.error("Some opens failed to journal", {
+          description: errors[0]?.message || "Unknown error",
+        });
+      }
+
+      const openCount = imported.length;
+      toast.success(
+        openCount === 1 ? "1 open journaled" : `${openCount} opens journaled`,
+        {
+          description: [
+            formatScanSummary(scanData),
+            deduped.length ? `${deduped.length} already in journal` : null,
+            errors.length ? `${errors.length} failed` : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      );
+      notifyPositionChanged({ source: "wallet-sync" });
+      setSyncTick((t) => t + 1);
     } catch (err) {
       if (err?.name === "AbortError") return;
       if (mountedRef.current) {
@@ -373,7 +412,7 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync scans swaps first — you review detected trades (open/add/reduce/close) before importing."
+        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync journals only new opens (wallet had 0 of a token → you bought)."
         actions={
           <div className="flex items-center gap-2">
             <Button

@@ -16,6 +16,7 @@ export function swap({
   qty,
   usd = 1000,
   sig,
+  tokenPre,
 }) {
   return {
     tokenMint: mint,
@@ -23,6 +24,7 @@ export function swap({
     tokenName: symbol,
     side,
     tokenAmount: qty,
+    tokenPre: tokenPre ?? null,
     quoteAmount: usd,
     quoteMint: "SOL",
     quoteSymbol: "SOL",
