@@ -40,17 +40,16 @@ import { formatCurrency, formatDate, formatRelative, truncateMiddle } from "../l
 import { useWallets } from "./hooks";
 import WalletFormModal from "./WalletFormModal";
 import {
-  getWalletSyncMeta,
-  scanWalletSync,
-  finalizeSyncScan,
   clearWalletSyncMeta,
-  formatSyncProgress,
-  loadPendingImportReview,
   clearPendingImportReview,
+  loadPendingImportReview,
   commitImportPlan,
 } from "../lib/swap/importFills";
-import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
-import { SYNC_BATCH_DEFAULT } from "../lib/swap/constants";
+import {
+  syncOpenPositions,
+  formatSyncProgress,
+  SYNC_BATCH_DEFAULT,
+} from "../lib/swap/openSync";
 
 function formatScanSummary(result) {
   const range =
@@ -189,7 +188,6 @@ export default function WalletsPage() {
     syncAbortRef.current = controller;
 
     setSyncingId(wallet.id);
-    const syncMode = { older, resync, reset };
     setSyncProgress((prev) => ({
       ...prev,
       [wallet.id]: {
@@ -210,7 +208,7 @@ export default function WalletsPage() {
       },
     }));
     try {
-      const scanData = await scanWalletSync(wallet.address, {
+      const result = await syncOpenPositions(wallet.address, {
         limit: SYNC_BATCH_DEFAULT,
         older,
         resync,
@@ -235,13 +233,17 @@ export default function WalletsPage() {
           }));
         },
       });
-      scanData.syncMode = syncMode;
 
-      const swaps = scanData.swaps ?? [];
+      if (!mountedRef.current) return;
+
+      const swaps = result.swaps ?? [];
+      const imported = result.imported ?? [];
+      const deduped = result.deduped ?? [];
+      const errors = result.errors ?? [];
+      const opens = result.opens ?? [];
+      const scanLine = formatScanSummary(result);
+
       if (!swaps.length) {
-        finalizeSyncScan(wallet.address, scanData, syncMode);
-        if (!mountedRef.current) return;
-        const scanLine = formatScanSummary(scanData);
         toast.info("No swaps in this batch", {
           description: resync || reset
             ? scanLine
@@ -250,33 +252,20 @@ export default function WalletsPage() {
         return;
       }
 
-      const mints = [...new Set(swaps.map((s) => s.tokenMint).filter(Boolean))];
-      const mintContext = await loadMintImportContext(mints);
-      const plan = buildImportPlan(swaps, mintContext);
-
-      // Open-only: journal 0→buy fills immediately (no review modal).
-      if (plan.includedCount === 0) {
-        finalizeSyncScan(wallet.address, scanData, syncMode);
-        if (!mountedRef.current) return;
-        const skippedOpens = plan.trades.filter(
-          (t) => !t.autoImportEligible && t.skipReason === "no_open"
-        ).length;
+      if (!imported.length) {
+        if (errors.length) {
+          toast.error("Some opens failed to journal", {
+            description: errors[0]?.message || "Unknown error",
+          });
+          return;
+        }
         toast.info("No new opens", {
-          description: skippedOpens
-            ? `${formatScanSummary(scanData)} · ${swaps.length} swap(s) scanned, none were 0→buy opens`
-            : `${formatScanSummary(scanData)} · ${plan.fillCount} already in journal`,
+          description: opens.length
+            ? `${scanLine} · ${opens.length} open(s) already in journal`
+            : `${scanLine} · ${swaps.length} swap(s), none were 0→buy opens`,
         });
         return;
       }
-
-      const { imported, deduped, errors } = await commitImportPlan(
-        plan,
-        wallet.address,
-        scanData,
-        syncMode
-      );
-
-      if (!mountedRef.current) return;
 
       if (errors.length) {
         toast.error("Some opens failed to journal", {
@@ -284,12 +273,11 @@ export default function WalletsPage() {
         });
       }
 
-      const openCount = imported.length;
       toast.success(
-        openCount === 1 ? "1 open journaled" : `${openCount} opens journaled`,
+        imported.length === 1 ? "1 open journaled" : `${imported.length} opens journaled`,
         {
           description: [
-            formatScanSummary(scanData),
+            scanLine,
             deduped.length ? `${deduped.length} already in journal` : null,
             errors.length ? `${errors.length} failed` : null,
           ]

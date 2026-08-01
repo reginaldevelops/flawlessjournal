@@ -11,7 +11,7 @@ import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchUsdPrices } from "../../lib/swap/clientPrices";
 import { LIVE_POSITIONS_REFRESH_MS } from "../../lib/swap/constants";
-import { runWalletSync } from "../../lib/swap/importFills";
+import { syncOpenPositions } from "../../lib/swap/openSync";
 import {
   isPositionLive,
   unrealizedPnlUsd,
@@ -39,7 +39,7 @@ export default function LivePositionsBar() {
     if (now < syncCooldownUntil.current) return;
     syncCooldownUntil.current = now + 12_000;
     try {
-      await runWalletSync(address, { limit: 40, quiet: true });
+      await syncOpenPositions(address, { limit: 40 });
       notifyPositionChanged({ source: "wallet-sync" });
     } catch (err) {
       console.warn("[live-positions] wallet sync:", err?.message || err);

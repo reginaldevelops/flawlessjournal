@@ -1,5 +1,8 @@
 /**
  * Client helpers: sync state in localStorage + import fills into journal.
+ *
+ * Preferred entry point for Solana wallets: syncOpenPositions (open-only).
+ * Legacy commitImportPlan remains for pending-review recovery.
  */
 
 import { appendFillToPosition } from "./journal";
@@ -415,54 +418,21 @@ export async function commitImportPlan(plan, walletAddress, scanData, syncOpts =
   return { imported, deduped, errors };
 }
 
-/** Advance sync cursor when scan found no new swaps to import. */
-export function finalizeSyncScan(address, scanData, syncOpts = {}) {
+/** Advance sync cursor after a scan (optionally with import count). */
+export function finalizeSyncScan(address, scanData, syncOpts = {}, extras = {}) {
   const meta = syncOpts.reset ? null : getWalletSyncMeta(address);
   const patch = buildSyncMetaPatch(scanData, meta, syncOpts);
-  patch.lastImported = 0;
+  patch.lastImported = extras.lastImported ?? 0;
   saveWalletSyncMeta(address, patch);
+  return patch;
 }
 
 /**
- * Fetch classified swaps from the API then journal them (direct import, no review).
+ * @deprecated Use syncOpenPositions from ./openSync — kept so old imports
+ * fail loudly with a clear message instead of the broken import-plan path.
  */
-export async function runWalletSync(address, opts = {}) {
-  const {
-    limit = SYNC_BATCH_DEFAULT,
-    quiet = false,
-    older = false,
-    resync = false,
-    reset = false,
-    onProgress,
-  } = opts;
-
-  const scanData = await scanWalletSync(address, {
-    limit,
-    older,
-    resync,
-    reset,
-    onProgress,
-  });
-
-  const mints = [...new Set((scanData.swaps ?? []).map((s) => s.tokenMint).filter(Boolean))];
-  const mintContext = await loadMintImportContext(mints);
-  const plan = buildImportPlan(scanData.swaps ?? [], mintContext);
-
-  const { imported, deduped, errors } = await commitImportPlan(
-    plan,
-    address,
-    scanData,
-    { older, resync, reset }
+export async function runWalletSync() {
+  throw new Error(
+    "runWalletSync moved — import syncOpenPositions from app/lib/swap/openSync"
   );
-
-  return {
-    ...scanData,
-    imported,
-    deduped,
-    errors,
-    quiet,
-    older,
-    resync,
-    reset,
-  };
 }

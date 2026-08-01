@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test app/lib/swap/importPlan.test.mjs"
+    "test": "node --test app/lib/swap/importPlan.test.mjs app/lib/swap/openSync.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

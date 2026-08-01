@@ -21,7 +21,10 @@ export {
 } from "./importPlanCore";
 
 import { supabase } from "../supabaseClient";
-import { buildMintContextFromTrades } from "./importPlanCore";
+import {
+  buildMintContextFromTrades,
+  JOURNAL_POSITION_KIND,
+} from "./importPlanCore";
 
 /** Load live position + known signatures per mint for import context. */
 export async function loadMintImportContext(tokenMints = []) {

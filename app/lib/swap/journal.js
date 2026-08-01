@@ -525,3 +525,69 @@ export async function appendFillToPosition({
     episodesSplit: repair.repaired,
   };
 }
+
+/**
+ * Journal a true wallet open (0 → buy) as a brand-new position row.
+ * Never attaches to an existing live trade for the same mint.
+ */
+export async function journalOpenFromWallet({
+  tokenMint,
+  tokenSymbol,
+  tokenName,
+  pairUrl,
+  imageUrl,
+  signature,
+  quoteMint,
+  quoteSymbol,
+  quoteAmount,
+  tokenAmount,
+  priceUsd,
+  usdValue,
+  wallet,
+  ts,
+  blockTime,
+}) {
+  const executedAt =
+    ts ??
+    (blockTime != null
+      ? new Date(blockTime > 1e12 ? blockTime : blockTime * 1000).toISOString()
+      : undefined);
+
+  if (signature) {
+    const existing = await findTradeWithFillSignature(tokenMint, signature, "buy");
+    if (existing) {
+      return { tradeId: existing.id, data: existing.data, deduped: true };
+    }
+  }
+
+  const trade = await insertPositionTrade(
+    tradeSeed({
+      tokenMint,
+      tokenSymbol,
+      tokenName,
+      pairUrl,
+      imageUrl,
+      executedAt,
+    })
+  );
+
+  return appendFillToPosition({
+    tradeId: trade.id,
+    tokenMint,
+    tokenSymbol,
+    tokenName,
+    pairUrl,
+    imageUrl,
+    side: "buy",
+    signature,
+    quoteMint,
+    quoteSymbol,
+    quoteAmount,
+    tokenAmount,
+    priceUsd,
+    usdValue,
+    wallet,
+    ts: executedAt,
+    blockTime,
+  });
+}
