@@ -39,17 +39,14 @@ import { chainMeta, explorerUrl } from "../lib/chain/constants";
 import { formatCurrency, formatDate, formatRelative, truncateMiddle } from "../lib/format";
 import { useWallets } from "./hooks";
 import WalletFormModal from "./WalletFormModal";
-import WalletImportReviewModal from "../components/wallets/WalletImportReviewModal";
 import {
   getWalletSyncMeta,
   scanWalletSync,
   finalizeSyncScan,
   clearWalletSyncMeta,
   formatSyncProgress,
-  savePendingImportReview,
   loadPendingImportReview,
   clearPendingImportReview,
-  loadOlderIntoReview,
   commitImportPlan,
 } from "../lib/swap/importFills";
 import { buildImportPlan, loadMintImportContext } from "../lib/swap/importPlan";
@@ -91,7 +88,6 @@ export default function WalletsPage() {
   const [syncProgress, setSyncProgress] = useState({});
   const [resetSyncTarget, setResetSyncTarget] = useState(null);
   const [resetSyncLoading, setResetSyncLoading] = useState(false);
-  const [importReview, setImportReview] = useState(null);
   const [rhTxLoadingId, setRhTxLoadingId] = useState(null);
   const [rhTxByWallet, setRhTxByWallet] = useState({});
   const [rhTxExpanded, setRhTxExpanded] = useState({});
@@ -306,7 +302,14 @@ export default function WalletsPage() {
     } catch (err) {
       if (err?.name === "AbortError") return;
       if (mountedRef.current) {
-        toast.error("Wallet sync failed", { description: err.message });
+        const msg = String(err?.message || "");
+        if (/Failed to load chunk|Loading chunk|ChunkLoadError/i.test(msg)) {
+          toast.error("App updated — refresh the page", {
+            description: "Hard refresh (Ctrl/Cmd+Shift+R), then try Sync / Older again.",
+          });
+        } else {
+          toast.error("Wallet sync failed", { description: msg });
+        }
       }
     } finally {
       if (mountedRef.current) {
@@ -319,55 +322,6 @@ export default function WalletsPage() {
       }
     }
   };
-
-  const handleCloseImportReview = () => {
-    setImportReview(null);
-  };
-
-  const handleImportCommitted = () => {
-    clearPendingImportReview();
-    setSyncTick((t) => t + 1);
-    setImportReview(null);
-  };
-
-  const handleReviewUpdated = useCallback(({ scanData, plan }) => {
-    if (!importReview?.wallet) return;
-    savePendingImportReview({
-      walletId: importReview.wallet.id,
-      scanData,
-      plan,
-      syncMode: scanData.syncMode ?? importReview.scanData?.syncMode ?? {},
-    });
-    setImportReview((prev) =>
-      prev ? { ...prev, scanData, plan } : prev
-    );
-  }, [importReview?.wallet, importReview?.scanData?.syncMode]);
-
-  const handleLoadOlderInReview = useCallback(
-    async ({ scanData }) => {
-      if (!importReview?.wallet) return null;
-      const controller = new AbortController();
-      syncAbortRef.current = controller;
-      return loadOlderIntoReview(importReview.wallet.address, scanData, {
-        signal: controller.signal,
-        onProgress: (ev) => {
-          if (!mountedRef.current) return;
-          const label = formatSyncProgress(ev);
-          setSyncProgress((prev) => ({
-            ...prev,
-            [importReview.wallet.id]: {
-              label: label || "Loading older batch…",
-              scanned: ev.scanned ?? prev[importReview.wallet.id]?.scanned ?? 0,
-              total: ev.total ?? prev[importReview.wallet.id]?.total ?? 0,
-              swapsFound: ev.swapsFound ?? prev[importReview.wallet.id]?.swapsFound ?? 0,
-              older: true,
-            },
-          }));
-        },
-      });
-    },
-    [importReview?.wallet]
-  );
 
   const handleResetSyncCursor = async () => {
     if (!resetSyncTarget) return;
@@ -548,16 +502,6 @@ export default function WalletsPage() {
         }
         confirmLabel="Remove"
         loading={deleting}
-      />
-      <WalletImportReviewModal
-        open={Boolean(importReview)}
-        onClose={handleCloseImportReview}
-        wallet={importReview?.wallet ?? null}
-        scanData={importReview?.scanData ?? null}
-        initialPlan={importReview?.plan ?? null}
-        onCommitted={handleImportCommitted}
-        onLoadOlder={handleLoadOlderInReview}
-        onReviewUpdated={handleReviewUpdated}
       />
     </>
   );
@@ -884,7 +828,7 @@ function WalletCard({
                   </Button>
                 </Tooltip>
                 {canScanOlder && (
-                  <Tooltip content="Scan the next older batch (same size cap — never full history)">
+                  <Tooltip content="Scan the next older batch and journal new opens (0→buy)">
                     <Button
                       variant="ghost"
                       size="sm"
