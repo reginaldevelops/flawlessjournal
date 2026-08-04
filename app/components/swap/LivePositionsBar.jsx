@@ -21,12 +21,21 @@ import {
   subscribePositionChanged,
 } from "../../lib/swap/positionEvents";
 import { fetchWalletMintBalance } from "../../lib/swap/walletBalance";
+import { LIVE_POSITIONS_BAR_ENABLED } from "../../lib/swap/featureFlags";
 
 /**
  * Thin global bar under the app header for open Solana positions.
  * Refreshes every ~5s while tab visible; wallet reconcile when Phantom connected.
+ *
+ * Temporarily disabled via LIVE_POSITIONS_BAR_ENABLED — journal "open" rows
+ * were shown without reliable on-wallet coin checks.
  */
 export default function LivePositionsBar() {
+  if (!LIVE_POSITIONS_BAR_ENABLED) return null;
+  return <LivePositionsBarActive />;
+}
+
+function LivePositionsBarActive() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const [rows, setRows] = useState([]);
