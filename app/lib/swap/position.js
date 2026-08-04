@@ -5,6 +5,11 @@
  * Quote assets (Fartcoin, SOL, USDC) are payment rails, never the trade.
  */
 
+import {
+  MIRROR_COMPUTED_PNL_TO_JOURNAL,
+  TRADE_COMPUTED_STATS_ENABLED,
+} from "./featureFlags";
+
 function n(v) {
   const x = typeof v === "number" ? v : Number.parseFloat(String(v ?? ""));
   return Number.isFinite(x) ? x : 0;
@@ -192,17 +197,26 @@ export function mirrorJournalFields({ symbol, computed, existing = {} }) {
   const pnlKey =
     Object.keys(existing).find((k) => k.toLowerCase() === "pnl") || "PnL";
 
-  return {
+  const next = {
     Coin: symbol,
     Coins: symbol,
-    "Avg entry":
-      computed.avgEntryUsd != null ? round(computed.avgEntryUsd, 8) : "",
-    "Total invested": round(computed.totalInvestedUsd, 2),
-    "Avg sell":
-      computed.avgExitUsd != null ? round(computed.avgExitUsd, 8) : "",
     "Tokens open": round(computed.tokensOpen, 6),
-    [pnlKey]: round(computed.realizedPnlUsd, 2),
   };
+
+  if (TRADE_COMPUTED_STATS_ENABLED) {
+    next["Avg entry"] =
+      computed.avgEntryUsd != null ? round(computed.avgEntryUsd, 8) : "";
+    next["Total invested"] = round(computed.totalInvestedUsd, 2);
+    next["Avg sell"] =
+      computed.avgExitUsd != null ? round(computed.avgExitUsd, 8) : "";
+  }
+
+  // When disabled, leave journal PnL alone so the user can enter it manually.
+  if (MIRROR_COMPUTED_PNL_TO_JOURNAL) {
+    next[pnlKey] = round(computed.realizedPnlUsd, 2);
+  }
+
+  return next;
 }
 
 function round(v, dp) {
