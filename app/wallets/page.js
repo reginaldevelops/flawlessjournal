@@ -51,6 +51,7 @@ import {
   getWalletSyncMeta,
   SYNC_BATCH_DEFAULT,
 } from "../lib/swap/openSync";
+import { WALLET_SYNC_UI_ENABLED } from "../lib/swap/featureFlags";
 
 function formatScanSummary(result) {
   const range =
@@ -105,6 +106,10 @@ export default function WalletsPage() {
   }, []);
 
   useEffect(() => {
+    if (!WALLET_SYNC_UI_ENABLED) {
+      clearPendingImportReview();
+      return;
+    }
     if (restoredPendingRef.current || loading || !wallets.length) return;
     const pending = loadPendingImportReview();
     if (!pending?.walletId || !pending?.plan) return;
@@ -182,6 +187,7 @@ export default function WalletsPage() {
   };
 
   const handleSyncWallet = async (wallet, { older = false, resync = false, reset = false } = {}) => {
+    if (!WALLET_SYNC_UI_ENABLED) return;
     if (wallet.chain !== "solana") return;
 
     syncAbortRef.current?.abort();
@@ -355,7 +361,11 @@ export default function WalletsPage() {
     <>
       <PageHeader
         title="Wallets"
-        description="Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync journals only new opens (wallet had 0 of a token → you bought)."
+        description={
+          WALLET_SYNC_UI_ENABLED
+            ? "Track Solana, Robinhood Crypto, and Hyperliquid balances. Solana sync journals only new opens (wallet had 0 of a token → you bought)."
+            : "Track Solana, Robinhood Crypto, and Hyperliquid balances. Wallet sync is temporarily paused."
+        }
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -791,7 +801,7 @@ function WalletCard({
 
           {/* Actions */}
           <div className="flex shrink-0 items-center gap-1">
-            {wallet.chain === "solana" && (
+            {WALLET_SYNC_UI_ENABLED && wallet.chain === "solana" && (
               <>
                 <Tooltip content="Scan wallet txs and review detected trades before importing">
                   <Button
