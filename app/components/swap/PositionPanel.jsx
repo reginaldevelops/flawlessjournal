@@ -11,9 +11,11 @@ import {
 import { fetchUsdPrices } from "../../lib/swap/clientPrices";
 import SwapSheet from "./SwapSheet";
 import PositionCandlesChart from "./PositionCandlesChart";
+import { TRADE_COMPUTED_STATS_ENABLED } from "../../lib/swap/featureFlags";
 
 /**
  * Position summary + fill history for Solana journal trades created via Jupiter.
+ * Computed PnL / invested stats are gated — journal PnL stays manual for now.
  */
 export default function PositionPanel({ trade, onRefresh }) {
   const fj = trade?._fj;
@@ -102,7 +104,7 @@ export default function PositionPanel({ trade, onRefresh }) {
           </div>
         </div>
 
-        {live && (
+        {TRADE_COMPUTED_STATS_ENABLED && live && (
           <div className="border-b border-line px-4 py-3">
             <div className="rounded-xl border border-line bg-surface-sunken/50 px-4 py-3">
               <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
@@ -171,53 +173,57 @@ export default function PositionPanel({ trade, onRefresh }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
-          <Metric
-            label="Avg entry"
-            value={formatCurrency(c.avgEntryUsd, {
-              compact: (c.avgEntryUsd ?? 0) < 0.01,
-              decimals: (c.avgEntryUsd ?? 0) < 0.01 ? 6 : 4,
-            })}
-          />
-          <Metric
-            label="Total invested"
-            value={formatCurrency(c.totalInvestedUsd, { compact: true })}
-          />
-          <Metric
-            label="Avg sell"
-            value={formatCurrency(c.avgExitUsd, {
-              compact: (c.avgExitUsd ?? 0) < 0.01,
-              decimals: (c.avgExitUsd ?? 0) < 0.01 ? 6 : 4,
-              fallback: "—",
-            })}
-          />
-          <Metric
-            label="Realized PnL"
-            value={formatCurrency(c.realizedPnlUsd, { compact: true, signed: true })}
-            tone={c.realizedPnlUsd}
-          />
-        </div>
+        {TRADE_COMPUTED_STATS_ENABLED && (
+          <>
+            <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
+              <Metric
+                label="Avg entry"
+                value={formatCurrency(c.avgEntryUsd, {
+                  compact: (c.avgEntryUsd ?? 0) < 0.01,
+                  decimals: (c.avgEntryUsd ?? 0) < 0.01 ? 6 : 4,
+                })}
+              />
+              <Metric
+                label="Total invested"
+                value={formatCurrency(c.totalInvestedUsd, { compact: true })}
+              />
+              <Metric
+                label="Avg sell"
+                value={formatCurrency(c.avgExitUsd, {
+                  compact: (c.avgExitUsd ?? 0) < 0.01,
+                  decimals: (c.avgExitUsd ?? 0) < 0.01 ? 6 : 4,
+                  fallback: "—",
+                })}
+              />
+              <Metric
+                label="Realized PnL"
+                value={formatCurrency(c.realizedPnlUsd, { compact: true, signed: true })}
+                tone={c.realizedPnlUsd}
+              />
+            </div>
 
-        <div className="grid grid-cols-3 gap-3 border-t border-line px-4 py-3 text-xs">
-          <div>
-            <p className="text-2xs text-content-subtle">Tokens open</p>
-            <p className="font-mono tnum text-content">
-              {Number(c.tokensOpen ?? 0).toLocaleString(undefined, {
-                maximumFractionDigits: 4,
-              })}
-            </p>
-          </div>
-          <div>
-            <p className="text-2xs text-content-subtle">Open cost</p>
-            <p className="font-mono tnum text-content">
-              {formatCurrency(c.openCostUsd, { compact: true })}
-            </p>
-          </div>
-          <div>
-            <p className="text-2xs text-content-subtle">Fills</p>
-            <p className="font-mono tnum text-content">{fills.length}</p>
-          </div>
-        </div>
+            <div className="grid grid-cols-3 gap-3 border-t border-line px-4 py-3 text-xs">
+              <div>
+                <p className="text-2xs text-content-subtle">Tokens open</p>
+                <p className="font-mono tnum text-content">
+                  {Number(c.tokensOpen ?? 0).toLocaleString(undefined, {
+                    maximumFractionDigits: 4,
+                  })}
+                </p>
+              </div>
+              <div>
+                <p className="text-2xs text-content-subtle">Open cost</p>
+                <p className="font-mono tnum text-content">
+                  {formatCurrency(c.openCostUsd, { compact: true })}
+                </p>
+              </div>
+              <div>
+                <p className="text-2xs text-content-subtle">Fills</p>
+                <p className="font-mono tnum text-content">{fills.length}</p>
+              </div>
+            </div>
+          </>
+        )}
 
         {fills.length > 0 && (
           <div className="border-t border-line">
