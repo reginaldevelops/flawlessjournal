@@ -756,7 +756,7 @@ function WalletCard({
                   <ExternalLink size={10} aria-hidden />
                 </a>
               )}
-              {syncMeta?.lastAt && !syncing && (
+              {WALLET_SYNC_UI_ENABLED && syncMeta?.lastAt && !syncing && (
                 <span className="text-2xs text-content-subtle">
                   Last sync {formatRelative(syncMeta.lastAt)}
                   {syncMeta.oldestScannedAt
