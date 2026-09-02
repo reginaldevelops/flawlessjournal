@@ -11,7 +11,7 @@ import {
   tokensOpenBefore,
 } from "./position";
 import { captureFillOhlcSnapshot } from "./ohlcSnapshot";
-import { toDatetimeLocalValue } from "../systemFields";
+import { toDateOnlyValue, toDatetimeLocalValue } from "../systemFields";
 
 function tradeSeed({
   tokenMint,
@@ -24,12 +24,9 @@ function tradeSeed({
 }) {
   const when = executedAt ? new Date(executedAt) : new Date();
   const safeWhen = Number.isNaN(when.getTime()) ? new Date() : when;
-  const pad = (n) => String(n).padStart(2, "0");
   return {
     ...existing,
-    Datum:
-      existing.Datum ??
-      `${safeWhen.getFullYear()}-${pad(safeWhen.getMonth() + 1)}-${pad(safeWhen.getDate())}`,
+    Datum: existing.Datum ?? toDateOnlyValue(safeWhen),
     Entreetijd: existing.Entreetijd ?? toDatetimeLocalValue(safeWhen),
     Coin: tokenSymbol,
     Coins: tokenSymbol,

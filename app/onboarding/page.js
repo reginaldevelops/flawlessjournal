@@ -25,17 +25,6 @@ export default function OnboardingPage() {
 
   const [variables, setVariables] = useState([
     {
-      id: "default-date",
-      name: "Datum",
-      type: "system",
-      system_key: "date",
-      varType: "date",
-      phase: "pre",
-      options: [],
-      formula: null,
-      visible: true,
-    },
-    {
       id: "default-entry-time",
       name: "Entreetijd",
       type: "system",
