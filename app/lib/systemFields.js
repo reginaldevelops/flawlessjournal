@@ -86,14 +86,41 @@ export const SYSTEM_FIELDS = {
   },
 };
 
-/** Always ensure these exist for every journal. */
+/** Always ensure these exist for every journal. Date comes from Entry time. */
 export const REQUIRED_SYSTEM_KEYS = [
   SYSTEM_FIELD_KEYS.pnl,
-  SYSTEM_FIELD_KEYS.date,
   SYSTEM_FIELD_KEYS.entryTime,
   SYSTEM_FIELD_KEYS.exitTime,
   SYSTEM_FIELD_KEYS.coin,
 ];
+
+/** True when value is bare HH:MM (legacy time field). */
+export function isTimeOnlyValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return false;
+  if (raw.includes("T") || /^\d{4}-\d{2}-\d{2}/.test(raw)) return false;
+  return /^\d{1,2}:\d{2}(?::\d{2})?$/.test(raw);
+}
+
+/**
+ * Resolve a fallback calendar day for legacy HH:MM values.
+ * Accepts Date, YYYY-MM-DD, or datetime strings — never invents "today".
+ */
+export function resolveFallbackDate(fallbackDate) {
+  if (!fallbackDate) return null;
+  if (fallbackDate instanceof Date && !Number.isNaN(fallbackDate.getTime())) {
+    return new Date(fallbackDate);
+  }
+  const raw = String(fallbackDate).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const day = raw.slice(0, 10);
+    const d = new Date(`${day}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 export function normalizeFieldToken(value) {
   return String(value ?? "")
@@ -218,13 +245,11 @@ export function parseTradeDateTime(value, fallbackDate = null) {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // time only HH:MM
+  // time only HH:MM — require an explicit calendar day (never invent today)
   const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(raw);
   if (tm) {
-    const base =
-      fallbackDate instanceof Date && !Number.isNaN(fallbackDate.getTime())
-        ? new Date(fallbackDate)
-        : new Date();
+    const base = resolveFallbackDate(fallbackDate);
+    if (!base) return null;
     base.setHours(+tm[1], +tm[2], tm[3] ? +tm[3] : 0, 0);
     return base;
   }
@@ -241,6 +266,55 @@ export function toDatetimeLocalValue(value, fallbackDate = null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** YYYY-MM-DD from a datetime/date value (for legacy Datum mirrors). */
+export function toDateOnlyValue(value, fallbackDate = null) {
+  const d = value instanceof Date ? value : parseTradeDateTime(value, fallbackDate);
+  if (!d) {
+    const base = resolveFallbackDate(fallbackDate);
+    if (!base) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
+  }
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Upgrade legacy HH:MM entry/exit values to datetime using Datum.
+ * Returns null when nothing changed.
+ */
+export function upgradeLegacyTimesInTradeData(data = {}) {
+  if (!data || typeof data !== "object") return null;
+  const datum = data.Datum || data.Date || data.date || null;
+  if (!datum) return null;
+
+  let next = null;
+  const ensure = () => {
+    if (!next) next = { ...data };
+    return next;
+  };
+
+  if (isTimeOnlyValue(data.Entreetijd)) {
+    const upgraded = toDatetimeLocalValue(data.Entreetijd, datum);
+    if (upgraded) ensure().Entreetijd = upgraded;
+  }
+  if (isTimeOnlyValue(data.Exittijd)) {
+    let upgraded = toDatetimeLocalValue(data.Exittijd, datum);
+    if (upgraded && isTimeOnlyValue(data.Entreetijd || next?.Entreetijd)) {
+      // overnight: exit clock before entry clock → next calendar day
+      const entryAt = parseTradeDateTime(data.Entreetijd || next?.Entreetijd, datum);
+      const exitAt = parseTradeDateTime(data.Exittijd, datum);
+      if (entryAt && exitAt && exitAt < entryAt) {
+        exitAt.setDate(exitAt.getDate() + 1);
+        upgraded = toDatetimeLocalValue(exitAt);
+      }
+    }
+    if (upgraded) ensure().Exittijd = upgraded;
+  }
+
+  return next;
+}
+
 /**
  * Hold duration in minutes from entry/exit values (supports multi-day).
  * Legacy same-day HH:MM overnight wrap kept as fallback when no dates exist.
@@ -250,25 +324,23 @@ export function computeHoldMinutes({
   exitValue,
   tradeDate = null,
 } = {}) {
-  const baseDate = parseTradeDateTime(tradeDate) || (tradeDate instanceof Date ? tradeDate : null);
+  const baseDate = resolveFallbackDate(tradeDate);
+  const entryIsTimeOnly = isTimeOnlyValue(entryValue);
+  const exitIsTimeOnly = isTimeOnlyValue(exitValue);
+
+  // Both legacy HH:MM without calendar day → clock diff / overnight wrap only
+  if (entryIsTimeOnly && exitIsTimeOnly && !baseDate) {
+    const em = /^(\d{1,2}):(\d{2})/.exec(String(entryValue).trim());
+    const xm = /^(\d{1,2}):(\d{2})/.exec(String(exitValue).trim());
+    if (!em || !xm) return null;
+    const entryMin = +em[1] * 60 + +em[2];
+    const exitMin = +xm[1] * 60 + +xm[2];
+    return exitMin >= entryMin ? exitMin - entryMin : exitMin + 24 * 60 - entryMin;
+  }
 
   const entryAt = parseTradeDateTime(entryValue, baseDate);
   const exitAt = parseTradeDateTime(exitValue, baseDate);
   if (!entryAt || !exitAt) return null;
-
-  const entryIsTimeOnly = /^\d{1,2}:\d{2}/.test(String(entryValue ?? "").trim()) &&
-    !String(entryValue).includes("T") &&
-    !/^\d{4}-\d{2}-\d{2}/.test(String(entryValue));
-  const exitIsTimeOnly = /^\d{1,2}:\d{2}/.test(String(exitValue ?? "").trim()) &&
-    !String(exitValue).includes("T") &&
-    !/^\d{4}-\d{2}-\d{2}/.test(String(exitValue));
-
-  // Both legacy HH:MM without absolute dates → overnight wrap if needed
-  if (entryIsTimeOnly && exitIsTimeOnly && !baseDate) {
-    const entryMin = entryAt.getHours() * 60 + entryAt.getMinutes();
-    const exitMin = exitAt.getHours() * 60 + exitAt.getMinutes();
-    return exitMin >= entryMin ? exitMin - entryMin : exitMin + 24 * 60 - entryMin;
-  }
 
   // If both are time-only on the same trade date and exit < entry → next day
   if (entryIsTimeOnly && exitIsTimeOnly && baseDate && exitAt < entryAt) {

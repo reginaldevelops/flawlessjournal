@@ -18,6 +18,8 @@ import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import {
   SYSTEM_FIELD_KEYS,
   getTradeSystemValue,
+  readSystemKey,
+  toDateOnlyValue,
   toDatetimeLocalValue,
 } from "../../lib/systemFields";
 import { ensureSystemVariables } from "../../lib/ensureSystemVariables";
@@ -521,7 +523,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // Date + time (multi-day holds)
+  // Date + time (multi-day holds). Legacy HH:MM uses trade Datum — never "today".
   if (v.varType === "datetime") {
     const localValue = toDatetimeLocalValue(
       value,
@@ -532,7 +534,15 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
         <input
           type="datetime-local"
           value={localValue}
-          onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
+          onChange={(e) => {
+            const next = { ...trade, [v.name]: e.target.value };
+            // Keep legacy Datum in sync for filters that still query data->>Datum
+            if (v.name === "Entreetijd" || readSystemKey(v) === "entryTime") {
+              const day = toDateOnlyValue(e.target.value);
+              if (day) next.Datum = day;
+            }
+            saveTrade(next);
+          }}
           className={`${fieldCls} w-[190px]`}
         />
       </FieldShell>
@@ -805,7 +815,13 @@ export default function TradeViewPage() {
               {status.label}
             </span>
             <span className="text-sm text-content-muted font-mono">
-              {trade.Datum || trade["Date"] || "—"}
+              {toDateOnlyValue(
+                trade.Entreetijd,
+                trade.Datum || trade.Date || trade.date || null
+              ) ||
+                trade.Datum ||
+                trade["Date"] ||
+                "—"}
             </span>
             <button
               onClick={() => setShowManageModal(true)}

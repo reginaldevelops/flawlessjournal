@@ -151,15 +151,13 @@ function buildVariables() {
     const systemKey =
       name === "PnL"
         ? "pnl"
-        : name === "Datum"
-          ? "date"
-          : name === "Entreetijd"
-            ? "entryTime"
-            : name === "Exittijd"
-              ? "exitTime"
-              : name === "Coin"
-                ? "coin"
-                : null;
+        : name === "Entreetijd"
+          ? "entryTime"
+          : name === "Exittijd"
+            ? "exitTime"
+            : name === "Coin"
+              ? "coin"
+              : null;
     return {
       id: `var-${i + 1}`,
       user_id: DEMO_USER.id,

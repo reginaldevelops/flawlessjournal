@@ -1,14 +1,15 @@
 import { supabase } from "../supabaseClient";
-import { toDatetimeLocalValue } from "../systemFields";
+import { toDateOnlyValue, toDatetimeLocalValue } from "../systemFields";
 
 /** Create an empty manual journal trade and return the new row id. */
 export async function createJournalTrade(client = supabase) {
   const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
+  const entry = toDatetimeLocalValue(now);
   const payload = {
     data: {
-      Datum: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-      Entreetijd: toDatetimeLocalValue(now),
+      // Datum kept as mirror for legacy filters; Entry time is source of truth
+      Datum: toDateOnlyValue(now),
+      Entreetijd: entry,
     },
   };
 

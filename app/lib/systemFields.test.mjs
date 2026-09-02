@@ -7,10 +7,12 @@ import {
   getSystemDataKey,
   getSystemVariable,
   getTradeSystemValue,
+  isTimeOnlyValue,
   matchesSystemAlias,
   parseTradeDateTime,
   systemFieldMap,
   toDatetimeLocalValue,
+  upgradeLegacyTimesInTradeData,
 } from "./systemFields.js";
 
 describe("systemFields", () => {
@@ -52,6 +54,37 @@ describe("systemFields", () => {
   });
 });
 
+describe("legacy HH:MM never invents today", () => {
+  it("returns null for time-only without fallback date", () => {
+    assert.equal(parseTradeDateTime("14:30"), null);
+    assert.equal(toDatetimeLocalValue("14:30"), "");
+  });
+
+  it("combines HH:MM with string Datum fallback", () => {
+    const d = parseTradeDateTime("14:30", "2026-07-15");
+    assert.ok(d instanceof Date);
+    assert.equal(d.getFullYear(), 2026);
+    assert.equal(d.getMonth(), 6);
+    assert.equal(d.getDate(), 15);
+    assert.equal(d.getHours(), 14);
+    assert.equal(toDatetimeLocalValue("09:05", "2026-07-15"), "2026-07-15T09:05");
+  });
+
+  it("upgrades trade data HH:MM using Datum", () => {
+    const next = upgradeLegacyTimesInTradeData({
+      Datum: "2026-07-20",
+      Entreetijd: "10:15",
+      Exittijd: "11:00",
+      PnL: 12,
+    });
+    assert.equal(next.Entreetijd, "2026-07-20T10:15");
+    assert.equal(next.Exittijd, "2026-07-20T11:00");
+    assert.equal(next.Datum, "2026-07-20");
+    assert.equal(isTimeOnlyValue("10:15"), true);
+    assert.equal(isTimeOnlyValue("2026-07-20T10:15"), false);
+  });
+});
+
 describe("computeHoldMinutes multi-day", () => {
   it("supports datetime-local across days", () => {
     const mins = computeHoldMinutes({
@@ -68,11 +101,5 @@ describe("computeHoldMinutes multi-day", () => {
       tradeDate: "2026-08-01",
     });
     assert.equal(mins, 3.5 * 60);
-  });
-
-  it("parses and formats datetime-local", () => {
-    const d = parseTradeDateTime("2026-08-01T14:05");
-    assert.ok(d instanceof Date);
-    assert.equal(toDatetimeLocalValue(d).slice(0, 16), "2026-08-01T14:05");
   });
 });

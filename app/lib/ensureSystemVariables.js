@@ -11,9 +11,10 @@ import {
   getSystemVariable,
   normalizeFieldToken,
   readSystemKey,
+  upgradeLegacyTimesInTradeData,
 } from "./systemFields";
 
-const ENSURE_FLAG = "flawless.systemFields.ensured.v2";
+const ENSURE_FLAG = "flawless.systemFields.ensured.v3";
 
 function hasSystemKeyColumnError(error) {
   const msg = String(error?.message ?? error?.code ?? "");
@@ -230,6 +231,39 @@ export async function ensureSystemVariables(supabase, opts = {}) {
     await remapTradeKeys(supabase, renames);
   }
 
+  // Datum is redundant once Entry time is datetime — demote to hidden custom.
+  const dateVar = getSystemVariable(working, "date") ||
+    working.find(
+      (v) =>
+        v.type === "system" &&
+        normalizeFieldToken(v.name) === "datum"
+    );
+  if (dateVar) {
+    const patch = {
+      type: "custom",
+      visible: false,
+    };
+    if (supportsSystemKey) patch.system_key = null;
+    const { error: demoteErr } = await supabase
+      .from("variables")
+      .update(patch)
+      .eq("id", dateVar.id);
+    if (!demoteErr) {
+      working = working.map((v) =>
+        v.id === dateVar.id
+          ? { ...v, ...patch, system_key: supportsSystemKey ? null : v.system_key }
+          : v
+      );
+      changes.push({ action: "demote_date", from: dateVar.name });
+    }
+  }
+
+  // Persist HH:MM + Datum → full datetime so UI/analytics stop inventing "today".
+  const upgraded = await upgradeLegacyTradeTimestamps(supabase);
+  if (upgraded.updated) {
+    changes.push({ action: "upgrade_timestamps", count: upgraded.updated });
+  }
+
   if (typeof window !== "undefined") {
     try {
       sessionStorage.setItem(ENSURE_FLAG, "1");
@@ -239,6 +273,30 @@ export async function ensureSystemVariables(supabase, opts = {}) {
   }
 
   return { variables: working, changes, supportsSystemKey };
+}
+
+async function upgradeLegacyTradeTimestamps(supabase) {
+  const { data: trades, error } = await supabase.from("trades").select("id, data");
+  if (error) {
+    console.warn("[ensureSystemVariables] timestamp upgrade skipped:", error.message);
+    return { updated: 0 };
+  }
+
+  const updates = [];
+  for (const trade of trades ?? []) {
+    const next = upgradeLegacyTimesInTradeData(trade.data);
+    if (next) updates.push({ id: trade.id, data: next });
+  }
+  if (!updates.length) return { updated: 0 };
+
+  for (let i = 0; i < updates.length; i += 100) {
+    const chunk = updates.slice(i, i + 100);
+    const { error: upErr } = await supabase
+      .from("trades")
+      .upsert(chunk, { onConflict: "id" });
+    if (upErr) throw upErr;
+  }
+  return { updated: updates.length };
 }
 
 function matchesAliasOnly(name, systemKey) {

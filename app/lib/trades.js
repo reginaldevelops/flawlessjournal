@@ -205,14 +205,6 @@ export function normalizeTrades(rows = [], variables = [], fieldsOverride) {
     ].filter(Boolean));
     const pnl = toNumber(rawPnl);
 
-    const rawDate = pick(data, fields, "date", [
-      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.date),
-      "Datum",
-      "Date",
-      "date",
-    ].filter(Boolean));
-    const date = parseDate(rawDate);
-
     const entryTime = pick(data, fields, "entryTime", [
       getSystemDataKey(variables, SYSTEM_FIELD_KEYS.entryTime),
       "Entreetijd",
@@ -221,6 +213,21 @@ export function normalizeTrades(rows = [], variables = [], fieldsOverride) {
       getSystemDataKey(variables, SYSTEM_FIELD_KEYS.exitTime),
       "Exittijd",
     ].filter(Boolean));
+
+    const rawDate = pick(data, fields, "date", [
+      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.date),
+      "Datum",
+      "Date",
+      "date",
+    ].filter(Boolean));
+
+    // Prefer calendar day from Entry datetime; fall back to legacy Datum.
+    const entryAt = parseTradeDateTime(entryTime, rawDate);
+    const dateFromEntry = entryAt
+      ? new Date(entryAt.getFullYear(), entryAt.getMonth(), entryAt.getDate())
+      : null;
+    const date = dateFromEntry || parseDate(rawDate);
+
     const entryMinutes = minutesFromTime(entryTime);
     const exitMinutes = minutesFromTime(exitTime);
 
