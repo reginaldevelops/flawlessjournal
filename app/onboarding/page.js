@@ -36,17 +36,6 @@ export default function OnboardingPage() {
       visible: true,
     },
     {
-      id: "default-coin",
-      name: "Coin",
-      type: "system",
-      system_key: "coin",
-      varType: "text",
-      phase: "pre",
-      options: [],
-      formula: null,
-      visible: true,
-    },
-    {
       id: "default-exit-time",
       name: "Exittijd",
       type: "system",

@@ -86,12 +86,11 @@ export const SYSTEM_FIELDS = {
   },
 };
 
-/** Always ensure these exist for every journal. Date comes from Entry time. */
+/** Always ensure these exist. Coin stays a normal custom dropdown (user-defined). */
 export const REQUIRED_SYSTEM_KEYS = [
   SYSTEM_FIELD_KEYS.pnl,
   SYSTEM_FIELD_KEYS.entryTime,
   SYSTEM_FIELD_KEYS.exitTime,
-  SYSTEM_FIELD_KEYS.coin,
 ];
 
 /** True when value is bare HH:MM (legacy time field). */
