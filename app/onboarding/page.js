@@ -20,15 +20,59 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  // Verplichte PnL variabele state
+  // Verplichte system variabelen
   const [pnlName, setPnlName] = useState("PnL");
 
-  // Dynamische variabelen lijst (start alleen met de verplichte PnL)
   const [variables, setVariables] = useState([
+    {
+      id: "default-date",
+      name: "Datum",
+      type: "system",
+      system_key: "date",
+      varType: "date",
+      phase: "pre",
+      options: [],
+      formula: null,
+      visible: true,
+    },
+    {
+      id: "default-entry-time",
+      name: "Entreetijd",
+      type: "system",
+      system_key: "entryTime",
+      varType: "datetime",
+      phase: "pre",
+      options: [],
+      formula: null,
+      visible: true,
+    },
+    {
+      id: "default-coin",
+      name: "Coin",
+      type: "system",
+      system_key: "coin",
+      varType: "text",
+      phase: "pre",
+      options: [],
+      formula: null,
+      visible: true,
+    },
+    {
+      id: "default-exit-time",
+      name: "Exittijd",
+      type: "system",
+      system_key: "exitTime",
+      varType: "datetime",
+      phase: "post",
+      options: [],
+      formula: null,
+      visible: true,
+    },
     {
       id: "default-pnl",
       name: "PnL",
       type: "system",
+      system_key: "pnl",
       varType: "number",
       phase: "post",
       options: [],
@@ -80,9 +124,11 @@ export default function OnboardingPage() {
     setShowConditional(false);
   };
 
-  // Variabele verwijderen
+  // Variabele verwijderen (system fields blijven)
   const handleRemoveVariable = (id) => {
-    setVariables((prev) => prev.filter((v) => v.id !== id));
+    setVariables((prev) =>
+      prev.filter((v) => !(v.id === id && v.type !== "system"))
+    );
   };
 
   // 🚀 Alles opslaan en onboarding voltooien
@@ -99,16 +145,16 @@ export default function OnboardingPage() {
         throw new Error("Geen ingelogde gebruiker gevonden.");
       }
 
-      // Zorg dat de PnL naam correct is ingevuld bij de systeemvariabele
+      // Zorg dat system-namen kloppen (PnL mag custom label houden)
       const finalVariables = variables.map((v, idx) => {
         let name = v.name;
-        if (v.id === "default-pnl") {
+        if (v.id === "default-pnl" || v.system_key === "pnl") {
           name = pnlName.trim() || "PnL";
         }
 
-        return {
+        const row = {
           user_id: user.id,
-          name: name,
+          name,
           type: v.type,
           varType: v.varType,
           phase: v.phase,
@@ -117,9 +163,15 @@ export default function OnboardingPage() {
           visible: v.visible,
           order: idx + 1,
         };
+        if (v.system_key) row.system_key = v.system_key;
+        return row;
       });
 
-      const { error } = await supabase.from("variables").insert(finalVariables);
+      let { error } = await supabase.from("variables").insert(finalVariables);
+      if (error && /system_key|column|42703/i.test(error.message ?? "")) {
+        const legacyRows = finalVariables.map(({ system_key, ...rest }) => rest);
+        ({ error } = await supabase.from("variables").insert(legacyRows));
+      }
 
       if (error) {
         throw new Error(error.message);
@@ -277,7 +329,7 @@ export default function OnboardingPage() {
                         </div>
                       )}
                     </div>
-                    {v.id !== "default-pnl" && (
+                    {v.type !== "system" && v.id !== "default-pnl" && (
                       <button
                         type="button"
                         onClick={() => handleRemoveVariable(v.id)}
@@ -309,6 +361,7 @@ export default function OnboardingPage() {
                     <option value="number">Number</option>
                     <option value="dropdown">Dropdown</option>
                     <option value="time">Time</option>
+                    <option value="datetime">Date + time</option>
                     <option value="date">Date</option>
                     <option value="textarea">Textarea</option>
                     <option value="link">Link (Charts/URLs)</option>

@@ -147,19 +147,34 @@ const VARIABLE_DEFS = [
 ];
 
 function buildVariables() {
-  return VARIABLE_DEFS.map(([name, varType, phase, options], i) => ({
-    id: `var-${i + 1}`,
-    user_id: DEMO_USER.id,
-    name,
-    type: name === "PnL" ? "system" : "custom",
-    varType,
-    phase,
-    options: options ?? null,
-    formula: name === "R" ? "pnl/risk" : null,
-    visible: true,
-    editable: true,
-    order: i + 1,
-  }));
+  return VARIABLE_DEFS.map(([name, varType, phase, options], i) => {
+    const systemKey =
+      name === "PnL"
+        ? "pnl"
+        : name === "Datum"
+          ? "date"
+          : name === "Entreetijd"
+            ? "entryTime"
+            : name === "Exittijd"
+              ? "exitTime"
+              : name === "Coin"
+                ? "coin"
+                : null;
+    return {
+      id: `var-${i + 1}`,
+      user_id: DEMO_USER.id,
+      name,
+      type: systemKey ? "system" : "custom",
+      system_key: systemKey,
+      varType: name === "Entreetijd" || name === "Exittijd" ? "datetime" : varType,
+      phase,
+      options: options ?? null,
+      formula: name === "R" ? "pnl/risk" : null,
+      visible: true,
+      editable: true,
+      order: i + 1,
+    };
+  });
 }
 
 /* ------------------------------------------------------------------ */

@@ -11,6 +11,7 @@ import {
   tokensOpenBefore,
 } from "./position";
 import { captureFillOhlcSnapshot } from "./ohlcSnapshot";
+import { toDatetimeLocalValue } from "../systemFields";
 
 function tradeSeed({
   tokenMint,
@@ -29,9 +30,7 @@ function tradeSeed({
     Datum:
       existing.Datum ??
       `${safeWhen.getFullYear()}-${pad(safeWhen.getMonth() + 1)}-${pad(safeWhen.getDate())}`,
-    Entreetijd:
-      existing.Entreetijd ??
-      `${pad(safeWhen.getHours())}:${pad(safeWhen.getMinutes())}`,
+    Entreetijd: existing.Entreetijd ?? toDatetimeLocalValue(safeWhen),
     Coin: tokenSymbol,
     Coins: tokenSymbol,
     Direction: existing.Direction || "Long",
@@ -471,6 +470,13 @@ export async function appendFillToPosition({
   const nextData = {
     ...trade.data,
     ...mirrored,
+    ...(closed
+      ? {
+          Exittijd:
+            trade.data?.Exittijd ||
+            toDatetimeLocalValue(fill.ts || executedAt || new Date()),
+        }
+      : null),
     _fj: {
       ...fj,
       tokenMint,

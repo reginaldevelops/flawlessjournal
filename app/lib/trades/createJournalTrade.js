@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { toDatetimeLocalValue } from "../systemFields";
 
 /** Create an empty manual journal trade and return the new row id. */
 export async function createJournalTrade(client = supabase) {
@@ -7,7 +8,7 @@ export async function createJournalTrade(client = supabase) {
   const payload = {
     data: {
       Datum: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-      Entreetijd: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      Entreetijd: toDatetimeLocalValue(now),
     },
   };
 

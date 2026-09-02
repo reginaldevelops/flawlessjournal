@@ -16,6 +16,12 @@ import { TRADE_POSITION_REFRESH_MS } from "../../lib/swap/constants";
 import { subscribePositionChanged } from "../../lib/swap/positionEvents";
 import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import {
+  SYSTEM_FIELD_KEYS,
+  getTradeSystemValue,
+  toDatetimeLocalValue,
+} from "../../lib/systemFields";
+import { ensureSystemVariables } from "../../lib/ensureSystemVariables";
+import {
   getJournalCompletionStatus,
   isFieldComplete,
   markFieldCheckedEmpty,
@@ -49,29 +55,17 @@ const COL_LABELS = {
 };
 const colLabel = (key) => COL_LABELS[key] ?? key;
 
-// Helper to flexibly resolve PnL value from trade
+// Resolve PnL via the bound system field (not any system var).
 function getPnlValue(trade, variables) {
   if (!trade) return 0;
 
-  // Zoek eerst of er een variabele is gedefinieerd als PnL / system
-  const pnlVar = variables.find(
-    (v) => v.type === "system" || v.name.toLowerCase() === "pnl"
-  );
-  const pnlKeyName = pnlVar ? pnlVar.name : null;
+  const fromSystem = getTradeSystemValue(trade, variables, SYSTEM_FIELD_KEYS.pnl);
+  if (fromSystem !== undefined && fromSystem !== "") return fromSystem;
 
-  // Check mogelijke sleutels in trade data of direct op trade object
-  if (
-    pnlKeyName &&
-    trade[pnlKeyName] !== undefined &&
-    trade[pnlKeyName] !== ""
-  ) {
-    return trade[pnlKeyName];
-  }
   if (trade["PNL"] !== undefined && trade["PNL"] !== "") return trade["PNL"];
   if (trade["Pnl"] !== undefined && trade["Pnl"] !== "") return trade["Pnl"];
   if (trade["pnl"] !== undefined && trade["pnl"] !== "") return trade["pnl"];
 
-  // Zoek in alle sleutels case-insensitive
   const foundKey = Object.keys(trade).find((k) => k.toLowerCase() === "pnl");
   if (foundKey && trade[foundKey] !== undefined && trade[foundKey] !== "") {
     return trade[foundKey];
@@ -513,7 +507,7 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
     );
   }
 
-  // Time
+  // Time (HH:MM)
   if (v.varType === "time") {
     return (
       <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
@@ -522,6 +516,24 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
           value={value}
           onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
           className={`${fieldCls} w-[90px]`}
+        />
+      </FieldShell>
+    );
+  }
+
+  // Date + time (multi-day holds)
+  if (v.varType === "datetime") {
+    const localValue = toDatetimeLocalValue(
+      value,
+      trade.Datum || trade.Date || trade.date || null
+    );
+    return (
+      <FieldShell label={colLabel(v.name)} missing={missing} onSkip={onSkip}>
+        <input
+          type="datetime-local"
+          value={localValue}
+          onChange={(e) => saveTrade({ ...trade, [v.name]: e.target.value })}
+          className={`${fieldCls} w-[190px]`}
         />
       </FieldShell>
     );
@@ -667,6 +679,16 @@ export default function TradeViewPage() {
   // Load variables
   useEffect(() => {
     const loadVariables = async () => {
+      try {
+        const ensured = await ensureSystemVariables(supabase, { force: true });
+        if (!ensured.error && ensured.variables?.length) {
+          setVariables(ensured.variables);
+          return;
+        }
+      } catch (err) {
+        console.warn("ensureSystemVariables:", err?.message || err);
+      }
+
       const { data, error } = await supabase
         .from("variables")
         .select("*")

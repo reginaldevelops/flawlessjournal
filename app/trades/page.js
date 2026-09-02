@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import DynamicTable2 from "../components/DynamicTable2";
 import { LoadingState, PageHeader, PageBody, Card } from "../components/ui";
 import { extractTradeNumber } from "../lib/trades";
+import { ensureSystemVariables } from "../lib/ensureSystemVariables";
 
 export default function TradeDataPage() {
   const [rows, setRows] = useState([]);
@@ -23,16 +24,26 @@ export default function TradeDataPage() {
         return;
       }
 
-      const { data: tradeVars, error: varsError } = await supabase
-        .from("variables")
-        .select("*")
-        .order("order", { ascending: true });
-
-      if (varsError) {
-        console.error("Error loading variables:", varsError);
+      let tradeVars = [];
+      try {
+        const ensured = await ensureSystemVariables(supabase, { force: true });
+        if (!ensured.error && ensured.variables?.length) {
+          tradeVars = ensured.variables;
+        }
+      } catch (err) {
+        console.warn("ensureSystemVariables:", err?.message || err);
       }
 
-      setVariables(tradeVars || []);
+      if (!tradeVars.length) {
+        const { data, error: varsError } = await supabase
+          .from("variables")
+          .select("*")
+          .order("order", { ascending: true });
+        if (varsError) console.error("Error loading variables:", varsError);
+        tradeVars = data || [];
+      }
+
+      setVariables(tradeVars);
 
       const mapped = (trades || []).map((d, index) => {
         const number = extractTradeNumber(d) ?? index + 1;
