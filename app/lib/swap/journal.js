@@ -223,14 +223,17 @@ export async function findOrCreatePositionTrade(args) {
  * If one journal row contains multiple flat→re-open episodes (e.g. old sell +
  * new buys), split into separate trades. Returns { repaired, tradeId }.
  */
-export async function repairTradeEpisodes(tradeId) {
-  const { data, error } = await supabase
-    .from("trades")
-    .select("id, data, trade_number")
-    .eq("id", tradeId)
-    .single();
-
-  if (error) throw error;
+export async function repairTradeEpisodes(tradeId, preloaded = null) {
+  let data = preloaded;
+  if (!data) {
+    const result = await supabase
+      .from("trades")
+      .select("id, data, trade_number")
+      .eq("id", tradeId)
+      .single();
+    if (result.error) throw result.error;
+    data = result.data;
+  }
 
   const fj = data?.data?._fj;
   if (fj?.kind !== POSITION_KIND) {

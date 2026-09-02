@@ -12,13 +12,95 @@ import {
   normalizeFieldToken,
   readSystemKey,
   upgradeLegacyTimesInTradeData,
-} from "./systemFields";
+} from "./systemFields.js";
 
 const ENSURE_FLAG = "flawless.systemFields.ensured.v4";
+const TIMESTAMPS_FLAG = "flawless.systemFields.timestamps.v1";
+
+let timestampsDone = false;
+let inflightEnsure = null;
+
+function readStorageFlag(storageName, key) {
+  try {
+    const storage = globalThis[storageName];
+    if (!storage || typeof storage.getItem !== "function") return null;
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageFlag(storageName, key, value) {
+  try {
+    const storage = globalThis[storageName];
+    if (!storage || typeof storage.setItem !== "function") return;
+    storage.setItem(key, value);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function timestampsAlreadyUpgraded() {
+  if (timestampsDone) return true;
+  if (readStorageFlag("localStorage", TIMESTAMPS_FLAG) === "1") {
+    timestampsDone = true;
+    return true;
+  }
+  return false;
+}
+
+function markTimestampsUpgraded() {
+  timestampsDone = true;
+  writeStorageFlag("localStorage", TIMESTAMPS_FLAG, "1");
+}
 
 function hasSystemKeyColumnError(error) {
   const msg = String(error?.message ?? error?.code ?? "");
   return /system_key|column|schema cache|42703/i.test(msg);
+}
+
+export function systemVariablePatch(bound, def, systemKey, supportsSystemKey) {
+  const patch = {
+    type: "system",
+    varType: def.varType,
+    phase: def.phase,
+  };
+  if (supportsSystemKey) patch.system_key = systemKey;
+
+  const shouldCanonicalize =
+    systemKey !== "pnl" &&
+    normalizeFieldToken(bound.name) !== normalizeFieldToken(def.defaultName);
+  if (shouldCanonicalize) patch.name = def.defaultName;
+
+  return { patch, shouldCanonicalize };
+}
+
+export function patchNeedsWrite(current, patch) {
+  if (!current || !patch) return true;
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === "system_key") {
+      if (readSystemKey(current) !== value) return true;
+      continue;
+    }
+    if (current[key] !== value) return true;
+  }
+  return false;
+}
+
+export function dateVarNeedsDemote(dateVar, supportsSystemKey) {
+  if (!dateVar) return false;
+  if (dateVar.type !== "custom") return true;
+  if (dateVar.visible !== false) return true;
+  if (supportsSystemKey && readSystemKey(dateVar)) return true;
+  return false;
+}
+
+export function coinVarNeedsRestore(coinVar, supportsSystemKey) {
+  if (!coinVar) return false;
+  if (coinVar.type !== "custom") return true;
+  if (coinVar.varType !== "dropdown") return true;
+  if (supportsSystemKey && readSystemKey(coinVar)) return true;
+  return false;
 }
 
 async function selectVariables(supabase) {
@@ -84,17 +166,25 @@ async function remapTradeKeys(supabase, renames) {
  * @param {{ userId?: string, force?: boolean, keys?: string[] }} [opts]
  */
 export async function ensureSystemVariables(supabase, opts = {}) {
+  const { force = false } = opts;
+  if (!force && inflightEnsure) return inflightEnsure;
+
+  const run = runEnsureSystemVariables(supabase, opts);
+  if (!force) {
+    inflightEnsure = run.finally(() => {
+      inflightEnsure = null;
+    });
+    return inflightEnsure;
+  }
+  return run;
+}
+
+async function runEnsureSystemVariables(supabase, opts = {}) {
   const { userId = null, force = false, keys = REQUIRED_SYSTEM_KEYS } = opts;
 
-  if (typeof window !== "undefined" && !force) {
-    try {
-      if (sessionStorage.getItem(ENSURE_FLAG) === "1") {
-        const { variables, error } = await selectVariables(supabase);
-        if (!error) return { variables, skipped: true, changes: [] };
-      }
-    } catch {
-      /* ignore */
-    }
+  if (!force && readStorageFlag("sessionStorage", ENSURE_FLAG) === "1") {
+    const { variables, error } = await selectVariables(supabase);
+    if (!error) return { variables, skipped: true, changes: [] };
   }
 
   const { variables: existing, supportsSystemKey, error } =
@@ -128,46 +218,43 @@ export async function ensureSystemVariables(supabase, opts = {}) {
     }
 
     if (bound) {
-      const patch = {
-        type: "system",
-        varType: def.varType,
-        phase: def.phase,
-      };
-      if (supportsSystemKey) patch.system_key = systemKey;
-
-      // Keep custom PnL display name; canonicalize other system data keys.
-      const shouldCanonicalize =
-        systemKey !== "pnl" &&
-        normalizeFieldToken(bound.name) !== normalizeFieldToken(def.defaultName);
+      const { patch, shouldCanonicalize } = systemVariablePatch(
+        bound,
+        def,
+        systemKey,
+        supportsSystemKey
+      );
       if (shouldCanonicalize) {
         renames[bound.name] = def.defaultName;
-        patch.name = def.defaultName;
       }
 
-      let { error: updErr } = await supabase
-        .from("variables")
-        .update(patch)
-        .eq("id", bound.id);
-
-      if (updErr && hasSystemKeyColumnError(updErr) && patch.system_key) {
-        delete patch.system_key;
-        ({ error: updErr } = await supabase
+      if (patchNeedsWrite(bound, patch)) {
+        let { error: updErr } = await supabase
           .from("variables")
           .update(patch)
-          .eq("id", bound.id));
-      }
-      if (updErr) throw updErr;
+          .eq("id", bound.id);
 
-      working = working.map((v) =>
-        v.id === bound.id ? { ...v, ...patch } : v
-      );
+        if (updErr && hasSystemKeyColumnError(updErr) && patch.system_key) {
+          delete patch.system_key;
+          ({ error: updErr } = await supabase
+            .from("variables")
+            .update(patch)
+            .eq("id", bound.id));
+        }
+        if (updErr) throw updErr;
+
+        working = working.map((v) =>
+          v.id === bound.id ? { ...v, ...patch } : v
+        );
+        changes.push({
+          action: getSystemVariable(existing, systemKey) ? "promote" : "link",
+          systemKey,
+          from: bound.name,
+          to: patch.name ?? bound.name,
+        });
+      }
+
       claimedIds.add(bound.id);
-      changes.push({
-        action: getSystemVariable(existing, systemKey) ? "promote" : "link",
-        systemKey,
-        from: bound.name,
-        to: patch.name ?? bound.name,
-      });
       continue;
     }
 
@@ -238,7 +325,7 @@ export async function ensureSystemVariables(supabase, opts = {}) {
         v.type === "system" &&
         normalizeFieldToken(v.name) === "datum"
     );
-  if (dateVar) {
+  if (dateVarNeedsDemote(dateVar, supportsSystemKey)) {
     const patch = {
       type: "custom",
       visible: false,
@@ -267,14 +354,13 @@ export async function ensureSystemVariables(supabase, opts = {}) {
         (normalizeFieldToken(v.name) === "coin" ||
           normalizeFieldToken(v.name) === "coins")
     );
-  if (coinVar) {
+  if (coinVarNeedsRestore(coinVar, supportsSystemKey)) {
     const patch = {
       type: "custom",
       varType: "dropdown",
       visible: coinVar.visible !== false,
     };
     if (supportsSystemKey) patch.system_key = null;
-    // Keep existing options; only reset empty options array if somehow null
     if (!Array.isArray(coinVar.options)) patch.options = coinVar.options ?? [];
     const { error: demoteErr } = await supabase
       .from("variables")
@@ -296,18 +382,14 @@ export async function ensureSystemVariables(supabase, opts = {}) {
     changes.push({ action: "upgrade_timestamps", count: upgraded.updated });
   }
 
-  if (typeof window !== "undefined") {
-    try {
-      sessionStorage.setItem(ENSURE_FLAG, "1");
-    } catch {
-      /* ignore */
-    }
-  }
+  writeStorageFlag("sessionStorage", ENSURE_FLAG, "1");
 
   return { variables: working, changes, supportsSystemKey };
 }
 
 async function upgradeLegacyTradeTimestamps(supabase) {
+  if (timestampsAlreadyUpgraded()) return { updated: 0, skipped: true };
+
   const { data: trades, error } = await supabase.from("trades").select("id, data");
   if (error) {
     console.warn("[ensureSystemVariables] timestamp upgrade skipped:", error.message);
@@ -319,7 +401,6 @@ async function upgradeLegacyTradeTimestamps(supabase) {
     const next = upgradeLegacyTimesInTradeData(trade.data);
     if (next) updates.push({ id: trade.id, data: next });
   }
-  if (!updates.length) return { updated: 0 };
 
   for (let i = 0; i < updates.length; i += 100) {
     const chunk = updates.slice(i, i + 100);
@@ -328,6 +409,8 @@ async function upgradeLegacyTradeTimestamps(supabase) {
       .upsert(chunk, { onConflict: "id" });
     if (upErr) throw upErr;
   }
+
+  markTimestampsUpgraded();
   return { updated: updates.length };
 }
 
@@ -336,9 +419,26 @@ function matchesAliasOnly(name, systemKey) {
 }
 
 export function resetSystemVariablesEnsureFlag() {
-  if (typeof window === "undefined") return;
   try {
-    sessionStorage.removeItem(ENSURE_FLAG);
+    const storage = globalThis.sessionStorage;
+    if (storage && typeof storage.removeItem === "function") {
+      storage.removeItem(ENSURE_FLAG);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Test-only: clear in-memory + storage caches between cases. */
+export function resetEnsureCachesForTests() {
+  timestampsDone = false;
+  inflightEnsure = null;
+  resetSystemVariablesEnsureFlag();
+  try {
+    const storage = globalThis.localStorage;
+    if (storage && typeof storage.removeItem === "function") {
+      storage.removeItem(TIMESTAMPS_FLAG);
+    }
   } catch {
     /* ignore */
   }

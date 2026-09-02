@@ -590,6 +590,23 @@ function VariableItem({ v, trade, saveTrade, setVariables }) {
   return null;
 }
 
+function tradeRowToState(data) {
+  const number =
+    data.trade_number ??
+    data.data?.["Trade number"] ??
+    data.data?.["Trade Number"] ??
+    null;
+  const newState = {
+    id: data.id,
+    "Trade number": number,
+    ...data.data,
+  };
+  if (newState["Trade number"] == null && number != null) {
+    newState["Trade number"] = number;
+  }
+  return newState;
+}
+
 /* ---------- Page ---------- */
 export default function TradeViewPage() {
   const { id } = useParams();
@@ -607,39 +624,40 @@ export default function TradeViewPage() {
       setLoadError(null);
     }
 
-    if (id) {
-      try {
-        const repair = await repairTradeEpisodes(id);
-        if (repair.repaired && repair.tradeId && String(repair.tradeId) !== String(id)) {
-          router.replace(`/trade/${repair.tradeId}`);
-          return;
-        }
-      } catch (err) {
-        console.warn("[trade] episode repair:", err?.message || err);
-      }
-    }
-
     const { data, error } = await supabase
       .from("trades")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (!error && data) {
-      const number =
-        data.trade_number ??
-        data.data?.["Trade number"] ??
-        data.data?.["Trade Number"] ??
-        null;
-      const newState = {
-        id: data.id,
-        "Trade number": number,
-        ...data.data,
-      };
-      if (newState["Trade number"] == null && number != null) {
-        newState["Trade number"] = number;
+    if (!error && data?.data?._fj?.kind === "solana_position") {
+      try {
+        const repair = await repairTradeEpisodes(id, data);
+        if (repair.repaired && repair.tradeId && String(repair.tradeId) !== String(id)) {
+          router.replace(`/trade/${repair.tradeId}`);
+          return;
+        }
+        if (repair.repaired) {
+          const refreshed = await supabase
+            .from("trades")
+            .select("*")
+            .eq("id", id)
+            .single();
+          if (!refreshed.error && refreshed.data) {
+            setTrade(tradeRowToState(refreshed.data));
+            setNotFound(false);
+            setLoadError(null);
+            if (!silent) setLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("[trade] episode repair:", err?.message || err);
       }
-      setTrade(newState);
+    }
+
+    if (!error && data) {
+      setTrade(tradeRowToState(data));
       setNotFound(false);
       setLoadError(null);
     } else if (error?.code === "PGRST116" || (!error && !data)) {
@@ -690,7 +708,7 @@ export default function TradeViewPage() {
   useEffect(() => {
     const loadVariables = async () => {
       try {
-        const ensured = await ensureSystemVariables(supabase, { force: true });
+        const ensured = await ensureSystemVariables(supabase);
         if (!ensured.error && ensured.variables?.length) {
           setVariables(ensured.variables);
           return;

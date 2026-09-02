@@ -14,7 +14,40 @@ import { ensureSystemVariables } from "./ensureSystemVariables";
  * Fetch trades without assuming `trade_number` exists.
  * Falls back to `id, data` (or `*`) and synthesises a stable index.
  */
+async function loadTradeVariables(supabase) {
+  try {
+    const ensured = await ensureSystemVariables(supabase);
+    if (!ensured.error && ensured.variables?.length) {
+      return ensured.variables;
+    }
+  } catch (err) {
+    console.warn("[fetchTrades] ensureSystemVariables:", err?.message || err);
+  }
+
+  const varsRes = await supabase
+    .from("variables")
+    .select("id, name, type, varType, phase, options, visible, order, system_key");
+  if (varsRes.error && /system_key/i.test(varsRes.error.message ?? "")) {
+    const legacy = await supabase
+      .from("variables")
+      .select("id, name, type, varType, phase, options, visible, order");
+    if (!legacy.error) return legacy.data ?? [];
+  } else if (!varsRes.error) {
+    return varsRes.data ?? [];
+  }
+
+  const fallback = await supabase
+    .from("variables")
+    .select("name, varType, phase, options, visible, order");
+  if (!fallback.error) return fallback.data ?? [];
+  return [];
+}
+
 export async function fetchTrades(supabase, { withVariables = false } = {}) {
+  const variablesPromise = withVariables
+    ? loadTradeVariables(supabase)
+    : Promise.resolve([]);
+
   const attempts = [
     () =>
       supabase
@@ -48,36 +81,17 @@ export async function fetchTrades(supabase, { withVariables = false } = {}) {
   }
 
   if (tradesError) {
+    if (withVariables) {
+      try {
+        await variablesPromise;
+      } catch {
+        /* ignore — caller only needs the trades error */
+      }
+    }
     return { trades: [], raw: [], variables: [], error: tradesError };
   }
 
-  let variables = [];
-  if (withVariables) {
-    try {
-      const ensured = await ensureSystemVariables(supabase);
-      if (!ensured.error && ensured.variables?.length) {
-        variables = ensured.variables;
-      } else {
-        const varsRes = await supabase
-          .from("variables")
-          .select("id, name, type, varType, phase, options, visible, order, system_key");
-        if (varsRes.error && /system_key/i.test(varsRes.error.message ?? "")) {
-          const legacy = await supabase
-            .from("variables")
-            .select("id, name, type, varType, phase, options, visible, order");
-          if (!legacy.error) variables = legacy.data ?? [];
-        } else if (!varsRes.error) {
-          variables = varsRes.data ?? [];
-        }
-      }
-    } catch (err) {
-      console.warn("[fetchTrades] ensureSystemVariables:", err?.message || err);
-      const varsRes = await supabase
-        .from("variables")
-        .select("name, varType, phase, options, visible, order");
-      if (!varsRes.error) variables = varsRes.data ?? [];
-    }
-  }
+  const variables = withVariables ? await variablesPromise : [];
 
   const enriched = trades.map((row, index) => {
     const number = extractTradeNumber(row) ?? index + 1;

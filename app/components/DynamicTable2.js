@@ -22,20 +22,6 @@ import {
 import { EmptyState } from "./ui";
 import { createJournalTrade } from "../lib/trades/createJournalTrade";
 import { useSwapFlow } from "./swap/SwapFlowContext";
-
-/** Position / system blobs stored in trades.data — never table columns. */
-function isInternalTradeKey(key) {
-  if (!key || typeof key !== "string") return true;
-  if (key === "id" || key === "data") return true;
-  if (key.startsWith("_")) return true; // e.g. _fj
-  return false;
-}
-
-function formatCellValue(val) {
-  if (val === null || val === undefined || val === "") return null;
-  if (typeof val === "object") return null; // never render raw objects/arrays (except tags)
-  return val;
-}
 import {
   DndContext,
   closestCenter,
@@ -53,6 +39,26 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getJournalCompletionStatus } from "../lib/tradeCompletion";
+
+/** Position / system blobs stored in trades.data — never table columns. */
+function isInternalTradeKey(key) {
+  if (!key || typeof key !== "string") return true;
+  if (key === "id" || key === "data") return true;
+  if (key.startsWith("_")) return true; // e.g. _fj
+  return false;
+}
+
+function isChartLikeValue(val) {
+  return typeof val === "string" && val.startsWith("data:image");
+}
+
+function formatCellValue(val) {
+  if (val === null || val === undefined || val === "") return null;
+  if (typeof val === "object") return null; // never render raw objects/arrays (except tags)
+  if (typeof val === "string" && val.startsWith("data:image")) return "Image";
+  if (typeof val === "string" && val.length > 240) return `${val.slice(0, 120)}…`;
+  return val;
+}
 
 /* ------------------------------------------------------------------ */
 /* Column display-name overrides — keeps DB keys intact               */
@@ -217,16 +223,21 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
   }
 
   useEffect(() => {
-    const variableNames = variables.map((v) => v?.name).filter(Boolean);
+    const skipVarTypes = new Set(["chart", "link"]);
+    const variableNames = variables
+      .map((v) => v?.name)
+      .filter((name, i) => name && !skipVarTypes.has(variables[i]?.varType));
     const keysFromRows = new Set();
     (initialRows || []).forEach((row) => {
       if (row.data) {
         Object.keys(row.data).forEach((k) => {
-          if (!isInternalTradeKey(k)) keysFromRows.add(k);
+          if (!isInternalTradeKey(k) && !isChartLikeValue(row.data[k])) {
+            keysFromRows.add(k);
+          }
         });
       }
       Object.keys(row).forEach((k) => {
-        if (!isInternalTradeKey(k)) keysFromRows.add(k);
+        if (!isInternalTradeKey(k) && !isChartLikeValue(row[k])) keysFromRows.add(k);
       });
     });
     const combinedCols = [
