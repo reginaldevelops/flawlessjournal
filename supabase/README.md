@@ -23,6 +23,8 @@ trade numbering you should run the migration once.
 | `remove_variable_key` RPC | Deleting a variable from a trade |
 | Backfill `variables.user_id` | Stops a false redirect to onboarding |
 
+Also run [`20260812_variables_system_key.sql`](./migrations/20260812_variables_system_key.sql) so Entry/Exit time can bind as stable system fields (`system_key`). The app still works without it (falls back to name matching) but migration is cleaner with the column.
+
 ## Optional checks after running
 
 ```sql

@@ -34,6 +34,7 @@ import { formatCurrency, formatNumber, formatPercent, toneTextClass } from "../l
 const CHAIN_OPTIONS = [
   { value: "solana", label: "Solana" },
   { value: "hyperliquid", label: "Hyperliquid" },
+  { value: "robinhood", label: "Robinhood" },
 ];
 
 const METRIC_OPTIONS = [

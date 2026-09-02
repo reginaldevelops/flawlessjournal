@@ -9,6 +9,14 @@
  */
 
 import { dateKey, parseDate, toNumber } from "./format";
+import {
+  SYSTEM_FIELD_KEYS,
+  computeHoldMinutes,
+  getSystemDataKey,
+  getSystemVariable,
+  parseTradeDateTime,
+  systemFieldMap,
+} from "./systemFields";
 
 const TRADE_NUMBER_KEYS = [
   "Trade number",
@@ -103,9 +111,16 @@ const norm = (s) => String(s ?? "").toLowerCase().replace(/[\s_\-.]/g, "");
 
 /**
  * Builds a map of canonical field -> actual key present in the data.
- * Exact alias matches win; otherwise falls back to a substring match.
+ * System variables win (stable keys). Alias matching only fills gaps.
  */
 export function detectFields(rows = [], variables = []) {
+  const map = { ...systemFieldMap(variables) };
+
+  for (const key of Object.values(SYSTEM_FIELD_KEYS)) {
+    const bound = getSystemVariable(variables, key);
+    if (bound?.name) map[key] = bound.name;
+  }
+
   const keys = new Set();
   for (const v of variables) if (v?.name) keys.add(v.name);
   for (const row of rows) {
@@ -114,12 +129,14 @@ export function detectFields(rows = [], variables = []) {
   }
   const keyList = [...keys];
 
-  const map = {};
   for (const [canonical, aliases] of Object.entries(ALIASES)) {
+    if (map[canonical]) continue;
     const normalized = aliases.map(norm);
     let match = keyList.find((k) => normalized.includes(norm(k)));
     if (!match) {
-      match = keyList.find((k) => normalized.some((a) => a.length > 3 && norm(k).includes(a)));
+      match = keyList.find((k) =>
+        normalized.some((a) => a.length > 3 && norm(k).includes(a))
+      );
     }
     if (match) map[canonical] = match;
   }
@@ -150,6 +167,8 @@ function parseTags(value) {
 
 function minutesFromTime(value) {
   if (!value) return null;
+  const parsed = parseTradeDateTime(value);
+  if (parsed) return parsed.getHours() * 60 + parsed.getMinutes();
   const m = /^(\d{1,2}):(\d{2})/.exec(String(value).trim());
   if (!m) return null;
   return +m[1] * 60 + +m[2];
@@ -177,22 +196,41 @@ export function normalizeTrades(rows = [], variables = [], fieldsOverride) {
   return rows.map((row) => {
     const data = row?.data && typeof row.data === "object" ? row.data : row ?? {};
 
-    const rawPnl = pick(data, fields, "pnl", ["PnL", "PNL", "Pnl", "pnl"]);
+    const rawPnl = pick(data, fields, "pnl", [
+      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.pnl),
+      "PnL",
+      "PNL",
+      "Pnl",
+      "pnl",
+    ].filter(Boolean));
     const pnl = toNumber(rawPnl);
 
-    const rawDate = pick(data, fields, "date", ["Datum", "Date", "date"]);
+    const rawDate = pick(data, fields, "date", [
+      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.date),
+      "Datum",
+      "Date",
+      "date",
+    ].filter(Boolean));
     const date = parseDate(rawDate);
 
-    const entryTime = pick(data, fields, "entryTime", ["Entreetijd"]);
-    const exitTime = pick(data, fields, "exitTime");
+    const entryTime = pick(data, fields, "entryTime", [
+      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.entryTime),
+      "Entreetijd",
+    ].filter(Boolean));
+    const exitTime = pick(data, fields, "exitTime", [
+      getSystemDataKey(variables, SYSTEM_FIELD_KEYS.exitTime),
+      "Exittijd",
+    ].filter(Boolean));
     const entryMinutes = minutesFromTime(entryTime);
     const exitMinutes = minutesFromTime(exitTime);
 
     let durationMin = toNumber(pick(data, fields, "duration"));
-    if (durationMin === null && entryMinutes !== null && exitMinutes !== null) {
-      durationMin = exitMinutes >= entryMinutes
-        ? exitMinutes - entryMinutes
-        : exitMinutes + 24 * 60 - entryMinutes;
+    if (durationMin === null) {
+      durationMin = computeHoldMinutes({
+        entryValue: entryTime,
+        exitValue: exitTime,
+        tradeDate: date || rawDate,
+      });
     }
 
     const risk = toNumber(pick(data, fields, "risk"));

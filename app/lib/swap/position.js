@@ -8,7 +8,7 @@
 import {
   MIRROR_COMPUTED_PNL_TO_JOURNAL,
   TRADE_COMPUTED_STATS_ENABLED,
-} from "./featureFlags";
+} from "./featureFlags.js";
 
 function n(v) {
   const x = typeof v === "number" ? v : Number.parseFloat(String(v ?? ""));

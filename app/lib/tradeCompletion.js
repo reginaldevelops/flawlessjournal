@@ -2,6 +2,8 @@
  * Trade completion helpers: missing fields + intentional "check done".
  */
 
+import { SYSTEM_FIELD_KEYS, getSystemDataKey } from "./systemFields";
+
 export function getCheckedEmpty(trade) {
   const map = trade?._fj?.completion?.checkedEmpty;
   return map && typeof map === "object" ? map : {};
@@ -94,7 +96,7 @@ export function getJournalCompletionStatus(trade, variables = []) {
   const incompletePost = postVars.filter((v) => !isFieldComplete(trade, v.name));
 
   const pnlKey =
-    variables.find((v) => v.type === "system" && /pnl/i.test(v.name))?.name ||
+    getSystemDataKey(variables, SYSTEM_FIELD_KEYS.pnl) ||
     Object.keys(trade || {}).find((k) => k.toLowerCase() === "pnl");
   const pnlFilled = pnlKey ? isFieldValueFilled(trade?.[pnlKey]) : false;
 

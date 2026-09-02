@@ -22,6 +22,14 @@ export const CHAINS = {
     llamaFees: "Hyperliquid",
     focus: "Perps / spot venue scale",
   },
+  robinhood: {
+    id: "robinhood",
+    label: "Robinhood Chain",
+    llamaDex: "Robinhood Chain",
+    llamaTvl: "Robinhood Chain",
+    llamaFees: "Robinhood Chain",
+    focus: "L2 DEX / DeFi heat",
+  },
 };
 
 async function llamaGet(path, { searchParams, signal } = {}) {

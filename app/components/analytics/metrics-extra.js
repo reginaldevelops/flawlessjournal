@@ -40,7 +40,10 @@ export const DURATION_BUCKETS = [
   "30 – 60 min",
   "1 – 2 h",
   "2 – 4 h",
-  "> 4 h",
+  "4 – 12 h",
+  "12 – 24 h",
+  "1 – 3 d",
+  "> 3 d",
 ];
 
 export const RISK_BUCKETS = ["Under-sized", "Planned risk", "1.5 – 2× plan", "> 2× plan"];
@@ -75,7 +78,10 @@ export function durationBucket(trade) {
   if (d < 60) return DURATION_BUCKETS[3];
   if (d < 120) return DURATION_BUCKETS[4];
   if (d < 240) return DURATION_BUCKETS[5];
-  return DURATION_BUCKETS[6];
+  if (d < 720) return DURATION_BUCKETS[6];
+  if (d < 1440) return DURATION_BUCKETS[7];
+  if (d < 4320) return DURATION_BUCKETS[8];
+  return DURATION_BUCKETS[9];
 }
 
 export function riskBucket(trade, plannedRisk) {

@@ -1,7 +1,7 @@
 // components/ManageVariablesModal.jsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   pointerWithin,
@@ -20,6 +20,19 @@ import { supabase } from "../lib/supabaseClient";
 import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import { Parser } from "expr-eval";
 import ConditionalBuilder from "./ConditionalBuilder";
+import { getSystemFieldDef, readSystemKey } from "../lib/systemFields";
+import {
+  ensureSystemVariables,
+  resetSystemVariablesEnsureFlag,
+} from "../lib/ensureSystemVariables";
+
+function systemBadge(variable) {
+  const key = readSystemKey(variable);
+  const def = key ? getSystemFieldDef(key) : null;
+  if (def) return def.label;
+  if (variable?.type === "system") return "System";
+  return null;
+}
 
 // 🔄 Recalc helper
 async function recalcAllTrades(variable) {
@@ -115,7 +128,14 @@ function VariableRow({ v, dragHandleProps, isDragging, onRename, onDelete, onTog
       >
         ⠿
       </span>
-      <span className="flex-1 text-xs font-medium text-slate-800">{v.name}</span>
+      <span className="flex-1 text-xs font-medium text-slate-800">
+        {v.name}
+        {systemBadge(v) && (
+          <span className="ml-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            {systemBadge(v)}
+          </span>
+        )}
+      </span>
       <div className="flex items-center gap-2.5 text-slate-400">
         <button type="button" onClick={() => onToggleVisible(v)} className="hover:text-slate-600 transition">
           {v.visible ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -210,7 +230,25 @@ export default function ManageVariablesModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingFormula, setIsUpdatingFormula] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        resetSystemVariablesEnsureFlag();
+        const result = await ensureSystemVariables(supabase, { force: true });
+        if (cancelled || result.error || !result.variables) return;
+        setVariables(result.variables);
+      } catch (err) {
+        console.warn("[ManageVariables] ensureSystemVariables:", err?.message || err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setVariables]);
+
   const handleRename = async (variable) => {
+    if (variable.type !== "custom") return;
     const newName = prompt("New name?", variable.name);
     if (!newName || newName === variable.name) return;
 
@@ -526,6 +564,7 @@ export default function ManageVariablesModal({
                 <option value="number">Number</option>
                 <option value="dropdown">Dropdown</option>
                 <option value="time">Time</option>
+                <option value="datetime">Date + time</option>
                 <option value="date">Date</option>
                 <option value="textarea">Textarea</option>
                 <option value="chart">Chart</option>
