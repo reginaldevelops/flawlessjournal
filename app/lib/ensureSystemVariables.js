@@ -14,7 +14,7 @@ import {
   upgradeLegacyTimesInTradeData,
 } from "./systemFields";
 
-const ENSURE_FLAG = "flawless.systemFields.ensured.v3";
+const ENSURE_FLAG = "flawless.systemFields.ensured.v4";
 
 function hasSystemKeyColumnError(error) {
   const msg = String(error?.message ?? error?.code ?? "");
@@ -255,6 +255,38 @@ export async function ensureSystemVariables(supabase, opts = {}) {
           : v
       );
       changes.push({ action: "demote_date", from: dateVar.name });
+    }
+  }
+
+  // Coin was never meant to be a forced system text field — restore custom dropdown.
+  const coinVar =
+    getSystemVariable(working, "coin") ||
+    working.find(
+      (v) =>
+        v.type === "system" &&
+        (normalizeFieldToken(v.name) === "coin" ||
+          normalizeFieldToken(v.name) === "coins")
+    );
+  if (coinVar) {
+    const patch = {
+      type: "custom",
+      varType: "dropdown",
+      visible: coinVar.visible !== false,
+    };
+    if (supportsSystemKey) patch.system_key = null;
+    // Keep existing options; only reset empty options array if somehow null
+    if (!Array.isArray(coinVar.options)) patch.options = coinVar.options ?? [];
+    const { error: demoteErr } = await supabase
+      .from("variables")
+      .update(patch)
+      .eq("id", coinVar.id);
+    if (!demoteErr) {
+      working = working.map((v) =>
+        v.id === coinVar.id
+          ? { ...v, ...patch, system_key: supportsSystemKey ? null : v.system_key }
+          : v
+      );
+      changes.push({ action: "restore_coin_dropdown", from: coinVar.name });
     }
   }
 

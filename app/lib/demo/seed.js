@@ -155,9 +155,7 @@ function buildVariables() {
           ? "entryTime"
           : name === "Exittijd"
             ? "exitTime"
-            : name === "Coin"
-              ? "coin"
-              : null;
+            : null;
     return {
       id: `var-${i + 1}`,
       user_id: DEMO_USER.id,
