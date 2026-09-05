@@ -216,8 +216,10 @@ export async function fetchChainSnapshot(chainId, { signal } = {}) {
       )
     : [];
 
+  const { launchpadPattern: _launchpadPattern, ...publicChain } = cfg;
+
   const snapshot = {
-    chain: cfg,
+    chain: publicChain,
     fetchedAt: new Date().toISOString(),
     heat,
     stats: {
