@@ -12,16 +12,83 @@ import {
   normalizeFieldToken,
   readSystemKey,
   upgradeLegacyTimesInTradeData,
-} from "./systemFields";
+} from "./systemFields.js";
 
 const ENSURE_FLAG = "flawless.systemFields.ensured.v4";
+const TIMESTAMP_FLAG = "flawless.systemFields.timestamps.v1";
 
 function hasSystemKeyColumnError(error) {
   const msg = String(error?.message ?? error?.code ?? "");
   return /system_key|column|schema cache|42703/i.test(msg);
 }
 
-async function selectVariables(supabase) {
+export function timestampsAlreadyUpgraded() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(TIMESTAMP_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markTimestampsUpgraded() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TIMESTAMP_FLAG, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function leftoverSystemField(variables, systemKey, tokens) {
+  return (
+    getSystemVariable(variables, systemKey) ||
+    variables.find(
+      (v) =>
+        v?.type === "system" && tokens.includes(normalizeFieldToken(v.name))
+    ) ||
+    null
+  );
+}
+
+/** True when required system columns already match and leftover migrations are done. */
+export function schemaAlreadyHealthy(
+  variables = [],
+  { keys = REQUIRED_SYSTEM_KEYS, supportsSystemKey = true } = {}
+) {
+  for (const systemKey of keys) {
+    const def = SYSTEM_FIELDS[systemKey];
+    const bound = getSystemVariable(variables, systemKey);
+    if (!def || !bound) return false;
+    if (bound.type !== "system") return false;
+    if (bound.varType && bound.varType !== def.varType) return false;
+    if (bound.phase && bound.phase !== def.phase) return false;
+    if (supportsSystemKey && !readSystemKey(bound)) return false;
+    if (
+      systemKey !== "pnl" &&
+      normalizeFieldToken(bound.name) !== normalizeFieldToken(def.defaultName)
+    ) {
+      return false;
+    }
+  }
+
+  if (leftoverSystemField(variables, "date", ["datum", "date"])) return false;
+  if (leftoverSystemField(variables, "coin", ["coin", "coins"])) return false;
+  return true;
+}
+
+function needsVariablePatch(bound, patch) {
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === "system_key") {
+      if (readSystemKey(bound) !== value) return true;
+      continue;
+    }
+    if (bound?.[key] !== value) return true;
+  }
+  return false;
+}
+
+export async function selectVariables(supabase) {
   const full = await supabase
     .from("variables")
     .select(
@@ -101,6 +168,30 @@ export async function ensureSystemVariables(supabase, opts = {}) {
     await selectVariables(supabase);
   if (error) return { variables: [], error, changes: [] };
 
+  if (
+    !force &&
+    schemaAlreadyHealthy(existing, { keys, supportsSystemKey })
+  ) {
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(ENSURE_FLAG, "1");
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!timestampsAlreadyUpgraded()) {
+      const upgraded = await upgradeLegacyTradeTimestamps(supabase);
+      if (upgraded.updated) {
+        return {
+          variables: existing,
+          changes: [{ action: "upgrade_timestamps", count: upgraded.updated }],
+          supportsSystemKey,
+        };
+      }
+    }
+    return { variables: existing, skipped: true, changes: [], supportsSystemKey };
+  }
+
   const changes = [];
   const renames = {};
   const claimedIds = new Set();
@@ -142,6 +233,11 @@ export async function ensureSystemVariables(supabase, opts = {}) {
       if (shouldCanonicalize) {
         renames[bound.name] = def.defaultName;
         patch.name = def.defaultName;
+      }
+
+      if (!needsVariablePatch(bound, patch)) {
+        claimedIds.add(bound.id);
+        continue;
       }
 
       let { error: updErr } = await supabase
@@ -291,9 +387,11 @@ export async function ensureSystemVariables(supabase, opts = {}) {
   }
 
   // Persist HH:MM + Datum → full datetime so UI/analytics stop inventing "today".
-  const upgraded = await upgradeLegacyTradeTimestamps(supabase);
-  if (upgraded.updated) {
-    changes.push({ action: "upgrade_timestamps", count: upgraded.updated });
+  if (!timestampsAlreadyUpgraded()) {
+    const upgraded = await upgradeLegacyTradeTimestamps(supabase);
+    if (upgraded.updated) {
+      changes.push({ action: "upgrade_timestamps", count: upgraded.updated });
+    }
   }
 
   if (typeof window !== "undefined") {
@@ -319,7 +417,10 @@ async function upgradeLegacyTradeTimestamps(supabase) {
     const next = upgradeLegacyTimesInTradeData(trade.data);
     if (next) updates.push({ id: trade.id, data: next });
   }
-  if (!updates.length) return { updated: 0 };
+  if (!updates.length) {
+    markTimestampsUpgraded();
+    return { updated: 0 };
+  }
 
   for (let i = 0; i < updates.length; i += 100) {
     const chunk = updates.slice(i, i + 100);
@@ -328,6 +429,7 @@ async function upgradeLegacyTradeTimestamps(supabase) {
       .upsert(chunk, { onConflict: "id" });
     if (upErr) throw upErr;
   }
+  markTimestampsUpgraded();
   return { updated: updates.length };
 }
 

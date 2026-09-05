@@ -3,6 +3,8 @@
  * Docs: https://api.llama.fi
  */
 
+import { createCache } from "../chain/cache.js";
+
 export const LLAMA_API = "https://api.llama.fi";
 
 export const CHAINS = {
@@ -13,6 +15,18 @@ export const CHAINS = {
     llamaTvl: "Solana",
     llamaFees: "Solana",
     focus: "DEX + launchpads",
+    hasLaunchpads: true,
+    launchpadPattern: /pump|launch|bonk\.fun|bags|moonshot|letsbonk|believe/i,
+  },
+  bnb: {
+    id: "bnb",
+    label: "BNB Chain",
+    llamaDex: "BSC",
+    llamaTvl: "BSC",
+    llamaFees: "BSC",
+    focus: "DEX + Four.meme",
+    hasLaunchpads: true,
+    launchpadPattern: /four\.?meme|pinksale|dxsale|flap|cookie\.fun|launchpad|launch/i,
   },
   hyperliquid: {
     id: "hyperliquid",
@@ -21,6 +35,7 @@ export const CHAINS = {
     llamaTvl: "Hyperliquid L1",
     llamaFees: "Hyperliquid",
     focus: "Perps / spot venue scale",
+    hasLaunchpads: false,
   },
   robinhood: {
     id: "robinhood",
@@ -29,8 +44,12 @@ export const CHAINS = {
     llamaTvl: "Robinhood Chain",
     llamaFees: "Robinhood Chain",
     focus: "L2 DEX / DeFi heat",
+    hasLaunchpads: false,
   },
 };
+
+const snapshotCache = createCache({ ttl: 120_000, max: 16, name: "chain-snapshot" });
+const compareCache = createCache({ ttl: 120_000, max: 4, name: "chain-compare" });
 
 async function llamaGet(path, { searchParams, signal } = {}) {
   const url = new URL(path.startsWith("http") ? path : `${LLAMA_API}${path}`);
@@ -133,6 +152,9 @@ export async function fetchChainSnapshot(chainId, { signal } = {}) {
   const cfg = CHAINS[chainId];
   if (!cfg) throw new Error(`Unknown chain: ${chainId}`);
 
+  const cached = snapshotCache.get(chainId);
+  if (cached) return cached;
+
   const [chains, tvlHist, dex, fees, revenue] = await Promise.all([
     llamaGet("/v2/chains", { signal }),
     llamaGet(`/v2/historicalChainTvl/${encodeURIComponent(cfg.llamaTvl)}`, { signal }).catch(
@@ -186,16 +208,15 @@ export async function fetchChainSnapshot(chainId, { signal } = {}) {
     volume7dAvg,
   });
 
-  // Launchpad-ish names for Solana activity context
-  const launchProtocols = mapProtocols(revenue?.protocols || fees?.protocols || [], {
-    limit: 40,
-  }).filter((p) =>
-    /pump|launch|bonk\.fun|bags|moonshot|letsbonk|believe/i.test(
-      `${p.name} ${p.category || ""} ${p.slug || ""}`
-    )
-  );
+  const launchProtocols = cfg.hasLaunchpads
+    ? mapProtocols(revenue?.protocols || fees?.protocols || [], {
+        limit: 40,
+      }).filter((p) =>
+        cfg.launchpadPattern.test(`${p.name} ${p.category || ""} ${p.slug || ""}`)
+      )
+    : [];
 
-  return {
+  const snapshot = {
     chain: cfg,
     fetchedAt: new Date().toISOString(),
     heat,
@@ -238,10 +259,16 @@ export async function fetchChainSnapshot(chainId, { signal } = {}) {
       },
     },
   };
+
+  snapshotCache.set(chainId, snapshot);
+  return snapshot;
 }
 
 /** Lightweight strip for chain switcher cards (avoids full double snapshot). */
 export async function fetchCompareStrip({ signal } = {}) {
+  const cached = compareCache.get("all");
+  if (cached) return cached;
+
   const [chains, ...dexRows] = await Promise.all([
     llamaGet("/v2/chains", { signal }),
     ...Object.values(CHAINS).map((cfg) =>
@@ -257,7 +284,7 @@ export async function fetchCompareStrip({ signal } = {}) {
 
   const chainList = Array.isArray(chains) ? chains : [];
 
-  return Object.values(CHAINS).map((cfg, i) => {
+  const rows = Object.values(CHAINS).map((cfg, i) => {
     const dex = dexRows[i];
     if (dex?.error) {
       return { id: cfg.id, label: cfg.label, error: dex.error };
@@ -282,4 +309,7 @@ export async function fetchCompareStrip({ signal } = {}) {
       dexVolumeChange1d: dex?.change_1d ?? null,
     };
   });
+
+  compareCache.set("all", rows);
+  return rows;
 }

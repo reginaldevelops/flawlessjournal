@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { invalidateTradesCache } from "../supabaseTrades";
 import { toDateOnlyValue, toDatetimeLocalValue } from "../systemFields";
 
 /** Create an empty manual journal trade and return the new row id. */
@@ -20,5 +21,6 @@ export async function createJournalTrade(client = supabase) {
   }
 
   if (error) throw error;
+  invalidateTradesCache();
   return data?.[0]?.id ?? null;
 }

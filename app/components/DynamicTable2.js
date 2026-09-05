@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import {
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "./ui";
 import { createJournalTrade } from "../lib/trades/createJournalTrade";
+import { invalidateTradesCache } from "../lib/supabaseTrades";
 import { useSwapFlow } from "./swap/SwapFlowContext";
 
 /** Position / system blobs stored in trades.data — never table columns. */
@@ -189,6 +190,35 @@ function writeLocalTableSettings(payload) {
     /* quota */
   }
 }
+
+function getCellValue(row, col) {
+  if (row[col] !== undefined && row[col] !== null) return row[col];
+  if (row.data && row.data[col] !== undefined && row.data[col] !== null)
+    return row.data[col];
+  return null;
+}
+
+function applyTableSettings(allColumns, source) {
+  if (source?.visible_columns?.length > 0) {
+    const savedCols = source.visible_columns.filter((c) => !isInternalTradeKey(c));
+    return {
+      allCols: [
+        ...savedCols,
+        ...allColumns.filter((c) => !savedCols.includes(c) && !isInternalTradeKey(c)),
+      ],
+      visibleCols: savedCols,
+      sortConfig: {
+        key: source.sort_key || allColumns[0] || "",
+        direction: source.sort_direction || "desc",
+      },
+    };
+  }
+  return {
+    allCols: allColumns,
+    visibleCols: allColumns,
+    sortConfig: { key: allColumns[0] || "", direction: "desc" },
+  };
+}
 export default function DynamicTable2({ rows: initialRows, variables }) {
   const [rows, setRows] = useState(initialRows || []);
   const [visibleCols, setVisibleCols] = useState([]);
@@ -209,13 +239,6 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     })
   );
 
-  function getCellValue(row, col) {
-    if (row[col] !== undefined && row[col] !== null) return row[col];
-    if (row.data && row.data[col] !== undefined && row.data[col] !== null)
-      return row.data[col];
-    return null;
-  }
-
   useEffect(() => {
     const variableNames = variables.map((v) => v?.name).filter(Boolean);
     const keysFromRows = new Set();
@@ -232,51 +255,58 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     const combinedCols = [
       ...new Set(["Tags", ...variableNames, ...Array.from(keysFromRows)]),
     ].filter((c) => !isInternalTradeKey(c));
-    setAllCols(combinedCols);
-    loadVisibleCols(combinedCols);
+
+    const local = readLocalTableSettings();
+    const applied = applyTableSettings(combinedCols, local);
+    setAllCols(applied.allCols);
+    setVisibleCols(applied.visibleCols);
+    if (local?.visible_columns?.length || local?.sort_key) {
+      setSortConfig(applied.sortConfig);
+    } else {
+      setSortConfig((prev) => ({ ...prev, key: combinedCols[0] || prev.key || "" }));
+    }
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("table_settings")
+        .select("visible_columns, sort_key, sort_direction")
+        .eq("id", 1)
+        .single();
+      if (cancelled) return;
+
+      if (!error && data?.visible_columns?.length > 0) {
+        const remote = applyTableSettings(combinedCols, data);
+        setAllCols(remote.allCols);
+        setVisibleCols(remote.visibleCols);
+        setSortConfig(remote.sortConfig);
+        writeLocalTableSettings({
+          visible_columns: remote.visibleCols,
+          sort_key: remote.sortConfig.key,
+          sort_direction: remote.sortConfig.direction,
+        });
+        return;
+      }
+
+      if (!local?.visible_columns?.length) {
+        const payload = {
+          visible_columns: combinedCols,
+          sort_key: combinedCols[0] || "",
+          sort_direction: "desc",
+        };
+        writeLocalTableSettings(payload);
+        await supabase.from("table_settings").upsert({ id: 1, ...payload }).select();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [variables, initialRows]);
 
   useEffect(() => {
     setRows(initialRows || []);
   }, [initialRows]);
-
-  const loadVisibleCols = async (allColumns) => {
-    const local = readLocalTableSettings();
-
-    const { data, error } = await supabase
-      .from("table_settings")
-      .select("visible_columns, sort_key, sort_direction")
-      .eq("id", 1)
-      .single();
-
-    const source =
-      !error && data?.visible_columns?.length > 0
-        ? data
-        : local?.visible_columns?.length > 0
-          ? local
-          : null;
-
-    if (source?.visible_columns?.length > 0) {
-      const savedCols = source.visible_columns.filter((c) => !isInternalTradeKey(c));
-      const mergedAllCols = [
-        ...savedCols,
-        ...allColumns.filter((c) => !savedCols.includes(c) && !isInternalTradeKey(c)),
-      ];
-      setAllCols(mergedAllCols);
-      setVisibleCols(savedCols);
-      setSortConfig({
-        key: source.sort_key || allColumns[0] || "",
-        direction: source.sort_direction || "desc",
-      });
-    } else {
-      setAllCols(allColumns);
-      setVisibleCols(allColumns);
-      setSortConfig((prev) => ({ ...prev, key: allColumns[0] || "" }));
-      const payload = { visible_columns: allColumns, sort_key: allColumns[0] || "", sort_direction: "desc" };
-      writeLocalTableSettings(payload);
-      await supabase.from("table_settings").upsert({ id: 1, ...payload }).select();
-    }
-  };
 
   const persistTableSettings = async (cols, sort = sortConfig) => {
     const payload = {
@@ -315,14 +345,18 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
     }
   };
 
-  const sortedRows = [...rows].sort((a, b) => {
-    if (!sortConfig.key) return 0;
-    const valA = getCellValue(a, sortConfig.key) ?? "";
-    const valB = getCellValue(b, sortConfig.key) ?? "";
-    if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-    if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
+  const sortedRows = useMemo(() => {
+    if (!sortConfig.key) return rows;
+    const copy = rows.slice();
+    copy.sort((a, b) => {
+      const valA = getCellValue(a, sortConfig.key) ?? "";
+      const valB = getCellValue(b, sortConfig.key) ?? "";
+      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+    return copy;
+  }, [rows, sortConfig]);
 
   const displayCols = allCols.filter((c) => visibleCols.includes(c));
 
@@ -365,6 +399,7 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
       .delete()
       .in("id", selectedRows);
     if (error) return console.error("Bulk delete error:", error);
+    invalidateTradesCache();
     setRows((prev) => prev.filter((r) => !selectedRows.includes(r.id)));
     setSelectedRows([]);
     setBulkOpen(false);

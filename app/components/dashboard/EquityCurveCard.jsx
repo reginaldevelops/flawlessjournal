@@ -33,6 +33,18 @@ const MODES = [
   { value: "r", label: "R" },
 ];
 
+function downsampleSeries(points, maxPoints = 240) {
+  if (!points || points.length <= maxPoints) return points;
+  const last = maxPoints - 1;
+  const step = (points.length - 1) / last;
+  const out = [];
+  for (let i = 0; i < last; i += 1) {
+    out.push(points[Math.round(i * step)]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
 export default function EquityCurveCard({ metrics, loading, periodLabel }) {
   const colors = useChartColors();
   const [mode, setMode] = useState("money");
@@ -44,7 +56,7 @@ export default function EquityCurveCard({ metrics, loading, periodLabel }) {
     const closed = metrics?.closed ?? [];
     let acc = 0;
     let peak = 0;
-    return closed.map((trade, i) => {
+    const full = closed.map((trade, i) => {
       const delta = effectiveMode === "r" ? (trade.rMultiple ?? 0) : (trade.pnl ?? 0);
       acc += delta;
       peak = Math.max(peak, acc);
@@ -56,6 +68,7 @@ export default function EquityCurveCard({ metrics, loading, periodLabel }) {
         delta,
       };
     });
+    return downsampleSeries(full, 240);
   }, [metrics, effectiveMode]);
 
   const isMoney = effectiveMode === "money";
@@ -139,7 +152,7 @@ export default function EquityCurveCard({ metrics, loading, periodLabel }) {
                     minTickGap={44}
                     tickMargin={8}
                     tickFormatter={(value) => {
-                      const point = series[value - 1];
+                      const point = series.find((p) => p.index === value);
                       return point?.date ? formatDate(point.date, "short") : "";
                     }}
                   />

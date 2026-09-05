@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import DynamicTable2 from "../components/DynamicTable2";
 import { LoadingState, PageHeader, PageBody, Card } from "../components/ui";
-import { extractTradeNumber } from "../lib/trades";
-import { ensureSystemVariables } from "../lib/ensureSystemVariables";
+import { fetchTrades } from "../lib/supabaseTrades";
 
 export default function TradeDataPage() {
   const [rows, setRows] = useState([]);
@@ -14,39 +13,20 @@ export default function TradeDataPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: trades, error: tradesError } = await supabase
-        .from("trades")
-        .select("*");
+      const { raw, variables: tradeVars, error } = await fetchTrades(supabase, {
+        withVariables: true,
+      });
 
-      if (tradesError) {
-        console.error("Error loading trades:", tradesError);
+      if (error) {
+        console.error("Error loading trades:", error);
         setLoading(false);
         return;
       }
 
-      let tradeVars = [];
-      try {
-        const ensured = await ensureSystemVariables(supabase, { force: true });
-        if (!ensured.error && ensured.variables?.length) {
-          tradeVars = ensured.variables;
-        }
-      } catch (err) {
-        console.warn("ensureSystemVariables:", err?.message || err);
-      }
+      setVariables(tradeVars || []);
 
-      if (!tradeVars.length) {
-        const { data, error: varsError } = await supabase
-          .from("variables")
-          .select("*")
-          .order("order", { ascending: true });
-        if (varsError) console.error("Error loading variables:", varsError);
-        tradeVars = data || [];
-      }
-
-      setVariables(tradeVars);
-
-      const mapped = (trades || []).map((d, index) => {
-        const number = extractTradeNumber(d) ?? index + 1;
+      const mapped = (raw || []).map((d) => {
+        const number = d.trade_number;
         const base = {
           id: d.id,
           trade_number: number,

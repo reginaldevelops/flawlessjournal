@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/chain-analysis?chain=solana|hyperliquid|robinhood&compare=1
+ * GET /api/chain-analysis?chain=solana|bnb|hyperliquid|robinhood&compare=1
  */
 export async function GET(request) {
   try {

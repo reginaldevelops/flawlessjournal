@@ -23,6 +23,7 @@ import {
   toDatetimeLocalValue,
 } from "../../lib/systemFields";
 import { ensureSystemVariables } from "../../lib/ensureSystemVariables";
+import { invalidateTradesCache } from "../../lib/supabaseTrades";
 import {
   getJournalCompletionStatus,
   isFieldComplete,
@@ -690,7 +691,7 @@ export default function TradeViewPage() {
   useEffect(() => {
     const loadVariables = async () => {
       try {
-        const ensured = await ensureSystemVariables(supabase, { force: true });
+        const ensured = await ensureSystemVariables(supabase);
         if (!ensured.error && ensured.variables?.length) {
           setVariables(ensured.variables);
           return;
@@ -720,6 +721,7 @@ export default function TradeViewPage() {
       .update({ data: updated })
       .eq("id", updated.id);
     if (error) console.error("❌ Save error:", error);
+    else invalidateTradesCache();
   };
 
   const deleteTrade = async () => {
@@ -729,6 +731,7 @@ export default function TradeViewPage() {
       console.error("❌ Delete error:", error);
       return;
     }
+    invalidateTradesCache();
     window.location.href = "/trades";
   };
 

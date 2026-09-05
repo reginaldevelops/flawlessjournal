@@ -47,7 +47,7 @@ import {
   matchSessionKey,
   MARKET_SESSIONS,
 } from "../components/dashboard/helpers";
-import { closedTrades, computeMetrics, generateInsights, groupByDay, groupStats } from "../lib/trades";
+import { closedTrades, generateInsights, groupByDay, groupStats } from "../lib/trades";
 import { dateKey, formatDate, pluralize } from "../lib/format";
 
 const PERIOD_KEY = "flawless.dashboard.period";
@@ -82,16 +82,36 @@ export default function DashboardPage() {
   );
 
   const allClosed = useMemo(() => closedTrades(trades), [trades]);
-  const allTimeMetrics = useMemo(() => computeMetrics(trades), [trades]);
+  const allTimeMetrics = useMemo(() => {
+    let netPnl = 0;
+    let equity = 0;
+    let peak = 0;
+    let maxDrawdownPct = 0;
+    for (const trade of allClosed) {
+      const pnl = trade.pnl || 0;
+      netPnl += pnl;
+      equity += pnl;
+      if (equity > peak) peak = equity;
+      const denom = Math.abs(peak);
+      if (denom) {
+        const ddPct = ((peak - equity) / denom) * 100;
+        if (ddPct > maxDrawdownPct) maxDrawdownPct = ddPct;
+      }
+    }
+    return { netPnl, maxDrawdownPct };
+  }, [allClosed]);
   const allDays = useMemo(() => groupByDay(allClosed), [allClosed]);
 
   const insights = useMemo(() => generateInsights(rangeTrades, metrics), [rangeTrades, metrics]);
 
   const recentTrades = useMemo(
     () =>
-      [...trades].sort(
-        (a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0) || (b.tradeNumber ?? 0) - (a.tradeNumber ?? 0)
-      ),
+      [...trades]
+        .sort(
+          (a, b) =>
+            (b.timestamp ?? 0) - (a.timestamp ?? 0) || (b.tradeNumber ?? 0) - (a.tradeNumber ?? 0)
+        )
+        .slice(0, 8),
     [trades]
   );
 

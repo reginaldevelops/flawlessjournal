@@ -99,11 +99,12 @@ export function useNow(intervalMs = 60_000) {
 export function useTrades() {
   const [state, setState] = useState({ loading: true, error: null, trades: [], variables: [] });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ fresh = false } = {}) => {
     setState((s) => ({ ...s, loading: true, error: null }));
 
     const { trades, variables, error } = await fetchTrades(supabase, {
       withVariables: true,
+      fresh,
     });
 
     if (error) {
@@ -128,7 +129,7 @@ export function useTrades() {
     load();
   }, [load]);
 
-  return { ...state, reload: load };
+  return { ...state, reload: () => load({ fresh: true }) };
 }
 
 /* ------------------------------------------------------------------ */

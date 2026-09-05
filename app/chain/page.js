@@ -33,6 +33,7 @@ import { formatCurrency, formatNumber, formatPercent, toneTextClass } from "../l
 
 const CHAIN_OPTIONS = [
   { value: "solana", label: "Solana" },
+  { value: "bnb", label: "BNB" },
   { value: "hyperliquid", label: "Hyperliquid" },
   { value: "robinhood", label: "Robinhood" },
 ];
@@ -198,7 +199,7 @@ function PlatformTable({ title, rows, valueLabel = "24h" }) {
 function CompareCards({ rows, active, onSelect }) {
   if (!rows?.length) return null;
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {rows.map((row) => {
         const selected = row.id === active;
         const DeltaIcon =
@@ -315,7 +316,7 @@ export default function ChainAnalysisPage() {
       <PageHeader
         eyebrow="Research"
         title="Chain analysis"
-        description="On-chain volume, TVL and platform fees — so you can tell when Solana (or HL) is hot enough to sit at the desk, or quiet enough to take the week off."
+        description="On-chain volume, TVL and platform fees — so you can tell when Solana, BNB or Hyperliquid is hot enough to sit at the desk, or quiet enough to take the week off."
         actions={
           <Button
             variant="secondary"
@@ -437,8 +438,16 @@ export default function ChainAnalysisPage() {
                 <StatCard
                   label="Focus"
                   value={state.data.chain?.focus || "Venue scale"}
-                  sublabel="HL for perps / spot heat"
-                  hint="Hyperliquid is included for venue-scale activity next to Solana DEX heat."
+                  sublabel={
+                    chain === "bnb"
+                      ? "PancakeSwap + Four.meme heat"
+                      : "HL for perps / spot heat"
+                  }
+                  hint={
+                    chain === "bnb"
+                      ? "BNB Chain is included for DEX volume and Four.meme-style launchpad flow next to Solana."
+                      : "Hyperliquid is included for venue-scale activity next to Solana and BNB DEX heat."
+                  }
                 />
               )}
             </div>
@@ -454,7 +463,8 @@ export default function ChainAnalysisPage() {
                 <div>
                   <p className="text-sm font-semibold text-content">Platform breakdown</p>
                   <p className="mt-0.5 text-xs text-content-muted">
-                    DEX volume, fees, revenue{chain === "solana" ? " & launchpads" : ""}
+                    DEX volume, fees, revenue
+                    {state.data.chain?.hasLaunchpads ? " & launchpads" : ""}
                   </p>
                 </div>
                 <ChevronDown
@@ -475,9 +485,13 @@ export default function ChainAnalysisPage() {
                     rows={state.data.topRevenue}
                     valueLabel="Rev 24h"
                   />
-                  {chain === "solana" ? (
+                  {state.data.chain?.hasLaunchpads ? (
                     <PlatformTable
-                      title="Launchpads & meme rails"
+                      title={
+                        chain === "bnb"
+                          ? "Launchpads & Four.meme rails"
+                          : "Launchpads & meme rails"
+                      }
                       rows={state.data.launchpads}
                       valueLabel="Rev 24h"
                     />
@@ -493,8 +507,9 @@ export default function ChainAnalysisPage() {
                           opportunity density. Falling volume is your cue to reduce screen time.
                         </p>
                         <p>
-                          Compare Solana DEX heat with Hyperliquid when you care about overall
-                          crypto risk-on — HL often leads on perps scale even when SOL memes cool off.
+                          Compare Solana and BNB DEX heat with Hyperliquid when you care about
+                          overall crypto risk-on — HL often leads on perps scale even when memes
+                          cool off.
                         </p>
                       </CardBody>
                     </Card>

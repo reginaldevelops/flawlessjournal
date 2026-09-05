@@ -8,74 +8,160 @@
  */
 
 import { normalizeTrades, extractTradeNumber } from "./trades";
-import { ensureSystemVariables } from "./ensureSystemVariables";
+import {
+  ensureSystemVariables,
+  markTimestampsUpgraded,
+  schemaAlreadyHealthy,
+  selectVariables,
+  timestampsAlreadyUpgraded,
+} from "./ensureSystemVariables";
+import { upgradeLegacyTimesInTradeData } from "./systemFields";
+
+const PAGE_SIZE = 1000;
+const CACHE_TTL_MS = 20_000;
+const MAX_ROWS = 20_000;
+
+let tradesCache = {
+  at: 0,
+  withVariables: false,
+  payload: null,
+};
+
+export function invalidateTradesCache() {
+  tradesCache = { at: 0, withVariables: false, payload: null };
+}
+
+function isColumnError(error) {
+  const msg = String(error?.message ?? error?.code ?? "");
+  return /trade_number|column|schema cache|42703/i.test(msg);
+}
+
+async function fetchTradeRows(supabase) {
+  const plans = [
+    { select: "id, trade_number, data, created_at", orderCol: "trade_number" },
+    { select: "id, data, created_at", orderCol: "created_at" },
+    { select: "id, data", orderCol: null },
+    { select: "*", orderCol: null },
+  ];
+
+  let lastError = null;
+
+  for (const plan of plans) {
+    const rows = [];
+    let from = 0;
+    let planFailed = false;
+
+    while (from < MAX_ROWS) {
+      let query = supabase.from("trades").select(plan.select);
+      if (plan.orderCol) query = query.order(plan.orderCol, { ascending: true });
+      const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        lastError = error;
+        if (isColumnError(error)) {
+          planFailed = true;
+          break;
+        }
+        return { rows: [], error };
+      }
+
+      const batch = data ?? [];
+      rows.push(...batch);
+      if (batch.length < PAGE_SIZE) return { rows, error: null };
+      from += PAGE_SIZE;
+    }
+
+    if (!planFailed) return { rows, error: null };
+  }
+
+  return { rows: [], error: lastError };
+}
+
+async function persistTimestampFixes(supabase, rows) {
+  const updates = [];
+  for (const trade of rows) {
+    const next = upgradeLegacyTimesInTradeData(trade.data);
+    if (next) updates.push({ id: trade.id, data: next });
+  }
+  if (!updates.length) {
+    markTimestampsUpgraded();
+    return rows;
+  }
+
+  for (let i = 0; i < updates.length; i += 100) {
+    const chunk = updates.slice(i, i + 100);
+    const { error } = await supabase.from("trades").upsert(chunk, { onConflict: "id" });
+    if (error) {
+      console.warn("[fetchTrades] timestamp upgrade failed:", error.message);
+      return rows;
+    }
+  }
+
+  markTimestampsUpgraded();
+  const byId = new Map(updates.map((row) => [row.id, row.data]));
+  return rows.map((row) => (byId.has(row.id) ? { ...row, data: byId.get(row.id) } : row));
+}
 
 /**
  * Fetch trades without assuming `trade_number` exists.
  * Falls back to `id, data` (or `*`) and synthesises a stable index.
  */
-export async function fetchTrades(supabase, { withVariables = false } = {}) {
-  const attempts = [
-    () =>
-      supabase
-        .from("trades")
-        .select("id, trade_number, data, created_at")
-        .order("trade_number", { ascending: true }),
-    () =>
-      supabase
-        .from("trades")
-        .select("id, data, created_at")
-        .order("created_at", { ascending: true }),
-    () => supabase.from("trades").select("id, data"),
-    () => supabase.from("trades").select("*"),
-  ];
+export async function fetchTrades(
+  supabase,
+  { withVariables = false, fresh = false } = {}
+) {
+  if (fresh) invalidateTradesCache();
 
-  let trades = [];
-  let tradesError = null;
-
-  for (const attempt of attempts) {
-    const { data, error } = await attempt();
-    if (!error) {
-      trades = data ?? [];
-      tradesError = null;
-      break;
-    }
-    tradesError = error;
-    const msg = String(error.message ?? error.code ?? "");
-    if (!/trade_number|column|schema cache|42703/i.test(msg)) {
-      break;
-    }
+  const now = Date.now();
+  if (
+    tradesCache.payload &&
+    now - tradesCache.at < CACHE_TTL_MS &&
+    (!withVariables || tradesCache.withVariables)
+  ) {
+    return tradesCache.payload;
   }
 
-  if (tradesError) {
-    return { trades: [], raw: [], variables: [], error: tradesError };
+  const [tradeResult, varsResult] = await Promise.all([
+    fetchTradeRows(supabase),
+    withVariables
+      ? selectVariables(supabase)
+      : Promise.resolve({ variables: [], supportsSystemKey: true, error: null }),
+  ]);
+
+  if (tradeResult.error) {
+    return { trades: [], raw: [], variables: [], error: tradeResult.error };
   }
 
-  let variables = [];
+  let trades = tradeResult.rows;
+  let variables = varsResult.variables ?? [];
+
   if (withVariables) {
-    try {
-      const ensured = await ensureSystemVariables(supabase);
-      if (!ensured.error && ensured.variables?.length) {
-        variables = ensured.variables;
-      } else {
-        const varsRes = await supabase
-          .from("variables")
-          .select("id, name, type, varType, phase, options, visible, order, system_key");
-        if (varsRes.error && /system_key/i.test(varsRes.error.message ?? "")) {
-          const legacy = await supabase
-            .from("variables")
-            .select("id, name, type, varType, phase, options, visible, order");
-          if (!legacy.error) variables = legacy.data ?? [];
-        } else if (!varsRes.error) {
-          variables = varsRes.data ?? [];
-        }
+    if (varsResult.error) {
+      try {
+        const ensured = await ensureSystemVariables(supabase);
+        if (!ensured.error && ensured.variables?.length) variables = ensured.variables;
+      } catch (err) {
+        console.warn("[fetchTrades] ensureSystemVariables:", err?.message || err);
       }
-    } catch (err) {
-      console.warn("[fetchTrades] ensureSystemVariables:", err?.message || err);
-      const varsRes = await supabase
-        .from("variables")
-        .select("name, varType, phase, options, visible, order");
-      if (!varsRes.error) variables = varsRes.data ?? [];
+    } else if (
+      !schemaAlreadyHealthy(variables, {
+        supportsSystemKey: varsResult.supportsSystemKey !== false,
+      })
+    ) {
+      try {
+        const ensured = await ensureSystemVariables(supabase);
+        if (!ensured.error && ensured.variables?.length) variables = ensured.variables;
+      } catch (err) {
+        console.warn("[fetchTrades] ensureSystemVariables:", err?.message || err);
+      }
+    }
+
+    if (!timestampsAlreadyUpgraded()) {
+      try {
+        trades = await persistTimestampFixes(supabase, trades);
+      } catch (err) {
+        console.warn("[fetchTrades] timestamp upgrade:", err?.message || err);
+      }
     }
   }
 
@@ -87,12 +173,15 @@ export async function fetchTrades(supabase, { withVariables = false } = {}) {
     };
   });
 
-  return {
+  const payload = {
     trades: normalizeTrades(enriched, variables),
     raw: enriched,
     variables,
     error: null,
   };
+
+  tradesCache = { at: Date.now(), withVariables, payload };
+  return payload;
 }
 
 /**
