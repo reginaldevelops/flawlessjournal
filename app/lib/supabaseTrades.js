@@ -27,7 +27,7 @@ const SLIM_PAGE_SIZE = 1000;
 const FAT_PAGE_SIZE = 250;
 const CACHE_TTL_MS = 120_000;
 const MAX_ROWS = 20_000;
-const SESSION_KEY = "flawless.tradesCache.v2";
+const SESSION_KEY = "flawless.tradesCache.v3";
 
 let tradesCache = {
   at: 0,

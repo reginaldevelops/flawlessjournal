@@ -34,6 +34,7 @@ function isInternalTradeKey(key) {
 
 function formatCellValue(val) {
   if (val === null || val === undefined || val === "") return null;
+  if (isSlimmedMedia(val)) return null;
   if (typeof val === "object") return null; // never render raw objects/arrays (except tags)
   return val;
 }
@@ -55,6 +56,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { getJournalCompletionStatus } from "../lib/tradeCompletion";
 import { parseTags, tagTone } from "../lib/tradeTags";
+import { isSlimmedMedia } from "../lib/slimTradeData";
 
 /* ------------------------------------------------------------------ */
 /* Column display-name overrides — keeps DB keys intact               */

@@ -1,9 +1,5 @@
--- =============================================================================
--- Slim trade list payloads + persist a reusable trade-tag catalog.
--- Safe to re-run.
--- =============================================================================
-
--- Strip chart screenshots (data:image…) and fill OHLC snapshots from JSON.
+-- If 20260916 was already applied, re-run this so stripped charts stay "filled"
+-- for journal STATUS (marker instead of empty string).
 CREATE OR REPLACE FUNCTION public.strip_trade_media(payload jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -45,19 +41,3 @@ BEGIN
   RETURN result;
 END;
 $$;
-
--- PostgREST computed column: select=id,trade_number,data:strip_trade_media
-CREATE OR REPLACE FUNCTION public.strip_trade_media(t public.trades)
-RETURNS jsonb
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT public.strip_trade_media(t.data);
-$$;
-
-GRANT EXECUTE ON FUNCTION public.strip_trade_media(jsonb) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.strip_trade_media(public.trades) TO anon, authenticated;
-
--- Reusable tag library (names only — colour is derived client-side).
-ALTER TABLE public.table_settings
-  ADD COLUMN IF NOT EXISTS trade_tags jsonb DEFAULT '[]'::jsonb;
