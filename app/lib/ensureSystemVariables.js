@@ -148,10 +148,15 @@ async function remapTradeKeys(supabase, renames) {
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase
- * @param {{ userId?: string, force?: boolean, keys?: string[] }} [opts]
+ * @param {{ userId?: string, force?: boolean, keys?: string[], skipTradeRewrites?: boolean }} [opts]
  */
 export async function ensureSystemVariables(supabase, opts = {}) {
-  const { userId = null, force = false, keys = REQUIRED_SYSTEM_KEYS } = opts;
+  const {
+    userId = null,
+    force = false,
+    keys = REQUIRED_SYSTEM_KEYS,
+    skipTradeRewrites = false,
+  } = opts;
 
   if (typeof window !== "undefined" && !force) {
     try {
@@ -179,7 +184,7 @@ export async function ensureSystemVariables(supabase, opts = {}) {
         /* ignore */
       }
     }
-    if (!timestampsAlreadyUpgraded()) {
+    if (!skipTradeRewrites && !timestampsAlreadyUpgraded()) {
       const upgraded = await upgradeLegacyTradeTimestamps(supabase);
       if (upgraded.updated) {
         return {
@@ -323,7 +328,7 @@ export async function ensureSystemVariables(supabase, opts = {}) {
     }
   }
 
-  if (Object.keys(renames).length) {
+  if (!skipTradeRewrites && Object.keys(renames).length) {
     await remapTradeKeys(supabase, renames);
   }
 
@@ -387,7 +392,7 @@ export async function ensureSystemVariables(supabase, opts = {}) {
   }
 
   // Persist HH:MM + Datum → full datetime so UI/analytics stop inventing "today".
-  if (!timestampsAlreadyUpgraded()) {
+  if (!skipTradeRewrites && !timestampsAlreadyUpgraded()) {
     const upgraded = await upgradeLegacyTradeTimestamps(supabase);
     if (upgraded.updated) {
       changes.push({ action: "upgrade_timestamps", count: upgraded.updated });

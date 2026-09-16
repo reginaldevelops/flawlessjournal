@@ -4,7 +4,26 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import DynamicTable2 from "../components/DynamicTable2";
 import { LoadingState, PageHeader, PageBody, Card } from "../components/ui";
-import { fetchTrades } from "../lib/supabaseTrades";
+import { fetchTrades, peekTradesCache } from "../lib/supabaseTrades";
+
+function mapTradeRows(raw) {
+  return (raw || []).map((d) => {
+    const number = d.trade_number;
+    const base = {
+      id: d.id,
+      trade_number: number,
+      "Trade number": number,
+      ...d.data,
+    };
+    if (base.PNL !== undefined && base.PnL === undefined) {
+      base.PnL = base.PNL;
+    }
+    if (base["Trade number"] == null && base["Trade Number"] == null) {
+      base["Trade number"] = number;
+    }
+    return base;
+  });
+}
 
 export default function TradeDataPage() {
   const [rows, setRows] = useState([]);
@@ -12,41 +31,31 @@ export default function TradeDataPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { raw, variables: tradeVars, error } = await fetchTrades(supabase, {
-        withVariables: true,
-      });
+    let cancelled = false;
 
+    const apply = ({ raw, variables: tradeVars, error } = {}) => {
+      if (cancelled) return;
       if (error) {
         console.error("Error loading trades:", error);
         setLoading(false);
         return;
       }
-
       setVariables(tradeVars || []);
-
-      const mapped = (raw || []).map((d) => {
-        const number = d.trade_number;
-        const base = {
-          id: d.id,
-          trade_number: number,
-          "Trade number": number,
-          ...d.data,
-        };
-        if (base.PNL !== undefined && base.PnL === undefined) {
-          base.PnL = base.PNL;
-        }
-        if (base["Trade number"] == null && base["Trade Number"] == null) {
-          base["Trade number"] = number;
-        }
-        return base;
-      });
-
-      setRows(mapped);
+      setRows(mapTradeRows(raw));
       setLoading(false);
     };
 
-    fetchData();
+    const cached = peekTradesCache();
+    if (cached?.raw?.length) apply(cached);
+
+    fetchTrades(supabase, {
+      withVariables: true,
+      onPartial: apply,
+    }).then(apply);
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {

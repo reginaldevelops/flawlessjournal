@@ -12,7 +12,7 @@ import TradeTagsEditor from "../../components/trade/TradeTagsEditor";
 import FieldShell from "../../components/trade/FieldShell";
 import { repairTradeEpisodes } from "../../lib/swap/journal";
 import { isPositionLive } from "../../lib/swap/position";
-import { TRADE_POSITION_REFRESH_MS } from "../../lib/swap/constants";
+import { TRADE_POSITION_REFRESH_MS, POSITION_KIND } from "../../lib/swap/constants";
 import { subscribePositionChanged } from "../../lib/swap/positionEvents";
 import { useVisibleInterval } from "../../lib/hooks/useVisibleInterval";
 import {
@@ -22,8 +22,8 @@ import {
   toDateOnlyValue,
   toDatetimeLocalValue,
 } from "../../lib/systemFields";
-import { ensureSystemVariables } from "../../lib/ensureSystemVariables";
-import { invalidateTradesCache } from "../../lib/supabaseTrades";
+import { ensureSystemVariables, selectVariables } from "../../lib/ensureSystemVariables";
+import { invalidateTradesCache, isMissingSchemaError } from "../../lib/supabaseTrades";
 import {
   getJournalCompletionStatus,
   isFieldComplete,
@@ -602,48 +602,73 @@ export default function TradeViewPage() {
   const [variables, setVariables] = useState([]);
   const [showManageModal, setShowManageModal] = useState(false);
 
+  const applyTradeRow = (data) => {
+    const number =
+      data.trade_number ??
+      data.data?.["Trade number"] ??
+      data.data?.["Trade Number"] ??
+      null;
+    const newState = {
+      id: data.id,
+      "Trade number": number,
+      ...data.data,
+    };
+    if (newState["Trade number"] == null && number != null) {
+      newState["Trade number"] = number;
+    }
+    setTrade(newState);
+    setNotFound(false);
+    setLoadError(null);
+    return newState;
+  };
+
+  const fetchTradeRow = async (tradeId) => {
+    let result = await supabase
+      .from("trades")
+      .select("id, trade_number, data")
+      .eq("id", tradeId)
+      .single();
+    if (result.error && isMissingSchemaError(result.error)) {
+      result = await supabase
+        .from("trades")
+        .select("id, data")
+        .eq("id", tradeId)
+        .single();
+    }
+    return result;
+  };
+
   const loadTrade = async ({ silent = false } = {}) => {
     if (!silent) {
       setLoading(true);
       setLoadError(null);
     }
 
-    if (id) {
-      try {
-        const repair = await repairTradeEpisodes(id);
-        if (repair.repaired && repair.tradeId && String(repair.tradeId) !== String(id)) {
-          router.replace(`/trade/${repair.tradeId}`);
-          return;
-        }
-      } catch (err) {
-        console.warn("[trade] episode repair:", err?.message || err);
-      }
-    }
-
-    const { data, error } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("id", id)
-      .single();
+    const { data, error } = await fetchTradeRow(id);
 
     if (!error && data) {
-      const number =
-        data.trade_number ??
-        data.data?.["Trade number"] ??
-        data.data?.["Trade Number"] ??
-        null;
-      const newState = {
-        id: data.id,
-        "Trade number": number,
-        ...data.data,
-      };
-      if (newState["Trade number"] == null && number != null) {
-        newState["Trade number"] = number;
+      const next = applyTradeRow(data);
+      if (!silent) setLoading(false);
+
+      // Episode splits only apply to Solana positions. Do this after first paint
+      // so a normal journal trade is one round-trip, not two.
+      if (!silent && next?._fj?.kind === POSITION_KIND) {
+        try {
+          const repair = await repairTradeEpisodes(id);
+          if (repair.repaired && repair.tradeId && String(repair.tradeId) !== String(id)) {
+            router.replace(`/trade/${repair.tradeId}`);
+          } else if (repair.repaired) {
+            const refreshed = await fetchTradeRow(id);
+            if (!refreshed.error && refreshed.data) applyTradeRow(refreshed.data);
+          }
+        } catch (err) {
+          console.warn("[trade] episode repair:", err?.message || err);
+        }
       }
-      setTrade(newState);
-      setNotFound(false);
-      setLoadError(null);
-    } else if (error?.code === "PGRST116" || (!error && !data)) {
+      return;
+    }
+
+    if (error?.code === "PGRST116" || (!error && !data)) {
       setTrade(null);
       setNotFound(true);
       setLoadError(null);
@@ -687,31 +712,34 @@ export default function TradeViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, positionLive]);
 
-  // Load variables
+  // Load variables (light select first — don't block the trade on a full-schema rewrite)
   useEffect(() => {
+    let cancelled = false;
     const loadVariables = async () => {
       try {
-        const ensured = await ensureSystemVariables(supabase);
-        if (!ensured.error && ensured.variables?.length) {
+        const { variables: existing, error } = await selectVariables(supabase);
+        if (!cancelled && !error && existing?.length) {
+          setVariables(existing);
+        }
+      } catch (err) {
+        console.warn("selectVariables:", err?.message || err);
+      }
+
+      try {
+        const ensured = await ensureSystemVariables(supabase, {
+          skipTradeRewrites: true,
+        });
+        if (!cancelled && !ensured.error && ensured.variables?.length) {
           setVariables(ensured.variables);
-          return;
         }
       } catch (err) {
         console.warn("ensureSystemVariables:", err?.message || err);
       }
-
-      const { data, error } = await supabase
-        .from("variables")
-        .select("*")
-        .order("order", { ascending: true });
-
-      if (!error && data) {
-        setVariables(data);
-      } else {
-        console.error("❌ Load variables error:", error);
-      }
     };
     loadVariables();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const saveTrade = async (updated) => {

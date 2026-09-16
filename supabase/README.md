@@ -22,8 +22,11 @@ trade numbering you should run the migration once.
 | `table_settings` sort columns | Trades table preferences |
 | `remove_variable_key` RPC | Deleting a variable from a trade |
 | Backfill `variables.user_id` | Stops a false redirect to onboarding |
+| `strip_trade_media` + `table_settings.trade_tags` | Faster /trades list (no chart screenshots) and a reusable tag catalog |
 
 Also run [`20260812_variables_system_key.sql`](./migrations/20260812_variables_system_key.sql) so Entry/Exit time can bind as stable system fields (`system_key`). The app still works without it (falls back to name matching) but migration is cleaner with the column.
+
+For faster trade lists and the shared tag picker, also run [`20260916_trade_tags_and_slim_list.sql`](./migrations/20260916_trade_tags_and_slim_list.sql). The app still works without it (strips charts in the browser after download, stores tags in localStorage).
 
 ## Optional checks after running
 
