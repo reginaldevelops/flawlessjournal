@@ -26,7 +26,7 @@ trade numbering you should run the migration once.
 
 Also run [`20260812_variables_system_key.sql`](./migrations/20260812_variables_system_key.sql) so Entry/Exit time can bind as stable system fields (`system_key`). The app still works without it (falls back to name matching) but migration is cleaner with the column.
 
-For faster trade lists and the shared tag picker, also run [`20260916_trade_tags_and_slim_list.sql`](./migrations/20260916_trade_tags_and_slim_list.sql). The app still works without it (strips charts in the browser after download, stores tags in localStorage).
+For faster trade lists and the shared tag picker, also run [`20260916_trade_tags_and_slim_list.sql`](./migrations/20260916_trade_tags_and_slim_list.sql). The app still works without it (strips charts in the browser after download, stores tags in localStorage). If you already ran that file before the STATUS fix, also run [`20260916_strip_media_keep_chart_marker.sql`](./migrations/20260916_strip_media_keep_chart_marker.sql) so filled charts still count as complete in the trades table.
 
 ## Optional checks after running
 

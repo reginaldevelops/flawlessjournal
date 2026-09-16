@@ -5,9 +5,19 @@
  * Chart screenshots are stored as `data:image…` strings (up to ~1.8MB each).
  * Fetching every trade with those attached is why /trades can take many seconds.
  * The trade detail page still loads the full row for that one id.
+ *
+ * Stripped chart fields keep a short marker so journal completion still counts
+ * them as filled (otherwise /trades shows Incomplete while /trade/:id is Completed).
  */
 
 const DATA_IMAGE_PREFIX = "data:image";
+
+/** Placeholder left behind when a data-URL screenshot is omitted from a list payload. */
+export const SLIMMED_MEDIA_MARKER = "[chart]";
+
+export function isSlimmedMedia(value) {
+  return value === SLIMMED_MEDIA_MARKER;
+}
 
 function slimFills(fills) {
   if (!Array.isArray(fills)) return fills;
@@ -33,7 +43,9 @@ function slimPosition(fj) {
 }
 
 function slimValue(key, value) {
-  if (typeof value === "string" && value.startsWith(DATA_IMAGE_PREFIX)) return "";
+  if (typeof value === "string" && value.startsWith(DATA_IMAGE_PREFIX)) {
+    return SLIMMED_MEDIA_MARKER;
+  }
   if (key === "_fj") return slimPosition(value);
   return value;
 }

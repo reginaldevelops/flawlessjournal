@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { slimTradeData, slimTradeRow } from "./slimTradeData.js";
+import { slimTradeData, slimTradeRow, SLIMMED_MEDIA_MARKER } from "./slimTradeData.js";
+
+function isFilled(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  return true;
+}
 
 describe("slimTradeData", () => {
   it("strips data-url chart screenshots but keeps tags and numbers", () => {
@@ -15,8 +21,8 @@ describe("slimTradeData", () => {
     assert.equal(slim.Coin, "SOL");
     assert.equal(slim.PnL, 120);
     assert.deepEqual(slim.Tags, ["FOMO", "News"]);
-    assert.equal(slim["Entry chart"], "");
-    assert.equal(slim["Exit chart"], "");
+    assert.equal(slim["Entry chart"], SLIMMED_MEDIA_MARKER);
+    assert.equal(slim["Exit chart"], SLIMMED_MEDIA_MARKER);
     assert.equal(slim.Notes, "good read");
   });
 
@@ -49,6 +55,18 @@ describe("slimTradeData", () => {
     });
     assert.equal(row.id, 9);
     assert.equal(row.data.Coin, "BTC");
-    assert.equal(row.data.chart, "");
+    assert.equal(row.data.chart, SLIMMED_MEDIA_MARKER);
+  });
+
+  it("keeps stripped charts filled so list STATUS can stay Completed", () => {
+    const slim = slimTradeData({
+      Coin: "SOL",
+      PnL: 40,
+      "Entry chart": "data:image/jpeg;base64,AAAA",
+      "Exit chart": "data:image/png;base64,BBBB",
+    });
+    assert.equal(isFilled(slim["Entry chart"]), true);
+    assert.equal(isFilled(slim["Exit chart"]), true);
+    assert.equal(isFilled(""), false);
   });
 });
