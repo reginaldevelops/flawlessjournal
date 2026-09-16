@@ -12,9 +12,10 @@
  */
 
 import { buildSeed, DEMO_USER } from "./seed";
+import { slimTradeData } from "../slimTradeData";
 
 const STORAGE_KEY = "flawless.demo.db.v1";
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 let memory = null;
 
@@ -368,6 +369,10 @@ class MockQuery {
         const aliasMatch = /^([\w"'->\s]+):(.+)$/.exec(col);
         const path = aliasMatch ? aliasMatch[2].trim() : col;
         const key = aliasMatch ? aliasMatch[1].trim() : pathLeaf(col);
+        if (path === "strip_trade_media") {
+          out[key] = slimTradeData(row.data ?? {});
+          continue;
+        }
         out[key] = deepClone(readPath(row, path));
       }
       return out;

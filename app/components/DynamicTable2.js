@@ -19,7 +19,7 @@ import {
   ListOrdered,
   ArrowDownUp,
 } from "lucide-react";
-import { EmptyState } from "./ui";
+import { EmptyState, cn } from "./ui";
 import { createJournalTrade } from "../lib/trades/createJournalTrade";
 import { invalidateTradesCache } from "../lib/supabaseTrades";
 import { useSwapFlow } from "./swap/SwapFlowContext";
@@ -54,6 +54,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getJournalCompletionStatus } from "../lib/tradeCompletion";
+import { parseTags, tagTone } from "../lib/tradeTags";
 
 /* ------------------------------------------------------------------ */
 /* Column display-name overrides — keeps DB keys intact               */
@@ -742,16 +743,20 @@ export default function DynamicTable2({ rows: initialRows, variables }) {
                     }
 
                     if (colLow === "tags") {
+                      const tags = parseTags(val);
                       return (
                         <td
                           key={col}
                           className="px-4 py-3"
                         >
-                          {Array.isArray(val) && val.length > 0 ? (
-                            val.map((t) => (
+                          {tags.length > 0 ? (
+                            tags.map((t) => (
                               <span
                                 key={t}
-                                className="inline-flex items-center bg-brand/10 text-brand text-2xs px-1.5 py-0.5 rounded font-medium mr-1"
+                                className={cn(
+                                  "inline-flex items-center text-2xs px-1.5 py-0.5 rounded-md font-medium mr-1 border",
+                                  tagTone(t)
+                                )}
                               >
                                 {t}
                               </span>

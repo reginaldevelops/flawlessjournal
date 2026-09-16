@@ -37,6 +37,14 @@ const pickWeighted = (pairs) => pickEntry(pairs)[0];
 const round = (n, dp = 2) => Number(n.toFixed(dp));
 const pad = (n) => String(n).padStart(2, "0");
 
+function uniqueTagsForTrade() {
+  if (rng() > 0.62) return [];
+  const first = pick(TAG_POOL);
+  if (rng() > 0.4) return [first];
+  const second = pick(TAG_POOL.filter((t) => t !== first));
+  return second ? [first, second] : [first];
+}
+
 const SYMBOLS = [
   ["SOL/USDT", 22],
   ["BTC/USDT", 20],
@@ -71,6 +79,8 @@ const TIMEFRAMES = [
   ["1H", 24],
   ["4H", 12],
 ];
+
+const TAG_POOL = ["A-plus", "FOMO", "News", "Breakout", "Patience", "Revenge", "Session-open"];
 
 const EMOTIONS_WIN = ["Calm", "Focused", "Confident", "Patient"];
 const EMOTIONS_LOSS = ["Frustrated", "Impatient", "FOMO", "Anxious", "Revenge"];
@@ -291,6 +301,7 @@ function buildTrades() {
           Mistakes: mistake,
           Grade: grade,
           Notes: noteFor(pnl, mistake),
+          Tags: uniqueTagsForTrade(),
           "Entry chart": "",
           "Exit chart": "",
         },
@@ -319,6 +330,7 @@ function buildTrades() {
         PnL: "",
         R: "",
         Notes: "",
+        Tags: i === 0 ? ["Patience"] : ["Breakout"],
         "Entry chart": "",
         "Exit chart": "",
       },
@@ -594,6 +606,7 @@ export function buildSeed() {
           "Direction",
           "Setup",
           "Session",
+          "Tags",
           "Risk",
           "PnL",
           "R",
@@ -601,6 +614,7 @@ export function buildSeed() {
         ],
         sort_key: "Datum",
         sort_direction: "desc",
+        trade_tags: ["A-plus", "FOMO", "News", "Breakout", "Patience", "Revenge", "Session-open"],
       },
     ],
     columns: [],
