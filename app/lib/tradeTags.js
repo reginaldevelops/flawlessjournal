@@ -7,10 +7,12 @@
  *
  * Persistence: localStorage (instant) + `table_settings.trade_tags` when the
  * column exists. Harvest from loaded trades so existing labels show up even
- * before the settings column is migrated.
+ * before the settings column is migrated. Explicitly deleted tags are
+ * tombstoned so harvest cannot resurrect a typo.
  */
 
 const STORAGE_KEY = "flawless.tradeTags.v1";
+const DELETED_KEY = "flawless.tradeTags.deleted.v1";
 
 export const TAG_PALETTE = [
   "bg-sky-500/15 text-sky-300 border-sky-500/30",
@@ -34,6 +36,9 @@ export function normalizeTag(raw) {
 export function parseTags(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(normalizeTag).filter(Boolean);
+  if (typeof value === "object") {
+    return parseTags(value.catalog ?? value.tags ?? []);
+  }
   return String(value)
     .split(/[,;|]/)
     .map(normalizeTag)
@@ -61,8 +66,36 @@ function uniqueTags(names) {
   return out;
 }
 
+export function sameTag(a, b) {
+  return normalizeTag(a).toLowerCase() === normalizeTag(b).toLowerCase();
+}
+
+export function excludeDeleted(names = [], deleted = []) {
+  const blocked = new Set(uniqueTags(deleted).map((t) => t.toLowerCase()));
+  return uniqueTags(names).filter((t) => !blocked.has(t.toLowerCase()));
+}
+
 export function mergeCatalog(a = [], b = []) {
   return uniqueTags([...parseTags(a), ...parseTags(b)]);
+}
+
+export function parseStoredTagLibrary(raw) {
+  if (!raw) return { catalog: [], deleted: [] };
+  if (Array.isArray(raw)) return { catalog: uniqueTags(raw), deleted: [] };
+  if (typeof raw === "string") {
+    try {
+      return parseStoredTagLibrary(JSON.parse(raw));
+    } catch {
+      return { catalog: parseTags(raw), deleted: [] };
+    }
+  }
+  if (typeof raw === "object") {
+    return {
+      catalog: uniqueTags(raw.catalog ?? raw.tags ?? []),
+      deleted: uniqueTags(raw.deleted ?? []),
+    };
+  }
+  return { catalog: [], deleted: [] };
 }
 
 function tagsFromUnknown(value) {
@@ -85,10 +118,10 @@ export function harvestTagsFromRows(rows = []) {
   return uniqueTags(names);
 }
 
-export function readLocalCatalog() {
+function readJsonList(key) {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     return uniqueTags(JSON.parse(raw));
   } catch {
@@ -96,19 +129,45 @@ export function readLocalCatalog() {
   }
 }
 
-export function writeLocalCatalog(tags) {
+function writeJsonList(key, tags) {
   const catalog = uniqueTags(tags);
   if (typeof window === "undefined") return catalog;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(catalog));
+    window.localStorage.setItem(key, JSON.stringify(catalog));
   } catch {
     /* quota / private mode */
   }
   return catalog;
 }
 
+export function readLocalCatalog() {
+  return readJsonList(STORAGE_KEY);
+}
+
+export function writeLocalCatalog(tags) {
+  return writeJsonList(STORAGE_KEY, tags);
+}
+
+export function readDeletedTags() {
+  return readJsonList(DELETED_KEY);
+}
+
+export function writeDeletedTags(tags) {
+  return writeJsonList(DELETED_KEY, tags);
+}
+
 export function rememberTags(names) {
-  return writeLocalCatalog(mergeCatalog(readLocalCatalog(), names));
+  const incoming = excludeDeleted(names, readDeletedTags());
+  return writeLocalCatalog(mergeCatalog(readLocalCatalog(), incoming));
+}
+
+export function forgetTags(names, { catalog = readLocalCatalog(), deleted = readDeletedTags() } = {}) {
+  const remove = uniqueTags(names);
+  const nextCatalog = excludeDeleted(catalog, remove);
+  const nextDeleted = uniqueTags([...deleted, ...remove]);
+  writeLocalCatalog(nextCatalog);
+  writeDeletedTags(nextDeleted);
+  return { catalog: nextCatalog, deleted: nextDeleted };
 }
 
 function isMissingColumnError(error) {
@@ -116,8 +175,59 @@ function isMissingColumnError(error) {
   return /trade_tags|column|schema cache|PGRST204|42703/i.test(msg);
 }
 
+function dropTagFromValue(value, tag) {
+  if (Array.isArray(value)) return value.filter((item) => !sameTag(item, tag));
+  if (typeof value === "string") {
+    const next = parseTags(value).filter((item) => !sameTag(item, tag));
+    return next;
+  }
+  return value;
+}
+
+function dropTagFromTradeData(data, tag) {
+  if (!data || typeof data !== "object") return { data, changed: false };
+  const next = { ...data };
+  let changed = false;
+  for (const key of ["Tags", "tags"]) {
+    if (next[key] == null) continue;
+    const stripped = dropTagFromValue(next[key], tag);
+    const before = parseTags(next[key]);
+    const after = parseTags(stripped);
+    if (before.length !== after.length) {
+      next[key] = stripped;
+      changed = true;
+    }
+  }
+  return { data: next, changed };
+}
+
+export function stripTagFromTradeRows(rows = [], tag) {
+  const needle = normalizeTag(tag);
+  if (!needle) return [];
+  const updates = [];
+  for (const row of rows) {
+    if (!row?.id || !row.data) continue;
+    const { data, changed } = dropTagFromTradeData(row.data, needle);
+    if (changed) updates.push({ id: row.id, data });
+  }
+  return updates;
+}
+
+function isMissingRpcError(error) {
+  const msg = `${error?.message ?? ""} ${error?.code ?? ""}`;
+  return /remove_trade_tag|could not find.*function|PGRST202|PGRST204/i.test(msg);
+}
+
+async function stripTagFromAllTrades(supabase, tag) {
+  const { error } = await supabase.rpc("remove_trade_tag", { tag_name: normalizeTag(tag) });
+  if (!error || isMissingRpcError(error)) return !error;
+  console.warn("[tradeTags] strip from trades:", error.message);
+  return false;
+}
+
 export async function loadTagCatalog(supabase, { extra = [] } = {}) {
-  let catalog = mergeCatalog(readLocalCatalog(), extra);
+  let deleted = readDeletedTags();
+  let catalog = excludeDeleted(mergeCatalog(readLocalCatalog(), extra), deleted);
 
   if (supabase) {
     try {
@@ -127,7 +237,9 @@ export async function loadTagCatalog(supabase, { extra = [] } = {}) {
         .eq("id", 1)
         .maybeSingle();
       if (!error && data?.trade_tags) {
-        catalog = mergeCatalog(catalog, data.trade_tags);
+        const stored = parseStoredTagLibrary(data.trade_tags);
+        deleted = uniqueTags([...deleted, ...stored.deleted]);
+        catalog = excludeDeleted(mergeCatalog(catalog, stored.catalog), deleted);
       }
     } catch {
       /* ignore */
@@ -139,7 +251,10 @@ export async function loadTagCatalog(supabase, { extra = [] } = {}) {
           .from("trades")
           .select("data->Tags, data->tags");
         if (!error && data?.length) {
-          catalog = mergeCatalog(catalog, harvestTagsFromRows(data));
+          catalog = excludeDeleted(
+            mergeCatalog(catalog, harvestTagsFromRows(data)),
+            deleted
+          );
         }
       } catch {
         /* ignore — list pages harvest from the full fetch instead */
@@ -147,12 +262,16 @@ export async function loadTagCatalog(supabase, { extra = [] } = {}) {
     }
   }
 
+  writeDeletedTags(deleted);
   return writeLocalCatalog(catalog);
 }
 
-export async function saveTagCatalog(supabase, tags) {
+export async function saveTagCatalog(supabase, tags, deleted = readDeletedTags()) {
   const catalog = writeLocalCatalog(tags);
+  const storedDeleted = writeDeletedTags(deleted);
   if (!supabase) return catalog;
+
+  const payload = { catalog, deleted: storedDeleted };
 
   try {
     const existing = await supabase
@@ -163,21 +282,20 @@ export async function saveTagCatalog(supabase, tags) {
 
     if (existing.error && isMissingColumnError(existing.error)) return catalog;
 
-    if (existing.data) {
-      const { error } = await supabase
-        .from("table_settings")
-        .update({ trade_tags: catalog })
-        .eq("id", 1);
-      if (error && !isMissingColumnError(error)) {
-        console.warn("[tradeTags] save failed:", error.message);
+    const write = async (value) => {
+      if (existing.data) {
+        return supabase.from("table_settings").update({ trade_tags: value }).eq("id", 1);
       }
-    } else if (!existing.error) {
-      const { error } = await supabase
-        .from("table_settings")
-        .insert({ id: 1, trade_tags: catalog });
-      if (error && !isMissingColumnError(error)) {
-        console.warn("[tradeTags] insert failed:", error.message);
+      if (!existing.error) {
+        return supabase.from("table_settings").insert({ id: 1, trade_tags: value });
       }
+      return { error: existing.error };
+    };
+
+    let { error } = await write(payload);
+    if (error) ({ error } = await write(catalog));
+    if (error && !isMissingColumnError(error)) {
+      console.warn("[tradeTags] save failed:", error.message);
     }
   } catch (err) {
     console.warn("[tradeTags] save failed:", err?.message || err);
@@ -189,4 +307,19 @@ export async function saveTagCatalog(supabase, tags) {
 export async function rememberAndPersist(supabase, names) {
   const catalog = rememberTags(names);
   return saveTagCatalog(supabase, catalog);
+}
+
+export async function forgetAndPersist(supabase, names) {
+  const { catalog, deleted } = forgetTags(names);
+  await saveTagCatalog(supabase, catalog, deleted);
+  if (supabase) {
+    for (const tag of uniqueTags(names)) {
+      try {
+        await stripTagFromAllTrades(supabase, tag);
+      } catch {
+        /* ignore missing RPC */
+      }
+    }
+  }
+  return catalog;
 }

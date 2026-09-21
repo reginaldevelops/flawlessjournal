@@ -13,6 +13,7 @@
 
 import { buildSeed, DEMO_USER } from "./seed";
 import { slimTradeData } from "../slimTradeData";
+import { stripTagFromTradeRows } from "../tradeTags";
 
 const STORAGE_KEY = "flawless.demo.db.v1";
 const SCHEMA_VERSION = 4;
@@ -639,6 +640,17 @@ const rpcHandlers = {
       if (row.data && keyName in row.data) delete row.data[keyName];
     }
     persist();
+    return { data: null, error: null };
+  },
+  remove_trade_tag({ tag_name: tagName }) {
+    const updates = stripTagFromTradeRows(table("trades"), tagName);
+    if (updates.length) {
+      const byId = new Map(updates.map((row) => [String(row.id), row.data]));
+      for (const row of table("trades")) {
+        if (byId.has(String(row.id))) row.data = byId.get(String(row.id));
+      }
+      persist();
+    }
     return { data: null, error: null };
   },
 };
