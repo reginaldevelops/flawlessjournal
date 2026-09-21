@@ -4,17 +4,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Tag, X } from "lucide-react";
 import { cn } from "../ui";
 import { supabase } from "../../lib/supabaseClient";
+import { invalidateTradesCache } from "../../lib/supabaseTrades";
 import {
+  forgetAndPersist,
   loadTagCatalog,
   normalizeTag,
   parseTags,
   rememberAndPersist,
+  sameTag,
   tagTone,
 } from "../../lib/tradeTags";
 
 /**
  * Inline header tags: colored chips + a picker of tags you already created.
  * New tags are saved to the catalog so they show up on every other trade.
+ * × in the picker deletes a tag from the library (and this trade).
  */
 export default function TradeTagsEditor({ value, onChange, className }) {
   const assigned = useMemo(() => parseTags(value), [value]);
@@ -71,10 +75,9 @@ export default function TradeTagsEditor({ value, onChange, className }) {
     setCatalog(next);
   };
 
-  const hasTag = (list, tag) =>
-    list.some((item) => item.toLowerCase() === String(tag).toLowerCase());
+  const hasTag = (list, tag) => list.some((item) => sameTag(item, tag));
 
-  const add = async (raw) => {
+  const add = async (raw, { close = true } = {}) => {
     const t = normalizeTag(raw);
     if (!t) {
       setDraft("");
@@ -83,16 +86,32 @@ export default function TradeTagsEditor({ value, onChange, className }) {
     if (!hasTag(assigned, t)) commitAssigned([...assigned, t]);
     await persistCatalog([...catalog, t]);
     setDraft("");
-    setOpen(false);
+    if (close) setOpen(false);
   };
 
-  const remove = (tag) => commitAssigned(assigned.filter((t) => t !== tag));
+  const toggle = async (tag) => {
+    if (hasTag(assigned, tag)) {
+      commitAssigned(assigned.filter((item) => !sameTag(item, tag)));
+      return;
+    }
+    await add(tag, { close: false });
+  };
+
+  const removeFromTrade = (tag) =>
+    commitAssigned(assigned.filter((item) => !sameTag(item, tag)));
+
+  const deleteFromLibrary = async (tag) => {
+    removeFromTrade(tag);
+    const next = await forgetAndPersist(supabase, [tag]);
+    setCatalog(next);
+    invalidateTradesCache();
+    setDraft("");
+  };
 
   const query = normalizeTag(draft).toLowerCase();
-  const unused = catalog.filter((tag) => !hasTag(assigned, tag));
   const visible = query
-    ? unused.filter((tag) => tag.toLowerCase().includes(query))
-    : unused;
+    ? catalog.filter((tag) => tag.toLowerCase().includes(query))
+    : catalog;
   const canCreate =
     Boolean(normalizeTag(draft)) &&
     !hasTag(catalog, normalizeTag(draft)) &&
@@ -111,9 +130,9 @@ export default function TradeTagsEditor({ value, onChange, className }) {
           {tag}
           <button
             type="button"
-            onClick={() => remove(tag)}
+            onClick={() => removeFromTrade(tag)}
             className="opacity-60 transition hover:opacity-100"
-            aria-label={`Remove ${tag}`}
+            aria-label={`Remove ${tag} from this trade`}
           >
             <X size={10} />
           </button>
@@ -147,7 +166,7 @@ export default function TradeTagsEditor({ value, onChange, className }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === ",") {
                   e.preventDefault();
-                  if (visible.length === 1 && !canCreate) add(visible[0]);
+                  if (visible.length === 1 && !canCreate) toggle(visible[0]);
                   else add(draft);
                 }
               }}
@@ -161,21 +180,42 @@ export default function TradeTagsEditor({ value, onChange, className }) {
                   <p className="px-0.5 pb-1 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
                     Your tags
                   </p>
+                  <p className="px-0.5 pb-1.5 text-2xs text-content-subtle">
+                    Click to assign · × deletes everywhere
+                  </p>
                   <div className="flex flex-wrap gap-1">
-                    {visible.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => add(tag)}
-                        className={cn(
-                          "inline-flex items-center rounded-md border px-1.5 py-0.5 text-2xs font-medium transition hover:brightness-125",
-                          tagTone(tag)
-                        )}
-                      >
-                        {tag}
-                      </button>
-                    ))}
+                    {visible.map((tag) => {
+                      const onTrade = hasTag(assigned, tag);
+                      return (
+                        <span
+                          key={tag}
+                          className={cn(
+                            "inline-flex items-center gap-0.5 rounded-md border text-2xs font-medium",
+                            tagTone(tag),
+                            onTrade && "ring-1 ring-brand/50"
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => toggle(tag)}
+                            className="px-1.5 py-0.5"
+                          >
+                            {tag}
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => deleteFromLibrary(tag)}
+                            className="pr-1 opacity-60 transition hover:opacity-100"
+                            aria-label={`Delete tag ${tag}`}
+                            title="Delete tag"
+                          >
+                            <X size={10} />
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -196,9 +236,7 @@ export default function TradeTagsEditor({ value, onChange, className }) {
                 <p className="px-1 py-1.5 text-2xs text-content-subtle">
                   {catalog.length === 0
                     ? "Type a name and press Enter to create your first tag."
-                    : query
-                      ? "No matching tags."
-                      : "All tags are already on this trade."}
+                    : "No matching tags."}
                 </p>
               )}
             </div>

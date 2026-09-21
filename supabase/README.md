@@ -28,6 +28,8 @@ Also run [`20260812_variables_system_key.sql`](./migrations/20260812_variables_s
 
 For faster trade lists and the shared tag picker, also run [`20260916_trade_tags_and_slim_list.sql`](./migrations/20260916_trade_tags_and_slim_list.sql). The app still works without it (strips charts in the browser after download, stores tags in localStorage). If you already ran that file before the STATUS fix, also run [`20260916_strip_media_keep_chart_marker.sql`](./migrations/20260916_strip_media_keep_chart_marker.sql) so filled charts still count as complete in the trades table.
 
+To delete a tag from every trade (not only the picker), run [`20260921_remove_trade_tag.sql`](./migrations/20260921_remove_trade_tag.sql). Without it, deleting a tag still hides it from Add tag; leftover assignments can be removed per trade with ×.
+
 ## Optional checks after running
 
 ```sql
