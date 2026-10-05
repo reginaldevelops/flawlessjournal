@@ -13,8 +13,24 @@ describe("chain analysis chains", () => {
     assert.match("Pinksale", CHAINS.bnb.launchpadPattern);
   });
 
-  it("keeps solana / HL / Robinhood", () => {
-    assert.deepEqual(Object.keys(CHAINS), ["solana", "bnb", "hyperliquid", "robinhood"]);
+  it("includes Ethereum mapped to DefiLlama Ethereum", () => {
+    assert.equal(CHAINS.ethereum.label, "Ethereum");
+    assert.equal(CHAINS.ethereum.llamaDex, "Ethereum");
+    assert.equal(CHAINS.ethereum.llamaTvl, "Ethereum");
+    assert.equal(CHAINS.ethereum.llamaFees, "Ethereum");
+    assert.equal(CHAINS.ethereum.hasLaunchpads, true);
+    assert.match("Pinksale", CHAINS.ethereum.launchpadPattern);
+    assert.match("GemPad", CHAINS.ethereum.launchpadPattern);
+  });
+
+  it("keeps solana / ETH / BNB / HL / Robinhood", () => {
+    assert.deepEqual(Object.keys(CHAINS), [
+      "solana",
+      "ethereum",
+      "bnb",
+      "hyperliquid",
+      "robinhood",
+    ]);
   });
 
   it("scores heat from volume momentum", () => {

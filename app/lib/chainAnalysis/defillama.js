@@ -18,6 +18,16 @@ export const CHAINS = {
     hasLaunchpads: true,
     launchpadPattern: /pump|launch|bonk\.fun|bags|moonshot|letsbonk|believe/i,
   },
+  ethereum: {
+    id: "ethereum",
+    label: "Ethereum",
+    llamaDex: "Ethereum",
+    llamaTvl: "Ethereum",
+    llamaFees: "Ethereum",
+    focus: "DEX + DeFi scale",
+    hasLaunchpads: true,
+    launchpadPattern: /pump|pinksale|dxsale|gempad|team\.finance|uncx|launchpad|launch/i,
+  },
   bnb: {
     id: "bnb",
     label: "BNB Chain",
